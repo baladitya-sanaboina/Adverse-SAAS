@@ -5,11 +5,14 @@ export function StatCard({
   value,
   change,
   icon,
+  tone,
 }: {
   label: string;
   value: string;
   change: string;
   icon: MetricIcon;
+  /** Optional: "warning" shows the note in red (e.g. over budget). Default look is unchanged. */
+  tone?: "warning";
 }) {
   const paths = {
     globe: (
@@ -28,7 +31,7 @@ export function StatCard({
     bolt: <path d="m13 2-9 12h8l-1 8 9-12h-8l1-8Z" />,
   };
   return (
-    <article className="dash-stat-card">
+    <article className={`dash-stat-card${tone ? ` ${tone}` : ""}`}>
       <div className="dash-stat-head">
         <span>{label}</span>
         <i>

@@ -1,0 +1,117 @@
+/*
+ * Client dashboard additions: budget meter and budget messages. Sits inside the existing
+ * dash-panel / client-dashboard-* styles and uses only the theme tokens and the app's status colours.
+ */
+
+.client-portal-meter-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px 0;
+}
+
+.client-portal-meter-wrap > span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.client-portal-meter {
+  height: 8px;
+  flex: 1 1 auto;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.client-portal-meter > i {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: #0876ed;
+  transition: width 300ms ease;
+}
+
+.client-portal-meter.near > i {
+  background: #c96f05;
+}
+
+.client-portal-meter.over > i {
+  background: #b74858;
+}
+
+.client-portal-negative {
+  color: #b74858 !important;
+}
+
+.dark .client-portal-negative {
+  color: #f0a6af !important;
+}
+
+.client-dashboard-panel > .client-portal-alert,
+.client-dashboard-panel > .client-portal-note {
+  margin: 16px 22px 22px;
+  padding: 12px 14px;
+  border: 1px solid;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.client-portal-alert {
+  border-color: #efc8ce;
+  color: #9a4551;
+  background: #fbf0f2;
+}
+
+.dark .client-portal-alert {
+  border-color: #63323a;
+  color: #f0a6af;
+  background: #361f24;
+}
+
+.client-portal-note {
+  border-color: #f1d9b5;
+  color: #8a520c;
+  background: #fdf5ea;
+}
+
+.dark .client-portal-note {
+  border-color: #5a4320;
+  color: #e3a04f;
+  background: #2b2214;
+}
+
+/* Bottom spacing when the meter is the last thing in the panel. */
+.client-dashboard-panel > .client-portal-meter-wrap:last-child {
+  padding-bottom: 22px;
+}
+
+/* The profile sits in the narrow column: stack its three facts. */
+#client-profile-panel .client-dashboard-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+#client-profile-panel .client-dashboard-list.compact > article {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+/* Panels in a row share a height; keep content at the top instead of spreading it out. */
+.dash-panel.client-dashboard-panel {
+  align-content: start;
+}
+
+/* Over-budget note on the stat card. */
+.dash-stat-card.warning > small {
+  color: #9a4551;
+  background: #fbf0f2;
+}
+
+.dark .dash-stat-card.warning > small {
+  color: #f0a6af;
+  background: #361f24;
+}
