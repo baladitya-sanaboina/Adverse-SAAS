@@ -17,9 +17,12 @@ export const metadata: Metadata = {
   title: appConfig.appName,
   description: `${appConfig.appName} application · ${appConfig.environment}`,
   icons: {
-    icon: adverseBrand.logos.favicon,
-    shortcut: adverseBrand.logos.favicon,
-    apple: adverseBrand.logos.favicon,
+    icon: [
+      { url: adverseBrand.logos.favicon, type: "image/svg+xml" },
+      { url: adverseBrand.logos.faviconPng, sizes: "32x32", type: "image/png" },
+    ],
+    shortcut: adverseBrand.logos.faviconPng,
+    apple: adverseBrand.logos.appleIcon,
   },
 };
 

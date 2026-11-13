@@ -9,15 +9,20 @@ export const adverseBrand = Object.freeze({
   primarySurface: "#EDF6FF",
   white: "#FFFFFF",
   logos: {
+    // Trimmed to the logo's edges (the original PNGs carry ~25% empty padding on every side).
     wordmark: {
-      light: "/logos/adverse-logo-transparent-blue.png",
-      dark: "/logos/adverse-logo-transparent-white.png",
+      light: "/logos/adverse-logo-blue.png",
+      dark: "/logos/adverse-logo-white.png",
     },
+    // Static SVG of Logos/adverse-orbit-animation-*.html (animation removed, transparent).
     orbit: {
-      light: "/logos/adverse-orbit-transparent-blue.png",
-      dark: "/logos/adverse-orbit-transparent-white.png",
+      light: "/logos/adverse-mark-blue.svg",
+      dark: "/logos/adverse-mark-white.svg",
     },
-    favicon: "/logos/adverse-orbit-blue-on-white.png",
+    // Transparent favicon: SVG for modern browsers, PNG fallback, 180px for phones.
+    favicon: "/logos/adverse-favicon.svg",
+    faviconPng: "/logos/adverse-favicon-32.png",
+    appleIcon: "/logos/adverse-favicon-180.png",
   },
 });
 
