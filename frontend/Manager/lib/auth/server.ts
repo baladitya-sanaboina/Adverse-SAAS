@@ -10,6 +10,20 @@ async function backend(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${authConfig.backendUrl}${path}`, { ...init, cache: "no-store" });
 }
 
+function companyIdFromAccessToken(token: string): string | undefined {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return undefined;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="))) as {
+      company_id?: unknown;
+    };
+    return typeof decoded.company_id === "string" && decoded.company_id ? decoded.company_id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function authenticatedBackend(
   path: string,
   init: RequestInit = {},
@@ -18,11 +32,18 @@ export async function authenticatedBackend(
   let access = store.get(authConfig.accessCookie)?.value;
   const refresh = store.get(authConfig.refreshCookie)?.value;
   if (!access) return { response: new Response(null, { status: 401 }) };
-  const request = (token: string) =>
-    backend(path, {
+  // The backend's tenant middleware requires X-Company-ID on company and workspace routes (same as Admin).
+  const request = (token: string) => {
+    const companyId = companyIdFromAccessToken(token);
+    return backend(path, {
       ...init,
-      headers: { ...Object.fromEntries(new Headers(init.headers).entries()), Authorization: `Bearer ${token}` },
+      headers: {
+        ...Object.fromEntries(new Headers(init.headers).entries()),
+        Authorization: `Bearer ${token}`,
+        ...(companyId ? { "X-Company-ID": companyId } : {}),
+      },
     });
+  };
   let response = await request(access);
   if (response.status !== 401 || !refresh) return { response };
   const refreshed = await backend("/auth/refresh", {
