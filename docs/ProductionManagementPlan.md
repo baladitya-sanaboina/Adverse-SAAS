@@ -180,6 +180,18 @@ All tables are tenant-scoped with `company_id`, UUID ids and `created_at`/`updat
 
 Approve/Complete stay Admin-only (confirmed by the owner's "go", 2026-11-13).
 
+### Tasks page redesign (owner request, 2026-11-13) — agreed, to build next
+
+Applies to the Admin **Tasks** page (`frontend/Admin/components/tasks/task-management-page.tsx`) and the shared **My Tasks** page (`frontend/shared/workspace/workspace-tasks-page.tsx`). Keep the colours, Poppins type, sidebar and topbar; only modernise this page.
+
+| Area | Agreed design |
+|---|---|
+| Top | Drop the large hero. A compact header card like the new dashboard: title, live counts ("12 open · 2 overdue · 3 to review"), search, view toggle, **+ New task** (Admin only). |
+| Quick filters | One-click chips with live counts: All, Overdue, Due this week, To review (Submitted + Review), Unassigned (Admin only). Status and client dropdowns stay for detail filtering. |
+| Board cards | Priority colour stripe on the left edge (Urgent/High/Medium/Low), assignee avatar initials, due-date chip (red when overdue), client and service, price (Admin) or own commission (Manager), file and comment counts. Requires adding `files_count` and `comments_count` to the task list responses (`AdminTaskResponse`, `WorkerTaskResponse`). |
+| Opening a task | A **side panel that slides in from the right** over the board (the board stays visible behind it), not a full-page view. Escape and the close button dismiss it; the URL keeps `?task=<id>` so links still work. |
+| Task detail | Cleaner header with a **status progress bar** (Assigned → In Progress → Submitted → Review → Approved → Completed), then tidy sections: overview, money (Admin), assignment (Admin), status change, files, comments, history. On phones the panel is full-screen. |
+
 ### Backend API (Phase 2)
 
 Every request needs `Authorization: Bearer <token>` and `X-Company-ID` (the tenant middleware requires it; the frontend's `authenticatedBackend` already sends it). The company used for data access always comes from the login token, never from the header.
