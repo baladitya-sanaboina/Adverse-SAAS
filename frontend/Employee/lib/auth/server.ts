@@ -1,0 +1,98 @@
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import { authConfig, isAllowedRole } from "./config";
+import type { ApiError, CurrentUser } from "./types";
+
+const secure = process.env.NODE_ENV === "production";
+const cookieOptions = (maxAge: number) => ({ httpOnly: true, secure, sameSite: "lax" as const, path: "/", maxAge });
+
+async function backend(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${authConfig.backendUrl}${path}`, { ...init, cache: "no-store" });
+}
+
+export async function authenticatedBackend(
+  path: string,
+  init: RequestInit = {},
+): Promise<{ response: Response; access?: string; refresh?: string }> {
+  const store = await cookies();
+  let access = store.get(authConfig.accessCookie)?.value;
+  const refresh = store.get(authConfig.refreshCookie)?.value;
+  if (!access) return { response: new Response(null, { status: 401 }) };
+  const request = (token: string) =>
+    backend(path, {
+      ...init,
+      headers: { ...Object.fromEntries(new Headers(init.headers).entries()), Authorization: `Bearer ${token}` },
+    });
+  let response = await request(access);
+  if (response.status !== 401 || !refresh) return { response };
+  const refreshed = await backend("/auth/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refresh }),
+  });
+  if (!refreshed.ok) return { response: refreshed };
+  const tokens = (await refreshed.json()) as { access_token: string; refresh_token: string };
+  access = tokens.access_token;
+  response = await request(access);
+  return { response, access, refresh: tokens.refresh_token };
+}
+
+export async function backendError(response: Response): Promise<NextResponse> {
+  const payload = (await response.json().catch(() => ({ detail: "Authentication request failed." }))) as ApiError;
+  return NextResponse.json(payload, { status: response.status });
+}
+
+export async function setSession(response: NextResponse, accessToken: string, refreshToken: string): Promise<void> {
+  response.cookies.set(authConfig.accessCookie, accessToken, cookieOptions(30 * 60));
+  response.cookies.set(authConfig.refreshCookie, refreshToken, cookieOptions(7 * 24 * 60 * 60));
+}
+
+export function clearSession(response: NextResponse): void {
+  response.cookies.set(authConfig.accessCookie, "", cookieOptions(0));
+  response.cookies.set(authConfig.refreshCookie, "", cookieOptions(0));
+}
+
+export async function currentUserWithRefresh(): Promise<{ response: Response; access?: string; refresh?: string }> {
+  const store = await cookies();
+  let access = store.get(authConfig.accessCookie)?.value;
+  const refresh = store.get(authConfig.refreshCookie)?.value;
+  if (!access) return { response: new Response(null, { status: 401 }) };
+  let response = await backend("/users/me", { headers: { Authorization: `Bearer ${access}` } });
+  if (response.status !== 401 || !refresh) return { response };
+  const refreshed = await backend("/auth/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refresh }),
+  });
+  if (!refreshed.ok) return { response: refreshed };
+  const tokens = (await refreshed.json()) as { access_token: string; refresh_token: string };
+  access = tokens.access_token;
+  response = await backend("/users/me", { headers: { Authorization: `Bearer ${access}` } });
+  return { response, access, refresh: tokens.refresh_token };
+}
+
+export async function loginSession(
+  email: string,
+  password: string,
+): Promise<{ user?: CurrentUser; response?: NextResponse; access?: string; refresh?: string }> {
+  const loginResponse = await backend("/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!loginResponse.ok) return { response: await backendError(loginResponse) };
+  const tokens = (await loginResponse.json()) as { access_token: string; refresh_token: string };
+  const profileResponse = await backend("/users/me", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+  if (!profileResponse.ok) return { response: await backendError(profileResponse) };
+  const user = (await profileResponse.json()) as CurrentUser;
+  if (!isAllowedRole(user.role.code)) {
+    await backend("/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${tokens.access_token}` } });
+    return {
+      response: NextResponse.json(
+        { code: "ROLE_NOT_ALLOWED", detail: "This account cannot access this workspace." },
+        { status: 403 },
+      ),
+    };
+  }
+  return { user, access: tokens.access_token, refresh: tokens.refresh_token };
+}

@@ -1,0 +1,42 @@
+.theme-loader {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #07111F;
+  color: #F6FAFF;
+}
+
+html[data-loopless-theme="light"] .theme-loader {
+  background: #F8FBFF;
+  color: #16202E;
+}
+
+.theme-loader__content {
+  display: grid;
+  justify-items: center;
+  gap: 0.9rem;
+}
+
+.theme-loader__spinner {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 3px solid rgba(8, 118, 237, 0.22);
+  border-top-color: #0876ED;
+  border-radius: 50%;
+  animation: theme-loader-spin 700ms linear infinite;
+}
+
+.theme-loader__label {
+  font: 600 0.8rem/1.2 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+@keyframes theme-loader-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-loader__spinner { animation: none; }
+}

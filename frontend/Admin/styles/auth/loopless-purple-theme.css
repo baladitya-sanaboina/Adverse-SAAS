@@ -1,0 +1,157 @@
+/* Color-only Adverse theme override. Layout, motion, and interactions stay unchanged. */
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) {
+  background:
+    radial-gradient(circle at 12% 18%, #EEF7FF 0, transparent 30%),
+    radial-gradient(circle at 90% 84%, #F2F9FF 0, transparent 28%),
+    #fafafa;
+}
+
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-card {
+  background: #ffffff;
+  border: 1px solid #EAF5FF;
+  box-shadow: 0 28px 90px rgba(47, 36, 61, 0.12);
+}
+
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .character-pane {
+  background: linear-gradient(150deg, #F2F8FF, #EDF6FF);
+}
+
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-form {
+  color: #16202E;
+}
+
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-form > p,
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .guest-copy,
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .remember-row {
+  color: #66778C !important;
+}
+
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .auth-theme,
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .auth-exit {
+  background: #ffffff;
+  border-color: #DCEEFF;
+  color: #5E6E82;
+}
+
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .auth-switch {
+  background: #F2F8FF;
+}
+
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .auth-switch button.active {
+  background: #ffffff;
+  color: #0876ED;
+}
+
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-form input {
+  background: #ffffff;
+  border-color: #DCEEFF;
+  color: #16202E;
+}
+
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-form input:focus {
+  border-color: #0876ED;
+  box-shadow: 0 0 0 3px rgba(8, 118, 237, 0.13);
+}
+
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) {
+  background:
+    radial-gradient(circle at 14% 18%, #10213D 0, transparent 29%),
+    radial-gradient(circle at 90% 82%, #16275B 0, transparent 27%),
+    #07111F;
+}
+
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .interactive-card {
+  background: #101827;
+  border: 1px solid #26344C;
+  box-shadow: 0 38px 100px rgba(0, 0, 0, 0.62);
+}
+
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .character-pane {
+  background: linear-gradient(150deg, #17213A, #100c17);
+}
+
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-switch,
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .interactive-form input {
+  background: #17213A;
+  border-color: #344054;
+  color: #F6FAFF;
+}
+
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-switch button.active {
+  background: #21304A;
+  color: #A7D7FF;
+}
+
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-theme,
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-exit {
+  background: #121D31;
+  border-color: #344054;
+  color: #EDF6FF;
+}
+
+.interactive-auth .interactive-submit,
+.interactive-auth .remember-row input:checked + i {
+  background: #0876ED;
+  border-color: #0876ED;
+}
+
+.interactive-auth .interactive-submit:hover {
+  background: #065EC1;
+  box-shadow: 0 10px 28px rgba(8, 118, 237, 0.3);
+}
+
+.interactive-auth .guest-copy button,
+.interactive-auth .auth-password button {
+  color: #3D9BF5;
+}
+
+.interactive-auth .blue-character {
+  background: #0876ED;
+}
+
+.interactive-auth .blue-character::after {
+  background: #0A56A8;
+}
+
+.interactive-auth .brand-logo-wide img,
+.interactive-auth .auth-logo img {
+  filter: none;
+}
+
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .brand-logo-wide img,
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-logo img {
+  filter: drop-shadow(0 0 10px rgba(8, 118, 237, 0.2));
+}
+
+/* Dashboard palette synchronization */
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth){background:radial-gradient(circle at 12% 18%,#EEF7FF 0,transparent 30%),radial-gradient(circle at 90% 84%,#F7FBFF 0,transparent 28%),#F8FBFF}
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-card{background:#fff;border-color:#E4F2FF;box-shadow:0 28px 90px rgba(47,36,61,.1)}
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .character-pane{background:linear-gradient(150deg,#EEF7FF,#EDF6FF)}
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-form{color:#151C29}
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-form>p,
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .guest-copy,
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .remember-row{color:#667085!important}
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .auth-theme,
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .auth-exit{background:#fff;border-color:#DCEEFF;color:#667085}
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .auth-switch{background:#EEF7FF}
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .auth-switch button.active{background:#fff;color:#0876ED}
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-form input{background:#fff;border-color:#DCEEFF;color:#151C29}
+:is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-form input:focus{border-color:#0876ED;box-shadow:0 0 0 3px rgba(8, 118, 237,.16)}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth){background:radial-gradient(circle at 14% 18%,#0D1320 0,transparent 29%),radial-gradient(circle at 90% 82%,#17213A 0,transparent 27%),#0A1423}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .interactive-card{background:#121D31;border-color:#26344C}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .character-pane{background:linear-gradient(150deg,#16202E,#0E1A2D)}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-switch,
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .interactive-form input{background:#16202E;border-color:#42516A;color:#F6FAFF}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-switch button.active{background:#21304A;color:#8CC8FF}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-theme,
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-exit{background:#121D31;border-color:#42516A;color:#F1F8FF}
+.interactive-auth .interactive-submit,.interactive-auth .remember-row input:checked+i{background:#0876ED;border-color:#0876ED}
+.interactive-auth .interactive-submit:hover{background:#065EC1;box-shadow:0 10px 28px rgba(8, 118, 237,.28)}
+.interactive-auth .guest-copy button,.interactive-auth .auth-password button{color:#58AEFF}
+.interactive-auth .blue-character{background:#0876ED}.interactive-auth .blue-character::after{background:#065EC1}
+
+/* Brand mark follows the shared dashboard palette. */
+.interactive-auth .brand-logo-wide img,
+.interactive-auth .auth-logo img{filter:none}
+:is(.interactive-auth.dark,html[data-loopless-theme="dark"] .interactive-auth) .brand-logo-wide img,
+:is(.interactive-auth.dark,html[data-loopless-theme="dark"] .interactive-auth) .auth-logo img{filter:drop-shadow(0 0 8px rgba(8,118,237,.18))}

@@ -1,0 +1,315 @@
+import logging
+import smtplib
+from email.message import EmailMessage
+from html import escape
+from typing import Protocol
+
+from app.core.settings import settings
+
+logger = logging.getLogger(__name__)
+
+
+def branded_email_html(
+    *,
+    eyebrow: str,
+    title: str,
+    description: str,
+    action_label: str,
+    action_url: str,
+    expiry_minutes: int,
+) -> str:
+    """Render a light-mode, email-client-safe Adverse transactional template."""
+    safe_url = escape(action_url, quote=True)
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>{escape(title)}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#F4FAFF;color:#241f2b;font-family:Poppins,Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F4FAFF;">
+      <tr>
+        <td align="center" style="padding:40px 16px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;">
+            <tr>
+              <td style="padding:0 4px 18px;color:#0876ED;font-size:22px;font-weight:800;letter-spacing:-0.5px;">
+                Adverse
+              </td>
+            </tr>
+            <tr>
+              <td style="overflow:hidden;border:1px solid #ded6e8;border-radius:20px;background:#ffffff;box-shadow:0 16px 44px rgba(55,38,72,.08);">
+                <div style="height:7px;background:#0876ED;font-size:0;line-height:0;">&nbsp;</div>
+                <div style="padding:42px 42px 38px;">
+                  <div style="display:inline-block;margin-bottom:20px;padding:7px 11px;border-radius:999px;background:#f1ebf7;color:#0876ED;font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;">
+                    {escape(eyebrow)}
+                  </div>
+                  <h1 style="margin:0 0 14px;color:#241f2b;font-size:30px;line-height:1.25;font-weight:800;letter-spacing:-.7px;">
+                    {escape(title)}
+                  </h1>
+                  <p style="margin:0 0 22px;color:#67788E;font-size:15px;line-height:1.75;">
+                    {escape(description)}
+                  </p>
+                  <div style="margin:0 0 26px;padding:13px 15px;border:1px solid #e5deed;border-radius:12px;background:#faf8fc;color:#5f5668;font-size:13px;line-height:1.5;">
+                    This secure, single-use link expires in <strong style="color:#0876ED;">{expiry_minutes} minutes</strong>.
+                  </div>
+                  <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                    <tr>
+                      <td style="border-radius:11px;background:#0876ED;">
+                        <a href="{safe_url}" style="display:inline-block;padding:14px 24px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:800;">
+                          {escape(action_label)}
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                  <div style="margin:30px 0 0;padding-top:24px;border-top:1px solid #eee9f3;">
+                    <p style="margin:0 0 9px;color:#67788E;font-size:12px;line-height:1.6;">
+                      If the button does not work, copy and paste this link into your browser:
+                    </p>
+                    <p style="margin:0;overflow-wrap:anywhere;word-break:break-all;color:#0876ED;font-size:11px;line-height:1.6;">
+                      <a href="{safe_url}" style="color:#0876ED;text-decoration:underline;">{safe_url}</a>
+                    </p>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 12px 0;text-align:center;color:#7C8DA3;font-size:11px;line-height:1.7;">
+                If you did not request this action, you can safely ignore this email.<br>
+                © Adverse · Secure business management
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
+
+
+def branded_code_email_html(
+    *,
+    eyebrow: str,
+    title: str,
+    description: str,
+    code: str,
+    expiry_minutes: int,
+) -> str:
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>{escape(title)}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#F4FAFF;color:#241f2b;font-family:Poppins,Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F4FAFF;">
+      <tr>
+        <td align="center" style="padding:40px 16px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;">
+            <tr>
+              <td style="padding:0 4px 18px;color:#0876ED;font-size:22px;font-weight:800;letter-spacing:-0.5px;">
+                Adverse
+              </td>
+            </tr>
+            <tr>
+              <td style="overflow:hidden;border:1px solid #ded6e8;border-radius:20px;background:#ffffff;box-shadow:0 16px 44px rgba(55,38,72,.08);">
+                <div style="height:7px;background:#0876ED;font-size:0;line-height:0;">&nbsp;</div>
+                <div style="padding:42px 42px 38px;">
+                  <div style="display:inline-block;margin-bottom:20px;padding:7px 11px;border-radius:999px;background:#f1ebf7;color:#0876ED;font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;">
+                    {escape(eyebrow)}
+                  </div>
+                  <h1 style="margin:0 0 14px;color:#241f2b;font-size:30px;line-height:1.25;font-weight:800;letter-spacing:-.7px;">
+                    {escape(title)}
+                  </h1>
+                  <p style="margin:0 0 22px;color:#67788E;font-size:15px;line-height:1.75;">
+                    {escape(description)}
+                  </p>
+                  <div style="margin:0 0 22px;padding:22px;border-radius:18px;background:#f6f1fb;border:1px dashed #d7c7ec;text-align:center;">
+                    <div style="margin-bottom:8px;color:#7B8DA7;font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;">One-time code</div>
+                    <div style="color:#241f2b;font-size:36px;font-weight:800;letter-spacing:10px;font-family:Menlo,Consolas,monospace;">{escape(code)}</div>
+                  </div>
+                  <div style="padding:13px 15px;border:1px solid #e5deed;border-radius:12px;background:#faf8fc;color:#5f5668;font-size:13px;line-height:1.5;">
+                    This secure code expires in <strong style="color:#0876ED;">{expiry_minutes} minutes</strong>.
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 12px 0;text-align:center;color:#7C8DA3;font-size:11px;line-height:1.7;">
+                If you did not request this action, you can safely ignore this email.<br>
+                © Adverse · Secure business management
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
+
+
+class PasswordResetEmailSender(Protocol):
+    def send_password_reset(self, email: str, reset_code: str) -> None: ...
+
+
+class VerificationEmailSender(Protocol):
+    def send_verification(self, email: str, verification_code: str) -> None: ...
+
+
+class EmailService:
+    def _send(self, message: EmailMessage) -> None:
+        host, port = settings.smtp_host, settings.smtp_port
+        username, password = settings.smtp_username, settings.smtp_password.get_secret_value()
+        encryption = "STARTTLS" if settings.smtp_use_tls else "NONE"
+        try:
+            from app.repositories.platform_settings_repository import PlatformSettingsRepository
+            from app.services.platform_settings_service import platform_settings_service
+
+            platform = PlatformSettingsRepository().get()
+            host, port = platform.smtp_host, platform.smtp_port
+            username = platform.smtp_username
+            password = platform_settings_service.decrypt_password(platform.smtp_password_encrypted)
+            encryption = platform.smtp_encryption
+            if "From" in message:
+                message.replace_header(
+                    "From", f"{platform.smtp_sender_name} <{platform.smtp_sender_email}>"
+                )
+        except Exception:
+            logger.warning("Using environment SMTP configuration; platform settings unavailable.")
+        client_type = smtplib.SMTP_SSL if encryption == "SSL" else smtplib.SMTP
+        with client_type(host, port, timeout=10) as client:
+            if encryption == "STARTTLS":
+                client.starttls()
+            if username:
+                client.login(username, password)
+            client.send_message(message)
+
+    def is_ready(self) -> bool:
+        if not settings.smtp_host:
+            return False
+        try:
+            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=3) as client:
+                return client.noop()[0] == 250
+        except (OSError, smtplib.SMTPException):
+            return False
+
+    def send_password_reset(self, email: str, reset_code: str) -> None:
+        if not settings.smtp_host:
+            logger.warning("Development password reset code for %s: %s", email, reset_code)
+            return
+
+        message = EmailMessage()
+        message["Subject"] = "Reset your Adverse password"
+        message["From"] = settings.smtp_from_email or settings.smtp_username
+        message["To"] = email
+        message.set_content(
+            "Use this 6-digit code to reset your Adverse password. "
+            f"It expires in {settings.password_reset_expiry_minutes} minutes.\n\n{reset_code}"
+        )
+        message.add_alternative(
+            branded_code_email_html(
+                eyebrow="Account security",
+                title="Reset your password",
+                description=(
+                    "We received a request to update the password for your Adverse account. "
+                    "Enter this one-time code to choose a new, secure password."
+                ),
+                code=reset_code,
+                expiry_minutes=settings.password_reset_expiry_minutes,
+            ),
+            subtype="html",
+        )
+        self._send(message)
+
+    def send_verification(self, email: str, verification_code: str) -> None:
+        if not settings.smtp_host:
+            logger.warning(
+                "Development email verification code for %s: %s", email, verification_code
+            )
+            return
+        message = EmailMessage()
+        message["Subject"] = "Verify your Adverse email"
+        message["From"] = settings.smtp_from_email or settings.smtp_username
+        message["To"] = email
+        message.set_content(
+            "Use this 6-digit code to activate your Adverse account. "
+            f"It expires in {settings.email_verification_expiry_minutes} minutes.\n\n{verification_code}"
+        )
+        message.add_alternative(
+            branded_code_email_html(
+                eyebrow="Welcome to Adverse",
+                title="Verify your email address",
+                description=(
+                    "Your workspace is almost ready. Confirm this email address to activate "
+                    "your account and continue to Adverse."
+                ),
+                code=verification_code,
+                expiry_minutes=settings.email_verification_expiry_minutes,
+            ),
+            subtype="html",
+        )
+        self._send(message)
+
+    def send_company_welcome(
+        self, email: str, *, admin_name: str, company_name: str, company_code: str
+    ) -> None:
+        """Send onboarding instructions without ever disclosing the submitted password."""
+        origins = settings.allowed_origins
+        login_url = origins[0]
+        message = EmailMessage()
+        message["Subject"] = f"Welcome to {company_name} on Adverse"
+        message["From"] = settings.smtp_from_email or settings.smtp_username
+        message["To"] = email
+        message.set_content(
+            f"Hello {admin_name}, your {company_name} workspace ({company_code}) is ready. "
+            f"Verify your email, then sign in at {login_url}."
+        )
+        message.add_alternative(
+            branded_email_html(
+                eyebrow="Workspace ready",
+                title=f"Welcome, {admin_name}",
+                description=(
+                    f"Your {company_name} workspace ({company_code}) is ready. "
+                    "Verify your email using the separate activation message, then sign in. "
+                    "For security, your password is never included in email."
+                ),
+                action_label="Open Adverse",
+                action_url=login_url,
+                expiry_minutes=settings.email_verification_expiry_minutes,
+            ),
+            subtype="html",
+        )
+        self._send(message)
+
+    def send_invitation(self, email: str, *, company_name: str, invitation_url: str) -> None:
+        message = EmailMessage()
+        message["Subject"] = f"You're invited to join {company_name} on Adverse"
+        message["From"] = settings.smtp_from_email or settings.smtp_username
+        message["To"] = email
+        message.set_content(
+            f"You've been invited to join {company_name} with {email}. "
+            f"Create your account using this secure link: {invitation_url}"
+        )
+        message.add_alternative(
+            branded_email_html(
+                eyebrow="Company invitation",
+                title=f"Join {company_name}",
+                description=(
+                    f"Your company administrator invited {email} to join {company_name} on Adverse. "
+                    "Create your account to continue."
+                ),
+                action_label="Accept invitation",
+                action_url=invitation_url,
+                expiry_minutes=settings.invitation_expiry_hours * 60,
+            ),
+            subtype="html",
+        )
+        self._send(message)
+
+
+email_service = EmailService()

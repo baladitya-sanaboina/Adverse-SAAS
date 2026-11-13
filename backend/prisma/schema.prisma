@@ -1,0 +1,1090 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum CompanyStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum RegistrationAction {
+  USER_CREATED
+  COMPANY_CREATED
+}
+
+enum SessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum AuthenticationEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  REFRESH_USED
+  LOGOUT
+  TOKEN_REVOKED
+  SESSION_EXPIRED
+  PASSWORD_CHANGED
+  PASSWORD_RESET
+  EMAIL_VERIFIED
+  ACCOUNT_LOCKED
+}
+
+enum ProfileAuditAction {
+  PROFILE_UPDATED
+  PASSWORD_CHANGED
+  PROFILE_IMAGE_UPDATED
+}
+
+enum SubscriptionPlanStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CompanySubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model Company {
+  id                 String                         @id @default(uuid()) @db.Uuid
+  name               String                         @unique
+  description        String?
+  code               String                         @unique
+  subscriptionPlan   String                         @map("subscription_plan")
+  status             CompanyStatus                  @default(ACTIVE)
+  contactEmail       String?                        @unique @map("contact_email")
+  phone              String?
+  address            String?
+  website            String?
+  timezone           String                         @default("UTC")
+  language           String                         @default("en")
+  createdAt          DateTime                       @default(now()) @map("created_at")
+  updatedAt          DateTime                       @updatedAt @map("updated_at")
+  users              User[]
+  registrationLogs   RegistrationAudit[]
+  authSessions       AuthSession[]
+  managementAudits   CompanyManagementAudit[]
+  subscription       CompanySubscription?
+  subscriptionAudits SubscriptionAudit[]
+  usageMetrics       CompanyUsageMetric?
+  usageAlerts        SubscriptionUsageAlert[]
+  enforcementAudits  SubscriptionEnforcementAudit[]
+  onboarding         CompanyOnboarding?
+  tenantDefaults     CompanyTenantDefault?
+  onboardingAudits   CompanyOnboardingAudit[]
+  settingAudits      CompanySettingAudit[]
+  departments        Department[]
+  branches           Branch[]
+  roles              Role[]
+  employees          Employee[]
+  employeeAudits     EmployeeAudit[]
+  clients            Client[]
+  clientNotes        ClientNote[]
+  clientFeedback     ClientFeedback[]
+  clientActivities   ClientActivity[]
+  services           CompanyService[]
+  servicePricing     ServicePricing[]
+  leads              Lead[]
+  opportunities      Opportunity[]
+  crmAudits          CrmAudit[]
+
+  @@index([status, createdAt])
+  @@index([subscriptionPlan, status])
+  @@map("companies")
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum EmployeeStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum LeadSource {
+  WEBSITE
+  REFERRAL
+  EMAIL
+  PHONE
+  SOCIAL
+  OTHER
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  LOST
+  CONVERTED
+}
+
+enum OpportunityStage {
+  NEW
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum OpportunityStatus {
+  OPEN
+  CLOSED
+}
+
+enum ServicePricingModel {
+  PER_VIDEO
+  PER_PIECE
+  MONTHLY_FIXED
+  MONTHLY_PACKAGE
+  COMMISSION_PER_DELIVERABLE
+}
+
+enum ServicePricingScope {
+  CLIENT
+  MANAGER
+}
+
+model Department {
+  id          String             @id @default(uuid()) @db.Uuid
+  companyId   String             @map("company_id") @db.Uuid
+  name        String
+  description String             @default("")
+  status      OrganizationStatus @default(ACTIVE)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users       User[]
+  employees   Employee[]
+
+  @@unique([companyId, name])
+  @@index([companyId, status])
+  @@map("departments")
+}
+
+model Branch {
+  id        String             @id @default(uuid()) @db.Uuid
+  companyId String             @map("company_id") @db.Uuid
+  name      String
+  code      String
+  address   String             @default("")
+  city      String             @default("")
+  state     String             @default("")
+  country   String             @default("")
+  status    OrganizationStatus @default(ACTIVE)
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users     User[]
+  employees Employee[]
+
+  @@unique([companyId, name])
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@map("branches")
+}
+
+model SubscriptionPlan {
+  id            String                    @id @default(uuid()) @db.Uuid
+  name          String
+  code          String                    @unique
+  description   String?
+  monthlyPrice  Decimal                   @default(0) @map("monthly_price") @db.Decimal(12, 2)
+  yearlyPrice   Decimal                   @default(0) @map("yearly_price") @db.Decimal(12, 2)
+  status        SubscriptionPlanStatus    @default(ACTIVE)
+  displayOrder  Int                       @default(0) @map("display_order")
+  createdAt     DateTime                  @default(now()) @map("created_at")
+  updatedAt     DateTime                  @updatedAt @map("updated_at")
+  features      SubscriptionPlanFeature[]
+  limits        SubscriptionPlanLimit[]
+  subscriptions CompanySubscription[]
+  audits        SubscriptionAudit[]
+
+  @@index([status, displayOrder])
+  @@map("subscription_plans")
+}
+
+model SubscriptionPlanFeature {
+  planId      String           @map("plan_id") @db.Uuid
+  featureCode String           @map("feature_code")
+  enabled     Boolean          @default(false)
+  plan        SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@id([planId, featureCode])
+  @@map("subscription_plan_features")
+}
+
+model SubscriptionPlanLimit {
+  planId    String           @map("plan_id") @db.Uuid
+  limitCode String           @map("limit_code")
+  value     BigInt?
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@id([planId, limitCode])
+  @@map("subscription_plan_limits")
+}
+
+model CompanySubscription {
+  id             String                    @id @default(uuid()) @db.Uuid
+  companyId      String                    @unique @map("company_id") @db.Uuid
+  planId         String                    @map("plan_id") @db.Uuid
+  status         CompanySubscriptionStatus @default(ACTIVE)
+  activationDate DateTime                  @default(now()) @map("activation_date")
+  expirationDate DateTime?                 @map("expiration_date")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+  company        Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  plan           SubscriptionPlan          @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([planId])
+  @@map("company_subscriptions")
+}
+
+model SubscriptionAudit {
+  id        String           @id @default(uuid()) @db.Uuid
+  actorId   String           @map("actor_id") @db.Uuid
+  companyId String?          @map("company_id") @db.Uuid
+  planId    String           @map("plan_id") @db.Uuid
+  action    String
+  details   String?
+  createdAt DateTime         @default(now()) @map("created_at")
+  actor     User             @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  company   Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([actorId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([planId, createdAt])
+  @@map("subscription_audits")
+}
+
+model CompanyUsageMetric {
+  companyId        String   @id @map("company_id") @db.Uuid
+  projectsUsed     BigInt   @default(0) @map("projects_used")
+  storageUsedBytes BigInt   @default(0) @map("storage_used_bytes")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("company_usage_metrics")
+}
+
+model SubscriptionUsageAlert {
+  id           String   @id @default(uuid()) @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  resourceCode String   @map("resource_code")
+  level        String
+  message      String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, resourceCode])
+  @@index([companyId, active])
+  @@map("subscription_usage_alerts")
+}
+
+model SubscriptionEnforcementAudit {
+  id              String   @id @default(uuid()) @db.Uuid
+  companyId       String   @map("company_id") @db.Uuid
+  actorId         String?  @map("actor_id") @db.Uuid
+  planId          String?  @map("plan_id") @db.Uuid
+  eventType       String   @map("event_type")
+  resourceCode    String?  @map("resource_code")
+  currentUsage    BigInt?  @map("current_usage")
+  configuredLimit BigInt?  @map("configured_limit")
+  details         String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([eventType, createdAt])
+  @@map("subscription_enforcement_audits")
+}
+
+model Role {
+  id              String             @id @default(uuid()) @db.Uuid
+  companyId       String?            @map("company_id") @db.Uuid
+  name            String
+  code            String             @unique
+  description     String             @default("")
+  status          OrganizationStatus @default(ACTIVE)
+  isSystem        Boolean            @default(false) @map("is_system")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  company         Company?           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users           User[]
+  employees       Employee[]
+  rolePermissions RolePermission[]
+
+  @@index([companyId, name])
+  @@index([companyId, status])
+  @@map("roles")
+}
+
+model Module {
+  id              String           @id @default(uuid()) @db.Uuid
+  name            String           @unique
+  code            String           @unique
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+
+  @@map("modules")
+}
+
+model Permission {
+  id              String           @id @default(uuid()) @db.Uuid
+  name            String           @unique
+  code            String           @unique
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id") @db.Uuid
+  moduleId     String     @map("module_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  module       Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, moduleId, permissionId])
+  @@index([moduleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model User {
+  id                      String                   @id @default(uuid()) @db.Uuid
+  name                    String
+  email                   String                   @unique
+  passwordHash            String                   @map("password_hash")
+  status                  UserStatus               @default(ACTIVE)
+  companyId               String?                  @map("company_id") @db.Uuid
+  roleId                  String                   @map("role_id") @db.Uuid
+  departmentId            String?                  @map("department_id") @db.Uuid
+  branchId                String?                  @map("branch_id") @db.Uuid
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
+  firstName               String?                  @map("first_name")
+  lastName                String?                  @map("last_name")
+  phoneNumber             String?                  @map("phone_number")
+  profileImageUrl         String?                  @map("profile_image_url")
+  timezone                String                   @default("UTC")
+  language                String                   @default("en")
+  themePreference         String                   @default("system") @map("theme_preference")
+  emailNotifications      Boolean                  @default(true) @map("email_notifications")
+  failedLoginAttempts     Int                      @default(0) @map("failed_login_attempts")
+  lockedUntil             DateTime?                @map("locked_until")
+  company                 Company?                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  role                    Role                     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  department              Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  branch                  Branch?                  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  registrationActions     RegistrationAudit[]      @relation("RegistrationActor")
+  registrationCreations   RegistrationAudit[]      @relation("RegistrationCreatedUser")
+  sessions                AuthSession[]
+  authenticationEvents    AuthenticationEvent[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  profileAudits           ProfileAudit[]
+  userPermissions         UserPermission[]
+  developerAuditActions   DeveloperAudit[]         @relation("DeveloperAuditActor")
+  developerAuditTargets   DeveloperAudit[]         @relation("DeveloperAuditTarget")
+  companyManagementAudits CompanyManagementAudit[]
+  subscriptionAudits      SubscriptionAudit[]
+  platformSettingAudits   PlatformSettingAudit[]
+  onboardingActions       CompanyOnboardingAudit[] @relation("OnboardingActor")
+  onboardingRecords       CompanyOnboarding[]      @relation("OnboardingActor")
+  companySettingAudits    CompanySettingAudit[]
+  employeeProfile         Employee?
+  employeeAuditActions    EmployeeAudit[]          @relation("EmployeeAuditActor")
+  crmAuditActions         CrmAudit[]               @relation("CrmAuditActor")
+  clientNotesCreated      ClientNote[]             @relation("ClientNoteCreator")
+  clientFeedbackCreated   ClientFeedback[]         @relation("ClientFeedbackCreator")
+  clientActivityActions   ClientActivity[]         @relation("ClientActivityActor")
+  clientAccountProfile    Client?                  @relation("ClientAccountUser")
+  managerPricingRecords   ServicePricing[]         @relation("ManagerPricingUser")
+  servicePricingChanges   ServicePricing[]         @relation("ServicePricingActor")
+
+  @@index([companyId])
+  @@index([roleId])
+  @@index([departmentId])
+  @@index([branchId])
+  @@index([roleId, status, createdAt])
+  @@map("users")
+}
+
+model Employee {
+  id                 String          @id @default(uuid()) @db.Uuid
+  companyId          String          @map("company_id") @db.Uuid
+  userId             String          @unique @map("user_id") @db.Uuid
+  employeeCode       String          @map("employee_code")
+  departmentId       String?         @map("department_id") @db.Uuid
+  branchId           String?         @map("branch_id") @db.Uuid
+  roleId             String          @map("role_id") @db.Uuid
+  status             EmployeeStatus  @default(PENDING)
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  company            Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user               User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  department         Department?     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  branch             Branch?         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  role               Role            @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  audits             EmployeeAudit[]
+  ownedLeads         Lead[]
+  ownedOpportunities Opportunity[]
+
+  @@unique([companyId, employeeCode])
+  @@index([companyId, status])
+  @@index([departmentId])
+  @@index([branchId])
+  @@index([roleId])
+  @@map("employees")
+}
+
+model EmployeeAudit {
+  id         String   @id @default(uuid()) @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  action     String
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actor      User     @relation("EmployeeAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, createdAt])
+  @@index([employeeId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("employee_audits")
+}
+
+model Client {
+  id                    String             @id @default(uuid()) @db.Uuid
+  companyId             String             @map("company_id") @db.Uuid
+  userId                String?            @unique @map("user_id") @db.Uuid
+  name                  String
+  code                  String
+  email                 String?
+  phone                 String?
+  website               String?
+  address               String             @default("")
+  city                  String             @default("")
+  state                 String             @default("")
+  country               String             @default("")
+  status                OrganizationStatus @default(ACTIVE)
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+  company               Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accountUser           User?              @relation("ClientAccountUser", fields: [userId], references: [id], onDelete: SetNull)
+  contacts              ClientContact[]
+  notes                 ClientNote[]
+  feedback              ClientFeedback[]
+  activities            ClientActivity[]
+  servicePricingRecords ServicePricing[]
+  leads                 Lead[]
+  opportunities         Opportunity[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([companyId, name])
+  @@index([companyId, email])
+  @@map("clients")
+}
+
+model ClientContact {
+  id          String             @id @default(uuid()) @db.Uuid
+  clientId    String             @map("client_id") @db.Uuid
+  firstName   String             @map("first_name")
+  lastName    String             @default("") @map("last_name")
+  email       String?
+  phone       String?
+  designation String             @default("")
+  isPrimary   Boolean            @default(false) @map("is_primary")
+  status      OrganizationStatus @default(ACTIVE)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  client      Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, email])
+  @@index([clientId, status])
+  @@index([clientId, isPrimary])
+  @@map("client_contacts")
+}
+
+model ClientNote {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  createdById String   @map("created_by_id") @db.Uuid
+  content     String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation("ClientNoteCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, clientId, createdAt])
+  @@index([createdById])
+  @@map("client_notes")
+}
+
+model ClientFeedback {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  createdById String   @map("created_by_id") @db.Uuid
+  content     String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation("ClientFeedbackCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, clientId, createdAt])
+  @@index([createdById])
+  @@map("client_feedback")
+}
+
+model ClientActivity {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  actorId     String   @map("actor_id") @db.Uuid
+  type        String
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  actor       User     @relation("ClientActivityActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, clientId, createdAt])
+  @@index([actorId])
+  @@map("client_activities")
+}
+
+model CompanyService {
+  id                  String              @id @default(uuid()) @db.Uuid
+  companyId           String              @map("company_id") @db.Uuid
+  name                String
+  code                String
+  description         String              @default("")
+  clientPricingModel  ServicePricingModel @map("client_pricing_model")
+  managerPricingModel ServicePricingModel @map("manager_pricing_model")
+  status              OrganizationStatus  @default(ACTIVE)
+  sortOrder           Int                 @default(0) @map("sort_order")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  company             Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  pricingRecords      ServicePricing[]
+
+  @@unique([companyId, name])
+  @@unique([companyId, code])
+  @@index([companyId, status, sortOrder])
+  @@index([companyId, name])
+  @@map("company_services")
+}
+
+model ServicePricing {
+  id            String              @id @default(uuid()) @db.Uuid
+  companyId     String              @map("company_id") @db.Uuid
+  serviceId     String              @map("service_id") @db.Uuid
+  scope         ServicePricingScope
+  clientId      String?             @map("client_id") @db.Uuid
+  managerUserId String?             @map("manager_user_id") @db.Uuid
+  pricingModel  ServicePricingModel @map("pricing_model")
+  amount        Decimal             @db.Decimal(12, 2)
+  currency      String              @default("INR") @db.VarChar(3)
+  notes         String              @default("")
+  effectiveFrom DateTime            @map("effective_from")
+  effectiveTo   DateTime?           @map("effective_to")
+  createdById   String              @map("created_by_id") @db.Uuid
+  createdAt     DateTime            @default(now()) @map("created_at")
+  company       Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  service       CompanyService      @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  client        Client?             @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  managerUser   User?               @relation("ManagerPricingUser", fields: [managerUserId], references: [id], onDelete: Restrict)
+  createdBy     User                @relation("ServicePricingActor", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, serviceId, scope, effectiveFrom])
+  @@index([companyId, clientId, effectiveFrom])
+  @@index([companyId, managerUserId, effectiveFrom])
+  @@index([createdById, createdAt])
+  @@map("service_pricing")
+}
+
+model Lead {
+  id            String        @id @default(uuid()) @db.Uuid
+  companyId     String        @map("company_id") @db.Uuid
+  clientId      String?       @map("client_id") @db.Uuid
+  ownerId       String        @map("owner_id") @db.Uuid
+  name          String
+  companyName   String        @default("") @map("company_name")
+  email         String?
+  phone         String?
+  source        LeadSource    @default(OTHER)
+  status        LeadStatus    @default(NEW)
+  notes         String        @default("")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client        Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  owner         Employee      @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  opportunities Opportunity[]
+
+  @@unique([companyId, email])
+  @@index([companyId, status])
+  @@index([companyId, ownerId])
+  @@index([companyId, source])
+  @@index([clientId])
+  @@map("leads")
+}
+
+model Opportunity {
+  id                String            @id @default(uuid()) @db.Uuid
+  companyId         String            @map("company_id") @db.Uuid
+  clientId          String            @map("client_id") @db.Uuid
+  leadId            String?           @map("lead_id") @db.Uuid
+  ownerId           String            @map("owner_id") @db.Uuid
+  name              String
+  description       String            @default("")
+  value             Decimal           @default(0) @db.Decimal(18, 2)
+  currency          String            @default("INR") @db.VarChar(3)
+  stage             OpportunityStage  @default(NEW)
+  status            OpportunityStatus @default(OPEN)
+  expectedCloseDate DateTime?         @map("expected_close_date") @db.Date
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  company           Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client            Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  lead              Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  owner             Employee          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, stage])
+  @@index([companyId, status])
+  @@index([companyId, ownerId])
+  @@index([clientId])
+  @@index([leadId])
+  @@map("opportunities")
+}
+
+model CrmAudit {
+  id         String   @id @default(uuid()) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id") @db.Uuid
+  action     String
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actor      User     @relation("CrmAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, createdAt])
+  @@index([entityType, entityId])
+  @@map("crm_audits")
+}
+
+model CompanyOnboarding {
+  id                   String    @id @default(uuid()) @db.Uuid
+  companyId            String    @unique @map("company_id") @db.Uuid
+  actorId              String    @map("actor_id") @db.Uuid
+  adminUserId          String    @map("admin_user_id") @db.Uuid
+  status               String    @default("IN_PROGRESS")
+  companyCreated       Boolean   @default(false) @map("company_created")
+  subscriptionAssigned Boolean   @default(false) @map("subscription_assigned")
+  adminCreated         Boolean   @default(false) @map("admin_created")
+  tenantInitialized    Boolean   @default(false) @map("tenant_initialized")
+  defaultsSeeded       Boolean   @default(false) @map("defaults_seeded")
+  welcomeEmailStatus   String    @default("PENDING") @map("welcome_email_status")
+  startedAt            DateTime  @default(now()) @map("started_at")
+  completedAt          DateTime? @map("completed_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  company              Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actor                User      @relation("OnboardingActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([actorId, startedAt])
+  @@map("company_onboardings")
+}
+
+model CompanyTenantDefault {
+  companyId               String   @id @map("company_id") @db.Uuid
+  logoUrl                 String?  @map("logo_url")
+  faviconUrl              String?  @map("favicon_url")
+  primaryColor            String   @map("primary_color")
+  secondaryColor          String   @map("secondary_color")
+  accentColor             String   @default("#0876ED") @map("accent_color")
+  infoColor               String   @default("#2563A6") @map("info_color")
+  successColor            String   @default("#16855B") @map("success_color")
+  warningColor            String   @default("#B7791F") @map("warning_color")
+  dangerColor             String   @default("#C2414F") @map("danger_color")
+  theme                   String   @default("system")
+  timezone                String
+  language                String
+  emailFooter             String   @default("") @map("email_footer")
+  supportEmail            String?  @map("support_email")
+  supportPhone            String?  @map("support_phone")
+  gstTaxId                String?  @map("gst_tax_id")
+  registrationNumber      String?  @map("registration_number")
+  currency                String   @default("USD")
+  dateFormat              String   @default("DD/MM/YYYY") @map("date_format")
+  timeFormat              String   @default("12_HOUR") @map("time_format")
+  workingDays             String[] @default(["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]) @map("working_days")
+  businessHours           Json     @default("{\"start\":\"09:00\",\"end\":\"18:00\"}") @map("business_hours")
+  defaultRoles            Json     @map("default_roles")
+  defaultPermissions      Json     @map("default_permissions")
+  notificationPreferences Json     @map("notification_preferences")
+  dashboardConfiguration  Json     @map("dashboard_configuration")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+  company                 Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("company_tenant_defaults")
+}
+
+enum CompanyIntegrationProvider {
+  GOOGLE_DRIVE
+  SLACK
+  STRIPE
+}
+
+enum CompanyIntegrationStatus {
+  NOT_CONFIGURED
+  CONFIGURED
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+model CompanyIntegration {
+  id            String                     @id @default(uuid()) @db.Uuid
+  companyId     String                     @map("company_id") @db.Uuid
+  provider      CompanyIntegrationProvider
+  status        CompanyIntegrationStatus   @default(NOT_CONFIGURED)
+  enabled       Boolean                    @default(false)
+  configuration Json                       @default("{}")
+  connectedAt   DateTime?                  @map("connected_at")
+  updatedBy     String                     @map("updated_by") @db.Uuid
+  createdAt     DateTime                   @default(now()) @map("created_at")
+  updatedAt     DateTime                   @updatedAt @map("updated_at")
+
+  @@unique([companyId, provider])
+  @@index([companyId, status])
+  @@map("company_integrations")
+}
+
+model CompanyWorkflowSetting {
+  companyId           String   @id @map("company_id") @db.Uuid
+  taskNotifications   Boolean  @default(true) @map("task_notifications")
+  projectUpdates      Boolean  @default(true) @map("project_updates")
+  approvalFlow        Boolean  @default(false) @map("approval_flow")
+  clientNotifications Boolean  @default(true) @map("client_notifications")
+  updatedBy           String   @map("updated_by") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("company_workflow_settings")
+}
+
+model CompanySettingAudit {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  action    String
+  details   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  actor     User     @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([actorId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("company_setting_audits")
+}
+
+model CompanyOnboardingAudit {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  companyId String?  @map("company_id") @db.Uuid
+  action    String
+  details   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  actor     User     @relation("OnboardingActor", fields: [actorId], references: [id], onDelete: Restrict)
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("company_onboarding_audits")
+}
+
+model PlatformSetting {
+  id                      String   @id @default("global")
+  platformName            String   @default("Adverse") @map("platform_name")
+  platformLogoUrl         String?  @map("platform_logo_url")
+  faviconUrl              String?  @map("favicon_url")
+  primaryColor            String   @default("#0876ED") @map("primary_color")
+  secondaryColor          String   @default("#065EC1") @map("secondary_color")
+  footerText              String   @default("© Adverse") @map("footer_text")
+  supportEmail            String   @default("support@adverse.example.com") @map("support_email")
+  supportPhone            String?  @map("support_phone")
+  defaultTimezone         String   @default("UTC") @map("default_timezone")
+  defaultLanguage         String   @default("en") @map("default_language")
+  defaultCompanyStatus    String   @default("ACTIVE") @map("default_company_status")
+  defaultUserStatus       String   @default("PENDING_VERIFICATION") @map("default_user_status")
+  defaultSubscriptionCode String   @default("STARTER") @map("default_subscription_code")
+  smtpHost                String   @default("mailpit") @map("smtp_host")
+  smtpPort                Int      @default(1025) @map("smtp_port")
+  smtpUsername            String   @default("") @map("smtp_username")
+  smtpPasswordEncrypted   String   @default("") @map("smtp_password_encrypted")
+  smtpEncryption          String   @default("NONE") @map("smtp_encryption")
+  smtpSenderName          String   @default("Adverse") @map("smtp_sender_name")
+  smtpSenderEmail         String   @default("no-reply@adverse.example.com") @map("smtp_sender_email")
+  maintenanceEnabled      Boolean  @default(false) @map("maintenance_enabled")
+  maintenanceMessage      String   @default("Adverse is temporarily unavailable while scheduled maintenance is in progress.") @map("maintenance_message")
+  maintenanceAllowedRoles String[] @default(["PLATFORM_OWNER"]) @map("maintenance_allowed_roles")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
+
+model PlatformSettingAudit {
+  id            String   @id @default(uuid()) @db.Uuid
+  actorId       String   @map("actor_id") @db.Uuid
+  action        String
+  changedFields String[] @map("changed_fields")
+  previousValue Json?    @map("previous_value")
+  newValue      Json?    @map("new_value")
+  createdAt     DateTime @default(now()) @map("created_at")
+  actor         User     @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("platform_setting_audits")
+}
+
+model UserPermission {
+  userId       String     @map("user_id") @db.Uuid
+  moduleId     String     @map("module_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at")
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module       Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, moduleId, permissionId])
+  @@index([moduleId])
+  @@index([permissionId])
+  @@map("user_permissions")
+}
+
+model DeveloperAudit {
+  id                String   @id @default(uuid()) @db.Uuid
+  actorId           String   @map("actor_id") @db.Uuid
+  targetDeveloperId String   @map("target_developer_id") @db.Uuid
+  action            String
+  details           String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  actor             User     @relation("DeveloperAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+  targetDeveloper   User     @relation("DeveloperAuditTarget", fields: [targetDeveloperId], references: [id], onDelete: Cascade)
+
+  @@index([actorId, createdAt])
+  @@index([targetDeveloperId, createdAt])
+  @@map("developer_audits")
+}
+
+model CompanyManagementAudit {
+  id             String   @id @default(uuid()) @db.Uuid
+  actorId        String   @map("actor_id") @db.Uuid
+  companyId      String   @map("company_id") @db.Uuid
+  action         String
+  previousStatus String?  @map("previous_status")
+  newStatus      String?  @map("new_status")
+  createdAt      DateTime @default(now()) @map("created_at")
+  actor          User     @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([actorId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("company_management_audits")
+}
+
+model ProfileAudit {
+  id        String             @id @default(uuid()) @db.Uuid
+  userId    String             @map("user_id") @db.Uuid
+  companyId String?            @map("company_id") @db.Uuid
+  action    ProfileAuditAction
+  createdAt DateTime           @default(now()) @map("created_at")
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([companyId])
+  @@map("profile_audits")
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+model AuthSession {
+  id               String                @id @default(uuid()) @db.Uuid
+  userId           String                @map("user_id") @db.Uuid
+  companyId        String?               @map("company_id") @db.Uuid
+  refreshTokenHash String                @map("refresh_token_hash")
+  status           SessionStatus         @default(ACTIVE)
+  loginAt          DateTime              @default(now()) @map("login_at")
+  lastActivityAt   DateTime              @default(now()) @map("last_activity_at")
+  expiresAt        DateTime              @map("expires_at")
+  deviceInfo       String?               @map("device_info")
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company          Company?              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  events           AuthenticationEvent[]
+
+  @@index([userId])
+  @@index([companyId])
+  @@index([status, expiresAt])
+  @@map("auth_sessions")
+}
+
+model AuthenticationEvent {
+  id        String                  @id @default(uuid()) @db.Uuid
+  eventType AuthenticationEventType @map("event_type")
+  userId    String?                 @map("user_id") @db.Uuid
+  sessionId String?                 @map("session_id") @db.Uuid
+  email     String?
+  details   String?
+  companyId String?                 @map("company_id") @db.Uuid
+  ipAddress String?                 @map("ip_address")
+  createdAt DateTime                @default(now()) @map("created_at")
+  user      User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  session   AuthSession?            @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([eventType, createdAt])
+  @@map("authentication_events")
+}
+
+model RegistrationAudit {
+  id            String             @id @default(uuid()) @db.Uuid
+  action        RegistrationAction
+  actorId       String             @map("actor_id") @db.Uuid
+  createdUserId String?            @map("created_user_id") @db.Uuid
+  companyId     String?            @map("company_id") @db.Uuid
+  roleCode      String?            @map("role_code")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  actor         User               @relation("RegistrationActor", fields: [actorId], references: [id], onDelete: Restrict)
+  createdUser   User?              @relation("RegistrationCreatedUser", fields: [createdUserId], references: [id], onDelete: Restrict)
+  company       Company?           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([actorId])
+  @@index([createdUserId])
+  @@index([companyId])
+  @@map("registration_audits")
+}
+
+model OrganizationAudit {
+  id         String   @id @default(uuid()) @db.Uuid
+  action     String
+  actorId    String   @map("actor_id") @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id") @db.Uuid
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([companyId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@map("organization_audits")
+}
+
+model CompanyInvitation {
+  id         String           @id @default(uuid()) @db.Uuid
+  companyId  String           @map("company_id") @db.Uuid
+  email      String
+  invitedBy  String           @map("invited_by") @db.Uuid
+  tokenHash  String           @unique @map("token_hash")
+  expiresAt  DateTime         @map("expires_at")
+  acceptedAt DateTime?        @map("accepted_at")
+  status     InvitationStatus @default(PENDING)
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  @@index([companyId, status])
+  @@index([companyId, email])
+  @@index([expiresAt])
+  @@map("company_invitations")
+}
+
+model InvitationAudit {
+  id           String   @id @default(uuid()) @db.Uuid
+  invitationId String?  @map("invitation_id") @db.Uuid
+  companyId    String?  @map("company_id") @db.Uuid
+  actorId      String?  @map("actor_id") @db.Uuid
+  action       String
+  details      Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([companyId, createdAt])
+  @@index([invitationId, createdAt])
+  @@map("invitation_audits")
+}

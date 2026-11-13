@@ -1,0 +1,328 @@
+.invite-workspace {
+  width: min(1120px, 100%);
+  margin: auto;
+  color: var(--foreground);
+  font-family: var(--font-poppins), Arial, sans-serif;
+}
+.invite-actions {
+  margin-bottom: 12px;
+}
+.invite-actions button {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 15px;
+  border: 1px solid #0876ED;
+  border-radius: 10px;
+  color: #fff;
+  background: #0876ED;
+  font-family: var(--font-poppins), Arial, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+.invite-actions button:hover {
+  background: #065EC1;
+}
+.invite-workspace svg {
+  width: 17px;
+}
+.invite-notice,
+.invite-error {
+  margin-bottom: 10px;
+  padding: 11px 13px;
+  border: 1px solid #bde5cc;
+  border-radius: 9px;
+  color: #356f55;
+  background: #e9f7ef;
+  font-size: 0.74rem;
+}
+.dark .invite-notice {
+  color: #86d3a9;
+  border-color: #28533a;
+  background: #173025;
+}
+.dark .invite-error {
+  color: #f0a6af;
+  border-color: #63323a;
+  background: #361f24;
+}
+.invite-error {
+  border-color: #efc8ce;
+  color: #9a4551;
+  background: #fbf0f2;
+}
+.invite-table {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.invite-head,
+.invite-table article {
+  display: grid;
+  grid-template-columns: 1.5fr 0.55fr 0.7fr 90px;
+  align-items: center;
+  gap: 18px;
+  padding: 0 16px;
+}
+.invite-head {
+  min-height: 40px;
+  color: var(--muted);
+  background: var(--surface-muted);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.invite-head span:last-child {
+  text-align: right;
+}
+.invite-table article {
+  min-height: 64px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.76rem;
+  transition: background 0.16s ease;
+}
+.invite-table article:nth-child(odd) {
+  background: var(--surface-muted);
+}
+.invite-table article:last-child {
+  border: 0;
+}
+.invite-table article:hover {
+  background: var(--surface-muted);
+}
+.invite-table article > strong,
+.invite-table article > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.invite-table article > strong {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.invite-table article > span {
+  color: var(--muted);
+}
+.invite-table em {
+  width: max-content;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: #065EC1;
+  background: var(--surface-muted);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 700;
+}
+.dark .invite-table em {
+  color: #C4E6FF;
+}
+.invite-table article > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.invite-table article button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    color 0.16s ease,
+    background 0.16s ease;
+}
+.invite-table article button:hover {
+  color: #0876ED;
+  border-color: #0876ED;
+  background: var(--surface-muted);
+}
+.invite-table article button:last-child {
+  color: #a64b56;
+}
+.invite-state {
+  min-height: 220px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 0.75rem;
+  text-align: center;
+}
+.invite-state > svg {
+  width: 34px;
+  color: #0876ED;
+}
+.invite-state i {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #0876ED;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: ispin 0.7s linear infinite;
+}
+.invite-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #100b1775;
+  backdrop-filter: blur(7px);
+  font-family: var(--font-poppins), Arial, sans-serif;
+}
+.invite-modal form {
+  width: min(520px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 25px 70px #100b1740;
+}
+.invite-modal header {
+  display: flex;
+  justify-content: space-between;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.invite-modal header span {
+  color: #0876ED;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.invite-modal h2 {
+  margin: 4px 0 0;
+  font-size: 1.12rem;
+}
+.invite-modal header button {
+  width: 35px;
+  height: 35px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: transparent;
+}
+.invite-modal label {
+  display: grid;
+  gap: 7px;
+  padding: 24px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.invite-modal input {
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--foreground);
+  background: var(--surface);
+  font-family: var(--font-poppins), Arial, sans-serif;
+  font-size: 0.76rem;
+  font-weight: 500;
+  outline: 0;
+}
+.invite-modal input:focus {
+  border-color: #0876ED;
+  box-shadow: 0 0 0 3px #0876ED16;
+}
+.invite-modal input[aria-invalid="true"] {
+  border-color: #b74858;
+}
+.invite-field-error {
+  color: #b74858;
+  font-size: 0.67rem;
+  font-weight: 600;
+}
+.invite-modal footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 17px 24px;
+  border-top: 1px solid var(--border);
+}
+.invite-modal footer button {
+  min-height: 41px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--foreground);
+  background: var(--surface);
+  font-family: var(--font-poppins), Arial, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.invite-modal footer button:last-child {
+  color: #fff;
+  border-color: #0876ED;
+  background: #0876ED;
+}
+.invite-modal footer button:last-child:hover {
+  background: #065EC1;
+}
+.invite-modal footer button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+.spin {
+  animation: ispin 0.7s linear infinite;
+}
+@keyframes ispin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-width: 700px) {
+  .invite-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+  .invite-head {
+    display: none;
+  }
+  .invite-table {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+  .invite-table article {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+    margin-bottom: 10px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    background: var(--surface);
+  }
+  .invite-table article > div {
+    width: 100%;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .invite-table article button {
+    flex: 1;
+  }
+}

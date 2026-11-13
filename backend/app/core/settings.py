@@ -1,0 +1,129 @@
+from functools import lru_cache
+from typing import Literal, Self
+
+from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+        populate_by_name=True,
+    )
+
+    app_name: str = "Adverse API"
+    app_version: str = "0.37.0"
+    app_description: str = "Adverse platform and company service API"
+    app_author: str = "Adverse"
+    environment: Literal["development", "test", "staging", "production"] = "development"
+    api_prefix: str = ""
+
+    database_url: str
+    redis_url: str
+
+    jwt_secret: SecretStr = Field(min_length=32)
+    jwt_expiry_minutes: int = Field(default=30, gt=0, le=10080)
+    jwt_refresh_expiry_days: int = Field(default=7, gt=0, le=365)
+    password_reset_expiry_minutes: int = Field(default=30, gt=0, le=1440)
+    email_verification_expiry_minutes: int = Field(default=60, gt=0, le=1440)
+    email_verification_resend_seconds: int = Field(default=60, gt=0, le=3600)
+    invitation_expiry_hours: int = Field(default=48, gt=0, le=168)
+    login_max_failed_attempts: int = Field(default=5, ge=3, le=20)
+    account_lock_minutes: int = Field(default=15, gt=0, le=1440)
+
+    storage_provider: Literal["local", "s3", "gcs", "azure"] = "local"
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, gt=0, le=65535)
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_from_email: str = ""
+    smtp_use_tls: bool = True
+
+    cors_origins: str = (
+        "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"
+    )
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    swagger_enabled: bool = True
+    health_check_enabled: bool = True
+    public_signup_enabled: bool = False
+
+    swagger_contact_name: str = "Adverse API Team"
+    swagger_contact_email: str = "api@adverse.example.com"
+    swagger_contact_url: str = "https://adverse.local"
+
+    @field_validator("app_name", "app_version", "database_url", "redis_url")
+    @classmethod
+    def required_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value.strip()
+
+    @field_validator("api_prefix")
+    @classmethod
+    def valid_api_prefix(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        if value and not value.startswith("/"):
+            raise ValueError("must be empty or begin with '/'")
+        return value
+
+    @model_validator(mode="after")
+    def validate_production_safety(self) -> Self:
+        if self.environment == "production":
+            secret = self.jwt_secret.get_secret_value().lower()
+            if "development" in secret or "change-me" in secret:
+                raise ValueError("JWT_SECRET must be replaced for production")
+            if not self.smtp_host or not self.smtp_from_email:
+                raise ValueError("SMTP_HOST and SMTP_FROM_EMAIL are required in production")
+        return self
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    def password_reset_url(self, role: str, token: str) -> str:
+        role_index = {
+            "PLATFORM_OWNER": 0,
+            "DEVELOPER": 0,
+            "COMPANY_ADMIN": 0,
+            "COMPANY_MANAGER": 1,
+            "COMPANY_EMPLOYEE": 2,
+            "COMPANY_CLIENT": 3,
+        }.get(role, 0)
+        origins = self.allowed_origins
+        if not origins:
+            raise ValueError("At least one CORS origin is required for password recovery")
+        origin = origins[role_index] if len(origins) > role_index else origins[0]
+        return f"{origin}/reset-password?token={token}"
+
+    def email_verification_url(self, role: str, token: str) -> str:
+        role_index = {
+            "PLATFORM_OWNER": 0,
+            "DEVELOPER": 0,
+            "COMPANY_ADMIN": 0,
+            "COMPANY_MANAGER": 1,
+            "COMPANY_EMPLOYEE": 2,
+            "COMPANY_CLIENT": 3,
+        }.get(role, 0)
+        origins = self.allowed_origins
+        if not origins:
+            raise ValueError("At least one CORS origin is required for email verification")
+        origin = origins[role_index] if len(origins) > role_index else origins[0]
+        return f"{origin}/verify-email?token={token}"
+
+    def invitation_url(self, token: str) -> str:
+        origins = self.allowed_origins
+        if not origins:
+            raise ValueError("At least one CORS origin is required for invitations")
+        origin = origins[0]
+        return f"{origin}/invitations/accept?token={token}"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

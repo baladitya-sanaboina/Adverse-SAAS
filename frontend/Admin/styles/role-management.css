@@ -1,0 +1,618 @@
+.role-workspace {
+  width: min(1120px, 100%);
+  margin: auto;
+  color: var(--foreground);
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+}
+
+.role-state > button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid #0876ED;
+  border-radius: 10px;
+  background: #0876ED;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.role-tools {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 190px;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.role-tools > label {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.role-tools > label:focus-within {
+  border-color: #0876ED;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #0876ED 12%, transparent);
+}
+
+.role-tools > label svg {
+  width: 17px;
+  color: #0876ED;
+}
+
+.role-tools input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--foreground);
+  font:
+    500 0.65rem var(--font-poppins),
+    Arial,
+    sans-serif;
+}
+
+.role-tools .loopless-select > button {
+  min-height: 40px;
+  font:
+    600 0.65rem var(--font-poppins),
+    Arial,
+    sans-serif;
+}
+
+.role-notice,
+.role-error {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid #bde5cc;
+  border-radius: 10px;
+  background: #e9f7ef;
+  color: #356f55;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.role-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-color: #efc8ce;
+  background: #fbf0f2;
+  color: #9a4551;
+}
+
+.role-error button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.dark .role-notice {
+  border-color: #28533a;
+  background: #173025;
+  color: #86d3a9;
+}
+
+.dark .role-error {
+  border-color: #63323a;
+  background: #361f24;
+  color: #f0a6af;
+}
+
+.role-table {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.role-table-head,
+.role-table article {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.5fr) 90px 120px 110px 200px;
+  align-items: center;
+  gap: 14px;
+  padding-inline: 16px;
+}
+
+.role-table-head {
+  min-height: 40px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.role-table-head > span:last-child {
+  text-align: right;
+}
+
+.role-table article {
+  min-height: 64px;
+  padding-block: 10px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.65rem;
+}
+
+.role-table article:hover {
+  background: color-mix(in srgb, var(--surface-muted) 64%, transparent);
+}
+
+.role-table article > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.role-table :is(strong, small) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-table strong {
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.role-table :is(small, article > span) {
+  color: var(--muted);
+}
+
+.role-table small {
+  font-size: 0.61rem;
+}
+
+.role-table em {
+  width: max-content;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.61rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.role-table em.active {
+  border-color: #c5e7d2;
+  background: #ebf8f0;
+  color: #287150;
+}
+
+.role-table em.inactive {
+  border-color: #efc8ce;
+  background: #fbf0f2;
+  color: #9a4551;
+}
+
+.dark .role-table em.active {
+  border-color: #28533a;
+  background: #173025;
+  color: #86d3a9;
+}
+
+.dark .role-table em.inactive {
+  border-color: #63323a;
+  background: #361f24;
+  color: #f0a6af;
+}
+
+.role-state {
+  min-height: 270px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 36px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-align: center;
+}
+
+.role-state > svg {
+  width: 36px;
+  color: #0876ED;
+}
+
+.role-state > i {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #0876ED;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: role-spin 0.7s linear infinite;
+}
+
+.role-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 17px;
+  margin-bottom: 20px;
+}
+
+.role-fields label {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.role-textarea-shell {
+  min-height: 98px;
+  align-items: flex-start;
+  padding-top: 13px;
+}
+
+.role-textarea-shell textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 0;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--foreground);
+  font:
+    500 0.73rem var(--font-poppins),
+    Arial,
+    sans-serif;
+  line-height: 1.5;
+}
+
+.role-form-card .permission-selector button {
+  grid-column: auto;
+  height: auto;
+}
+
+.role-fields .management-input:has(:disabled) {
+  background: var(--surface-muted);
+}
+
+.role-fields small {
+  color: #b74858;
+  font-size: 0.61rem;
+  font-weight: 600;
+}
+
+.role-form-body > .management-form-footer {
+  margin-top: 22px;
+}
+
+.permission-selector {
+  overflow: hidden;
+  margin-top: 22px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+}
+
+.permission-selector > header {
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 20px 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.permission-selector > header > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.permission-selector > header > div > i {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, #0876ED 28%, var(--border));
+  border-radius: 11px;
+  background: var(--surface);
+  color: #0876ED;
+  font-style: normal;
+}
+
+.permission-selector > header > div > i svg {
+  width: 19px;
+}
+
+.permission-selector > header > div > span {
+  display: grid;
+  gap: 3px;
+}
+
+.permission-selector > header strong {
+  font-size: 0.95rem;
+}
+
+.permission-selector > header small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.55;
+  font-weight: 500;
+}
+
+.permission-selector > header > em {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-style: normal;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.permission-selector-picker {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.34fr) 1fr;
+  gap: 12px;
+  padding: 0;
+}
+
+.permission-selector-picker > nav {
+  max-height: 390px;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 7px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+.permission-selector-picker > nav button {
+  width: 100%;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.71rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.permission-selector-picker > nav button:hover {
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.permission-selector-picker > nav button.active {
+  border-color: color-mix(in srgb, #0876ED 28%, var(--border));
+  background: var(--surface);
+  color: #0876ED;
+}
+
+.permission-selector-picker > nav em {
+  min-width: 40px;
+  padding: 4px 7px;
+  border-radius: 99px;
+  background: var(--surface-muted);
+  font-size: 0.61rem;
+  font-style: normal;
+  text-align: center;
+}
+
+.permission-selector-actions {
+  min-height: 330px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.permission-selector-actions > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.permission-selector-actions > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.permission-selector-actions > header strong {
+  font-size: 0.86rem;
+}
+
+.permission-selector-actions > header span {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.permission-selector-actions > header button {
+  min-width: 108px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: #0876ED;
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.permission-selector-actions > header button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.permission-selector-actions fieldset {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin: 0;
+  padding: 15px 0 0;
+  border: 0;
+}
+
+.permission-selector-actions label {
+  min-height: 49px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.permission-selector-actions label:hover,
+.permission-selector-actions label.selected {
+  border-color: color-mix(in srgb, #0876ED 40%, var(--border));
+}
+
+.permission-selector-actions label.selected {
+  background: color-mix(in srgb, #0876ED 8%, var(--surface));
+  color: var(--foreground);
+}
+
+.permission-selector-actions input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.permission-selector-actions label i {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  font-style: normal;
+}
+
+.permission-selector-actions label.selected i {
+  border-color: #0876ED;
+  background: #0876ED;
+  color: #fff;
+}
+
+.permission-selector-actions label i svg {
+  width: 12px;
+  stroke-width: 3;
+}
+
+.permission-selector-actions fieldset:disabled label {
+  cursor: default;
+}
+
+.spin {
+  animation: role-spin 0.7s linear infinite;
+}
+
+@keyframes role-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 900px) {
+  .role-table-head {
+    display: none;
+  }
+
+  .role-table {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    border: 0;
+    background: var(--surface-muted);
+  }
+
+  .role-table article {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 17px;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    background: var(--surface);
+  }
+
+  .role-table article > div:first-child,
+  .role-table article .crud-actions {
+    grid-column: 1 / -1;
+  }
+
+  .role-table article .crud-actions {
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .permission-selector-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .permission-selector-picker > nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 210px;
+  }
+}
+
+@media (max-width: 620px) {
+  .role-tools,
+  .role-fields,
+  .permission-selector-actions fieldset {
+    grid-template-columns: 1fr;
+  }
+
+  .role-workspace .management-toolbar button {
+    width: 100%;
+  }
+
+  .permission-selector > header {
+    align-items: flex-start;
+  }
+
+  .permission-selector-picker > nav {
+    grid-template-columns: 1fr;
+  }
+}

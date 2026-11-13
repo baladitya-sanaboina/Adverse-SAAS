@@ -1,0 +1,90 @@
+:root {
+  --company-primary: #0876ED;
+  --company-secondary: #065EC1;
+  --company-accent: #0876ED;
+  --company-on-primary: #ffffff;
+  --company-info: #2563a6;
+  --company-success: #16855b;
+  --company-warning: #b7791f;
+  --company-danger: #c2414f;
+}
+
+/* Preserve uploaded tenant artwork; tint only the Adverse fallback mark. */
+.dash-logo.has-company-logo img,
+.dash-mobile-brand.has-company-logo img,
+.dark .dash-logo.has-company-logo img,
+.dark .dash-mobile-brand.has-company-logo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  transform: none;
+  object-fit: contain;
+  object-position: center;
+  filter: none;
+}
+
+.dash-logo.has-company-logo,
+.dash-mobile-brand.has-company-logo {
+  padding: 3px;
+}
+
+.dash-logo,
+.dash-collapse,
+.dash-nav-item:hover,
+.dash-nav-item.active,
+.dash-breadcrumb strong,
+.dash-breadcrumb a:hover,
+.foundation-page > div > span,
+.foundation-error strong,
+.ui-empty > b,
+.shell-actions > button i {
+  color: var(--company-accent);
+}
+
+.dash-collapse:hover,
+.ui-button,
+.shell-profile > b {
+  border-color: var(--company-primary);
+  background: var(--company-primary);
+}
+.ui-button,
+.shell-profile > b {
+  color: var(--company-on-primary);
+}
+
+.dash-nav-item.active {
+  border-left-color: var(--company-accent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--company-primary) 13%, transparent), transparent);
+}
+
+.dash-nav-item:hover {
+  background: color-mix(in srgb, var(--company-primary) 10%, var(--surface));
+}
+
+.dash-avatar {
+  background: linear-gradient(135deg, var(--company-secondary), var(--company-primary));
+}
+
+.dash-breadcrumb a:hover,
+.ui-empty > b {
+  background: color-mix(in srgb, var(--company-primary) 10%, var(--surface));
+}
+
+.dash-collapse:hover {
+  color: #fff;
+  box-shadow: 0 9px 22px color-mix(in srgb, var(--company-primary) 30%, transparent);
+}
+
+.dark .dash-logo,
+.dark .dash-collapse,
+.dark .dash-nav-item:hover,
+.dark .dash-nav-item.active,
+.dark .dash-breadcrumb strong,
+.dark .dash-breadcrumb a:hover,
+.dark .foundation-page > div > span,
+.dark .foundation-error strong,
+.dark .ui-empty > b {
+  color: color-mix(in srgb, var(--company-accent) 68%, white);
+}

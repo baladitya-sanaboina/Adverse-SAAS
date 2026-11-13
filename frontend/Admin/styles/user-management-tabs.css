@@ -1,0 +1,69 @@
+.user-management-tabs {
+  width: max-content;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 1.15rem;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(44, 31, 55, 0.045);
+}
+
+.user-management-tabs a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.48rem;
+  min-width: 0;
+  min-height: 2.45rem;
+  padding: 0 0.82rem;
+  border: 0;
+  border-radius: 0.58rem;
+  color: var(--muted);
+  text-decoration: none;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.user-management-tabs a:hover {
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+.user-management-tabs a.active {
+  background: #EEF7FF;
+  color: #0876ED;
+}
+
+.dark .user-management-tabs a.active {
+  background: #17213A;
+  color: #A1D3FF;
+}
+
+.user-management-tabs svg {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  stroke-width: 1.8;
+}
+
+.user-management-tabs strong {
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .user-management-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .user-management-tabs a {
+    padding: 0 0.5rem;
+  }
+}

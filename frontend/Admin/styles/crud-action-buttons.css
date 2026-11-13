@@ -1,0 +1,86 @@
+.crud-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.crud-actions button {
+  width: 33px;
+  height: 33px;
+  flex: 0 0 33px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: #0876ED;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease;
+}
+
+.crud-actions button:hover,
+.crud-actions button:focus-visible {
+  border-color: #DCEEFF;
+  background: #EEF7FF;
+  outline: 0;
+  transform: translateY(-1px);
+}
+
+.dark .crud-actions button:hover,
+.dark .crud-actions button:focus-visible {
+  background: #17213A;
+}
+
+.crud-actions button.danger {
+  color: #a64b56;
+}
+
+.crud-actions button.danger:hover,
+.crud-actions button.danger:focus-visible {
+  border-color: color-mix(in srgb, #b64d59 45%, var(--border));
+  background: color-mix(in srgb, #b64d59 8%, var(--surface));
+}
+
+.crud-actions button.success {
+  color: #287150;
+}
+
+.crud-actions button.success:hover,
+.crud-actions button.success:focus-visible {
+  border-color: color-mix(in srgb, #2e7a58 45%, var(--border));
+  background: color-mix(in srgb, #2e7a58 8%, var(--surface));
+}
+
+.crud-actions button:disabled {
+  cursor: wait;
+  opacity: 0.45;
+  transform: none;
+}
+
+.crud-actions svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
+}
+
+.crud-actions .crud-action-spinner {
+  animation: crud-action-spin 0.7s linear infinite;
+}
+
+@keyframes crud-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .crud-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

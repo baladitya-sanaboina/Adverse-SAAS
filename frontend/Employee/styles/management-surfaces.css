@@ -1,0 +1,346 @@
+.management-toolbar {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 15px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--foreground);
+  background: var(--surface);
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+}
+.management-toolbar > div {
+  display: grid;
+  gap: 2px;
+}
+.management-toolbar span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 500;
+}
+.management-toolbar strong {
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+.management-toolbar button,
+.management-primary-action,
+.management-secondary-action {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border: 1px solid #0876ED;
+  border-radius: 9px;
+  color: #fff;
+  background: #0876ED;
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+.management-toolbar button svg,
+.management-primary-action svg,
+.management-secondary-action svg {
+  width: 16px;
+  height: 16px;
+}
+.management-toolbar .management-back,
+.management-secondary-action {
+  color: var(--foreground);
+  border-color: var(--border);
+  background: var(--surface-muted);
+}
+
+.management-toolbar button:not(.management-back):hover,
+.management-toolbar button:not(.management-back):focus-visible,
+.management-primary-action:hover,
+.management-primary-action:focus-visible {
+  border-color: #065EC1;
+  background: #065EC1;
+  box-shadow: 0 10px 24px rgba(8, 118, 237, 0.18);
+  outline: 0;
+  transform: translateY(-1px);
+}
+
+.management-toolbar .management-back:hover,
+.management-toolbar .management-back:focus-visible,
+.management-secondary-action:hover,
+.management-secondary-action:focus-visible {
+  border-color: #DCEEFF;
+  color: #065EC1;
+  background: #EEF7FF;
+  outline: 0;
+}
+
+.dark .management-toolbar .management-back:hover,
+.dark .management-toolbar .management-back:focus-visible,
+.dark .management-secondary-action:hover,
+.dark .management-secondary-action:focus-visible {
+  border-color: #42516A;
+  color: #A7D7FF;
+  background: #17213A;
+}
+.management-editor {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--foreground);
+  background: var(--surface);
+  box-shadow: 0 16px 42px rgba(23, 53, 87, 0.08);
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+}
+.management-editor > header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+.management-editor > header > i,
+.management-modal > header > i {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, #0876ED 32%, var(--border));
+  border-radius: 11px;
+  color: #0876ED;
+  background: var(--surface);
+  font-style: normal;
+}
+.management-editor > header svg,
+.management-modal > header > i svg {
+  width: 20px;
+  height: 20px;
+}
+.management-editor > header span,
+.management-modal > header span {
+  color: #0876ED;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.management-editor > header h2,
+.management-modal > header h2 {
+  margin: 3px 0 2px;
+  color: var(--foreground);
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.management-editor > header p,
+.management-modal > header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.management-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px;
+  padding: 22px;
+}
+.management-form > .wide,
+.management-form > .management-form-footer,
+.management-form > .management-form-message,
+.management-form > .permission-selector {
+  grid-column: 1 / -1;
+}
+.management-field {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  color: var(--foreground);
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.management-input {
+  min-height: 45px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--surface);
+}
+.management-input:focus-within {
+  border-color: #0876ED;
+  box-shadow: 0 0 0 3px rgba(8, 118, 237, 0.12);
+}
+.management-input:has([aria-invalid="true"]) {
+  border-color: #bd4752;
+}
+.management-input > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+.management-input input,
+.management-input textarea {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--foreground);
+  background: transparent;
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+.management-input textarea {
+  min-height: 88px;
+  padding: 12px 0;
+  resize: vertical;
+  line-height: 1.55;
+}
+.management-field small {
+  color: #b74858;
+  font-size: 0.61rem;
+  font-weight: 600;
+}
+.management-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 5px;
+}
+.management-form-message {
+  padding: 10px 12px;
+  border: 1px solid #efc8ce;
+  border-radius: 9px;
+  color: #9a4551;
+  background: #fbf0f2;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+.dark .management-form-message {
+  border-color: #63323a;
+  color: #f0a6af;
+  background: #361f24;
+}
+.management-modal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(10, 20, 35, 0.42);
+  backdrop-filter: blur(4px);
+}
+.management-modal {
+  width: min(560px, 100%);
+  max-height: min(780px, calc(100vh - 40px));
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--foreground);
+  background: var(--surface);
+  box-shadow: 0 28px 80px rgba(20, 12, 30, 0.28);
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+  animation: management-modal-in 0.2s ease-out;
+}
+.management-modal > header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 13px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+.management-modal > header > button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--surface);
+  cursor: pointer;
+}
+.management-modal > header > button svg {
+  width: 15px;
+}
+.management-modal-body {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  overflow-y: auto;
+}
+.management-modal-body .management-field {
+  font-size: 0.72rem;
+}
+.management-modal > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 15px 22px;
+  border-top: 1px solid var(--border);
+}
+@keyframes management-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@media (max-width: 680px) {
+  .management-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .management-toolbar button {
+    width: 100%;
+  }
+  .management-form {
+    grid-template-columns: 1fr;
+    padding: 18px;
+  }
+  .management-form > * {
+    grid-column: 1 !important;
+  }
+  .management-editor > header {
+    padding: 18px;
+  }
+  .management-form-footer,
+  .management-modal > footer {
+    flex-direction: column-reverse;
+  }
+  .management-form-footer button,
+  .management-modal > footer button {
+    width: 100%;
+  }
+  .management-modal-backdrop {
+    padding: 10px;
+  }
+  .management-modal > header,
+  .management-modal-body {
+    padding: 18px;
+  }
+}

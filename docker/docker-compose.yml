@@ -1,0 +1,195 @@
+name: loopless
+
+x-frontend-healthcheck: &frontend-healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 30s
+
+services:
+  admin:
+    build:
+      context: ../frontend/Admin
+      dockerfile: ../../docker/Dockerfile.admin
+    env_file: ../frontend/Admin/.env.local
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../frontend/Admin:/app
+      - ../frontend/shared:/app/_shared
+      - admin_node_modules:/app/node_modules
+      - admin_next:/app/.next
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      <<: *frontend-healthcheck
+      test: ["CMD", "node", "-e", "Promise.all([fetch('http://localhost:3000'),fetch(process.env.BACKEND_INTERNAL_URL+'/health')]).then(r=>{if(r.some(x=>!x.ok))process.exit(1)}).catch(()=>process.exit(1))"]
+
+  manager:
+    build:
+      context: ../frontend/Manager
+      dockerfile: ../../docker/Dockerfile.manager
+    env_file: ../frontend/Manager/.env.local
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+    ports:
+      - "3001:3001"
+    volumes:
+      - ../frontend/Manager:/app
+      - ../frontend/shared:/app/_shared
+      - manager_node_modules:/app/node_modules
+      - manager_next:/app/.next
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      <<: *frontend-healthcheck
+      test: ["CMD", "node", "-e", "Promise.all([fetch('http://localhost:3001'),fetch(process.env.BACKEND_INTERNAL_URL+'/health')]).then(r=>{if(r.some(x=>!x.ok))process.exit(1)}).catch(()=>process.exit(1))"]
+
+  employee:
+    build:
+      context: ../frontend/Employee
+      dockerfile: ../../docker/Dockerfile.employee
+    env_file: ../frontend/Employee/.env.local
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+    ports:
+      - "3002:3002"
+    volumes:
+      - ../frontend/Employee:/app
+      - ../frontend/shared:/app/_shared
+      - employee_node_modules:/app/node_modules
+      - employee_next:/app/.next
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      <<: *frontend-healthcheck
+      test: ["CMD", "node", "-e", "Promise.all([fetch('http://localhost:3002'),fetch(process.env.BACKEND_INTERNAL_URL+'/health')]).then(r=>{if(r.some(x=>!x.ok))process.exit(1)}).catch(()=>process.exit(1))"]
+
+  client:
+    build:
+      context: ../frontend/Client
+      dockerfile: ../../docker/Dockerfile.client
+    env_file: ../frontend/Client/.env.local
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+    ports:
+      - "3003:3003"
+    volumes:
+      - ../frontend/Client:/app
+      - client_node_modules:/app/node_modules
+      - client_next:/app/.next
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      <<: *frontend-healthcheck
+      test: ["CMD", "node", "-e", "Promise.all([fetch('http://localhost:3003'),fetch(process.env.BACKEND_INTERNAL_URL+'/health')]).then(r=>{if(r.some(x=>!x.ok))process.exit(1)}).catch(()=>process.exit(1))"]
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../docker/Dockerfile.backend
+    env_file: ../backend/.env
+    environment:
+      APP_VERSION: 0.37.0
+      DATABASE_URL: postgresql://loopless:loopless@postgres:5432/loopless_dev
+      REDIS_URL: redis://redis:6379/0
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_FROM_EMAIL: no-reply@loopless.local
+      SMTP_USE_TLS: "false"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/app
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  migrations:
+    build:
+      context: ../backend
+      dockerfile: ../docker/Dockerfile.prisma
+    environment:
+      DATABASE_URL: postgresql://loopless:loopless@postgres:5432/loopless_dev
+    volumes:
+      - ../backend/prisma:/app/prisma
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: loopless_dev
+      POSTGRES_USER: loopless
+      POSTGRES_PASSWORD: loopless
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loopless -d loopless_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: 5000
+    volumes:
+      - mailpit_data:/data
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  admin_node_modules:
+  admin_next:
+  manager_node_modules:
+  manager_next:
+  employee_node_modules:
+  employee_next:
+  client_node_modules:
+  client_next:
+  postgres_data:
+  redis_data:
+  mailpit_data:

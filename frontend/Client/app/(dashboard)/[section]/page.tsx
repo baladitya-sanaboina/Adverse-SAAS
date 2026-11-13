@@ -1,0 +1,26 @@
+import { ErrorState, FoundationPage } from "@/components/foundation/ui-foundation";
+import { AnimatedErrorPage } from "@/components/status/AnimatedErrorPage";
+import { navigationItems } from "@/lib/navigation";
+import { ProfilePage } from "@/components/profile/ProfilePage";
+
+const errors: Record<string, string> = {
+  "401": "Unauthorized",
+  "403": "Forbidden",
+  "404": "Page not found",
+  "500": "Server error",
+};
+const companyInternalSections = new Set(["clients", "crm", "roles", "departments", "branches"]);
+
+export default async function SectionPage({ params }: { params: Promise<{ section: string }> }) {
+  const { section } = await params;
+  if (section === "404") return <AnimatedErrorPage />;
+  if (errors[section]) return <ErrorState code={section} title={errors[section]} />;
+  if (companyInternalSections.has(section)) {
+    return <ErrorState code="403" title="This company workspace area is not available to client accounts" />;
+  }
+  if (section === "profile") return <ProfilePage />;
+  if (section === "settings") return <ProfilePage initialTab="settings" />;
+  const item = navigationItems.find(({ href }) => href === `/${section}`);
+  if (!item) return <AnimatedErrorPage />;
+  return <FoundationPage title={item.label} />;
+}

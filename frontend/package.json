@@ -1,0 +1,22 @@
+{
+  "name": "adverse-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "Admin",
+    "Manager",
+    "Employee",
+    "Client"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present && eslint shared",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "ui:standards": "node scripts/check-ui-standards.mjs",
+    "format": "prettier --write \"{Admin,Manager,Employee,Client}/{app,components,hooks,lib,services,types,utils}/**/*.{ts,tsx}\" \"shared/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"{Admin,Manager,Employee,Client}/{app,components,hooks,lib,services,types,utils}/**/*.{ts,tsx}\" \"shared/**/*.{ts,tsx}\""
+  },
+  "devDependencies": {
+    "prettier": "3.8.2"
+  }
+}
