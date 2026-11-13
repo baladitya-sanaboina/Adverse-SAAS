@@ -129,7 +129,9 @@ async function visit(page, url) {
   }
 }
 
-for (const app of apps) {
+// Optional: ONLY_APPS=admin,manager captures just those apps (useful when not all dev servers fit in memory).
+const onlyApps = process.env.ONLY_APPS ? process.env.ONLY_APPS.split(",") : null;
+for (const app of apps.filter((item) => !onlyApps || onlyApps.includes(item.name))) {
   for (const variant of variants) {
     const dir = join(outDir, app.name, variant.label);
     mkdirSync(dir, { recursive: true });
@@ -155,6 +157,7 @@ for (const app of apps) {
 
     const login = await context.request.post(`${app.base}/api/auth/login`, {
       data: { email: app.email, password: PASSWORD },
+      timeout: 180000, // a cold dev server compiles the login route on first use
     });
     if (!login.ok()) {
       failures.push(`${app.name}: login failed ${login.status()} ${await login.text()}`);
