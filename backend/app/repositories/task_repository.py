@@ -31,7 +31,9 @@ _TASK_COLUMNS = """
     t.client_price_default, t.client_price_final, t.client_price_reason,
     t.commission_default, t.commission_final, t.commission_reason,
     cb.name, t.created_at, t.updated_at,
-    t.assigned_at, t.started_at, t.submitted_at, t.approved_at, t.completed_at, t.cancelled_at
+    t.assigned_at, t.started_at, t.submitted_at, t.approved_at, t.completed_at, t.cancelled_at,
+    (SELECT COUNT(*) FROM task_files tf WHERE tf.task_id = t.id)::int,
+    (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id)::int
 """
 _TASK_FROM = """
     FROM tasks t
@@ -109,6 +111,8 @@ class TaskRow:
     approved_at: datetime | None
     completed_at: datetime | None
     cancelled_at: datetime | None
+    files_count: int = 0
+    comments_count: int = 0
 
     @property
     def code(self) -> str:

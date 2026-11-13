@@ -45,6 +45,8 @@ export type AdminTask = {
   commission_reason: string;
   margin: string;
   allowed_statuses: TaskStatus[];
+  files_count: number;
+  comments_count: number;
   created_by_name: string;
   created_at: string;
   updated_at: string;

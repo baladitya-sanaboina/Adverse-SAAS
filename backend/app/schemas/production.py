@@ -210,7 +210,7 @@ class TaskListFilters(BaseModel):
     assignee_user_id: UUID | None = None
     overdue_only: bool = False
     page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
+    page_size: int = Field(default=20, ge=1, le=500)
 
 
 class PriceChangeResponse(BaseModel):
@@ -247,6 +247,8 @@ class AdminTaskResponse(BaseModel):
     commission_reason: str
     margin: Money
     allowed_statuses: list[TaskStatus]
+    files_count: int = 0
+    comments_count: int = 0
     created_by_name: str
     created_at: datetime
     updated_at: datetime
@@ -322,6 +324,8 @@ class WorkerTaskResponse(BaseModel):
     currency: str
     allowed_statuses: list[TaskStatus]
     can_upload_deliverables: bool
+    files_count: int = 0
+    comments_count: int = 0
     created_at: datetime
     assigned_at: datetime | None
     submitted_at: datetime | None
@@ -348,7 +352,7 @@ class WorkerTaskFilters(BaseModel):
     status: TaskStatus | None = None
     search: str = Field(default="", max_length=100)
     page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
+    page_size: int = Field(default=20, ge=1, le=500)
 
 
 class TaskCounts(BaseModel):

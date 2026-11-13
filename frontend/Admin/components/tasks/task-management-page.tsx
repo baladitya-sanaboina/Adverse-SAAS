@@ -2,27 +2,34 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
-  ArrowLeft,
   CalendarDays,
   ClipboardList,
   Download,
   FileText,
   History,
-  List,
   MessageSquare,
   Paperclip,
   Pencil,
   Plus,
   RefreshCw,
-  Search,
   Send,
-  SquareKanban,
   Trash2,
   Upload,
   UserCheck,
   Wallet,
 } from "lucide-react";
-import { DashboardHero } from "@/components/dashboard/dashboard-hero";
+import {
+  QuickFilters,
+  SheetHeader,
+  StatusProgress,
+  TaskCard,
+  TaskSheet,
+  TasksHeader,
+  matchesQuick,
+  taskSummary,
+  type QuickFilter,
+  type TaskView,
+} from "@loopless-shared/production/task-board-ui";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { CrudActionButtons } from "@/components/foundation/crud-action-buttons";
 import { LooplessSelect, type LooplessSelectOption } from "@/components/foundation/loopless-select";
@@ -57,13 +64,13 @@ import "@/styles/service-pricing-settings.css";
 import "@/styles/production.css";
 
 type ChoiceItem = { id: string; name: string; code?: string; status?: string };
-type View =
-  | { mode: "list" }
-  | { mode: "create" }
-  | { mode: "edit"; task: AdminTaskDetail }
-  | { mode: "detail"; id: string };
+/** What the slide-in panel shows; null when it is closed and only the board is visible. */
+type Sheet = { mode: "create" } | { mode: "edit"; task: AdminTaskDetail } | { mode: "detail"; id: string } | null;
 
 const BILLING_STATUSES: TaskStatus[] = ["APPROVED", "COMPLETED", "CANCELLED"];
+const CLOSED_STATUSES: TaskStatus[] = ["APPROVED", "COMPLETED", "CANCELLED"];
+const VIEW_STORAGE_KEY = "adverse-task-view";
+const TASK_ID = /^[0-9a-f-]{36}$/i;
 
 function BudgetBanner({ budget }: { budget: BudgetCheck | null }) {
   if (!budget) return null;
@@ -93,13 +100,33 @@ function peopleOptions(people: AssigneeOption[], empty: string, filter?: (person
   ];
 }
 
+/** Keep ?task=<id> / ?mode=create in the address bar so an open task can be shared or reloaded. */
+function syncUrl(sheet: Sheet) {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("task");
+  url.searchParams.delete("mode");
+  if (sheet?.mode === "detail") url.searchParams.set("task", sheet.id);
+  else if (sheet?.mode === "create") url.searchParams.set("mode", "create");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+}
+
+const quickTask = (task: AdminTask) => ({ ...task, unassigned: !task.assignee });
+
 export function TaskManagementPage() {
-  const [view, setView] = useState<View>({ mode: "list" });
-  const [initialStatus, setInitialStatus] = useState("");
+  const [sheet, setSheet] = useState<Sheet>(null);
   const [notice, setNotice] = useState("");
   const [clients, setClients] = useState<ChoiceItem[]>([]);
   const [services, setServices] = useState<ChoiceItem[]>([]);
   const [people, setPeople] = useState<AssigneeOption[]>([]);
+  const [view, setView] = useState<TaskView>("board");
+  const [items, setItems] = useState<AdminTask[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [client, setClient] = useState("");
+  const [quick, setQuick] = useState<QuickFilter>("all");
 
   useEffect(() => {
     // Links from the dashboard: ?mode=create, ?task=<id> (open it) or ?status=<STATUS> (filter).
@@ -107,9 +134,15 @@ export function TaskManagementPage() {
       const params = new URLSearchParams(window.location.search);
       const taskId = params.get("task");
       const statusFilter = params.get("status");
-      if (params.get("mode") === "create") setView({ mode: "create" });
-      else if (taskId && /^[0-9a-f-]{36}$/i.test(taskId)) setView({ mode: "detail", id: taskId });
-      if (statusFilter && statusFilter in STATUS_LABELS) setInitialStatus(statusFilter);
+      if (params.get("mode") === "create") setSheet({ mode: "create" });
+      else if (taskId && TASK_ID.test(taskId)) setSheet({ mode: "detail", id: taskId });
+      if (statusFilter && statusFilter in STATUS_LABELS) setStatus(statusFilter);
+      try {
+        const saved = window.localStorage.getItem(VIEW_STORAGE_KEY);
+        if (saved === "board" || saved === "list") setView(saved);
+      } catch {
+        // Storage can be unavailable (private mode); the board stays the default.
+      }
     }, 0);
     void (async () => {
       try {
@@ -122,114 +155,18 @@ export function TaskManagementPage() {
         setServices(serviceData.items);
         setPeople(peopleData);
       } catch {
-        // The list still works without these; the form shows its own error when they are missing.
+        // The board still works without these; the form shows its own error when they are missing.
       }
     })();
     return () => window.clearTimeout(fromUrl);
   }, []);
-
-  const open = (next: View, message = "") => {
-    setNotice(message);
-    setView(next);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  return (
-    <>
-      <DashboardHero
-        title=""
-        highlight="Tasks"
-        description="Create work for clients, assign it to your team, and follow it from start to approval."
-        compact
-      />
-      <div className="dash-content">
-        <section className="organization-workspace production-workspace" aria-live="polite">
-          {notice && <div className="organization-notice">{notice}</div>}
-          {view.mode === "list" && (
-            <TaskList
-              key={initialStatus}
-              initialStatus={initialStatus}
-              clients={clients}
-              onCreate={() => open({ mode: "create" })}
-              onOpen={(id) => open({ mode: "detail", id })}
-              onNotice={setNotice}
-            />
-          )}
-          {(view.mode === "create" || view.mode === "edit") && (
-            <TaskForm
-              task={view.mode === "edit" ? view.task : null}
-              clients={clients}
-              services={services}
-              people={people}
-              onCancel={() => open(view.mode === "edit" ? { mode: "detail", id: view.task.id } : { mode: "list" })}
-              onSaved={(id, message) => open({ mode: "detail", id }, message)}
-            />
-          )}
-          {view.mode === "detail" && (
-            <TaskDetail
-              id={view.id}
-              people={people}
-              onBack={() => open({ mode: "list" })}
-              onEdit={(task) => open({ mode: "edit", task })}
-              onNotice={setNotice}
-            />
-          )}
-        </section>
-      </div>
-    </>
-  );
-}
-
-type TaskView = "board" | "list";
-const VIEW_STORAGE_KEY = "adverse-task-view";
-
-function TaskList({
-  initialStatus,
-  clients,
-  onCreate,
-  onOpen,
-  onNotice,
-}: {
-  initialStatus: string;
-  clients: ChoiceItem[];
-  onCreate: () => void;
-  onOpen: (id: string) => void;
-  onNotice: (message: string) => void;
-}) {
-  const [view, setView] = useState<TaskView>("board");
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      try {
-        const saved = window.localStorage.getItem(VIEW_STORAGE_KEY);
-        if (saved === "board" || saved === "list") setView(saved);
-      } catch {
-        // Storage can be unavailable (private mode); the board stays the default.
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-  const chooseView = (next: TaskView) => {
-    setView(next);
-    try {
-      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
-    } catch {
-      // Ignore: the choice just will not be remembered.
-    }
-  };
-  const [items, setItems] = useState<AdminTask[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState(initialStatus);
-  const [client, setClient] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const data = await api<Paged<AdminTask>>(
-        `/api/company/tasks${query({ search, status, client_id: client, page_size: 100 })}`,
+        `/api/company/tasks${query({ search, status, client_id: client, page_size: 500 })}`,
       );
       setItems(data.items);
       setTotal(data.total);
@@ -245,127 +182,210 @@ function TaskList({
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  const chooseView = (next: TaskView) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // Ignore: the choice just will not be remembered.
+    }
+  };
+
+  const openSheet = (next: Sheet, message = "") => {
+    setNotice(message);
+    setSheet(next);
+    syncUrl(next);
+  };
+  const closeSheet = useCallback(() => {
+    setSheet(null);
+    syncUrl(null);
+  }, []);
+  const refresh = useCallback(() => void load(), [load]);
+
   const clientOptions: LooplessSelectOption[] = useMemo(
     () => [{ value: "", label: "All clients" }, ...clients.map((item) => ({ value: item.id, label: item.name }))],
     [clients],
   );
+  const chips = useMemo(
+    () =>
+      (
+        [
+          ["all", "All"],
+          ["overdue", "Overdue"],
+          ["week", "Due this week"],
+          ["review", "To review"],
+          ["unassigned", "Unassigned"],
+        ] as const
+      ).map(([key, label]) => ({
+        key,
+        label,
+        count: items.filter((task) => matchesQuick(quickTask(task), key)).length,
+      })),
+    [items],
+  );
+  const visible = useMemo(() => items.filter((task) => matchesQuick(quickTask(task), quick)), [items, quick]);
+  const filtered = Boolean(search || status || client || quick !== "all");
+  const summary =
+    loading && items.length === 0
+      ? "Loading tasks…"
+      : `${taskSummary(items)}${total > items.length ? ` · showing ${items.length} of ${total}` : ""}`;
 
   return (
-    <>
-      <header className="management-toolbar">
-        <div>
-          <span>Production work</span>
-          <strong>
-            {total} {total === 1 ? "task" : "tasks"}
-          </strong>
-        </div>
-        <button type="button" onClick={onCreate}>
-          <Plus /> Create task
-        </button>
-      </header>
-      <div className="organization-tools production-tools" style={{ ["--production-filters" as string]: 3 }}>
-        <label>
-          <Search />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by task, code or client"
+    <div className="dash-content production-tasks-content">
+      <section className="organization-workspace production-workspace production-tasks-page" aria-live="polite">
+        <TasksHeader
+          title="Tasks"
+          summary={summary}
+          search={search}
+          onSearch={setSearch}
+          searchPlaceholder="Search by task, code or client"
+          view={view}
+          onView={chooseView}
+          action={
+            <button type="button" className="management-primary-action" onClick={() => openSheet({ mode: "create" })}>
+              <Plus /> New task
+            </button>
+          }
+        />
+        <QuickFilters chips={chips} value={quick} onChange={setQuick}>
+          <LooplessSelect
+            value={status}
+            onValueChange={setStatus}
+            ariaLabel="Filter tasks by status"
+            options={STATUS_FILTER_OPTIONS}
           />
-        </label>
-        <LooplessSelect
-          value={status}
-          onValueChange={setStatus}
-          ariaLabel="Filter tasks by status"
-          options={STATUS_FILTER_OPTIONS}
-        />
-        <LooplessSelect
-          value={client}
-          onValueChange={setClient}
-          ariaLabel="Filter tasks by client"
-          options={clientOptions}
-        />
-        <div className="production-view-toggle" role="group" aria-label="Task view">
-          <button
-            type="button"
-            className={view === "board" ? "active" : ""}
-            aria-pressed={view === "board"}
-            onClick={() => chooseView("board")}
-          >
-            <SquareKanban aria-hidden="true" /> Board
-          </button>
-          <button
-            type="button"
-            className={view === "list" ? "active" : ""}
-            aria-pressed={view === "list"}
-            onClick={() => chooseView("list")}
-          >
-            <List aria-hidden="true" /> List
-          </button>
-        </div>
-      </div>
-      {error ? (
-        <div className="organization-state">
-          <h3>{error}</h3>
-          <button type="button" onClick={() => void load()}>
-            Retry
-          </button>
-        </div>
-      ) : loading ? (
-        <div className="organization-skeleton">
-          {[1, 2, 3].map((row) => (
-            <i key={row} />
-          ))}
-        </div>
-      ) : items.length === 0 ? (
-        <div className="organization-state">
-          <ClipboardList />
-          <h3>{search || status || client ? "No tasks match these filters" : "No tasks yet"}</h3>
-          <p>Create a task for a client and assign it to your team.</p>
-          <button type="button" onClick={onCreate}>
-            <Plus /> Create task
-          </button>
-        </div>
-      ) : view === "board" ? (
-        <TaskBoard
-          items={items}
-          onOpen={onOpen}
-          onMoved={(message) => {
-            onNotice(message);
-            void load();
-          }}
-        />
-      ) : (
-        <div className="organization-table production-tasks" role="table">
-          <div className="organization-table-head">
-            <span>Task</span>
-            <span>Client</span>
-            <span>Assigned to</span>
-            <span>Due</span>
-            <span>Status</span>
-            <span className="production-money">Client price</span>
-            <span>Actions</span>
+          <LooplessSelect
+            value={client}
+            onValueChange={setClient}
+            ariaLabel="Filter tasks by client"
+            options={clientOptions}
+          />
+        </QuickFilters>
+        {notice && !sheet && <div className="organization-notice">{notice}</div>}
+        {error ? (
+          <div className="organization-state">
+            <h3>{error}</h3>
+            <button type="button" onClick={() => void load()}>
+              Retry
+            </button>
           </div>
-          {items.map((task) => (
-            <article key={task.id}>
-              <div className="production-cell">
-                <small>
-                  {task.code} · {task.service.name}
-                </small>
-                <strong>{task.title}</strong>
-              </div>
-              <span>{task.client.name}</span>
-              <span>{task.assignee ? task.assignee.name : "Not assigned"}</span>
-              <span className={task.is_overdue ? "production-overdue" : undefined}>
-                {task.due_date ? formatDate(task.due_date) : "—"}
-              </span>
-              <em className={statusTone(task.status)}>{STATUS_LABELS[task.status]}</em>
-              <span className="production-money">{money(task.client_price, task.currency)}</span>
-              <CrudActionButtons view={{ label: `View ${task.code}`, onClick: () => onOpen(task.id) }} />
-            </article>
-          ))}
-        </div>
-      )}
-    </>
+        ) : loading && items.length === 0 ? (
+          <div className="organization-skeleton">
+            {[1, 2, 3].map((row) => (
+              <i key={row} />
+            ))}
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="organization-state">
+            <ClipboardList />
+            <h3>{filtered ? "No tasks match these filters" : "No tasks yet"}</h3>
+            <p>
+              {filtered
+                ? "Try another filter, or clear the search."
+                : "Create a task for a client and assign it to your team."}
+            </p>
+            {filtered ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuick("all");
+                  setSearch("");
+                  setStatus("");
+                  setClient("");
+                }}
+              >
+                Clear filters
+              </button>
+            ) : (
+              <button type="button" onClick={() => openSheet({ mode: "create" })}>
+                <Plus /> New task
+              </button>
+            )}
+          </div>
+        ) : view === "board" ? (
+          <TaskBoard
+            items={visible}
+            allColumns={quick === "all" && !status}
+            onOpen={(id) => openSheet({ mode: "detail", id })}
+            onMoved={(message) => {
+              setNotice(message);
+              void load();
+            }}
+          />
+        ) : (
+          <TaskTable items={visible} onOpen={(id) => openSheet({ mode: "detail", id })} />
+        )}
+        {sheet && (
+          <TaskSheet
+            label={sheet.mode === "create" ? "New task" : sheet.mode === "edit" ? `Edit ${sheet.task.code}` : "Task"}
+            onClose={closeSheet}
+          >
+            {sheet.mode === "detail" ? (
+              <TaskDetail
+                key={sheet.id}
+                id={sheet.id}
+                people={people}
+                notice={notice}
+                onClose={closeSheet}
+                onEdit={(task) => openSheet({ mode: "edit", task })}
+                onNotice={setNotice}
+                onChanged={refresh}
+              />
+            ) : (
+              <TaskForm
+                key={sheet.mode === "edit" ? sheet.task.id : "new"}
+                task={sheet.mode === "edit" ? sheet.task : null}
+                clients={clients}
+                services={services}
+                people={people}
+                onClose={closeSheet}
+                onCancel={() =>
+                  sheet.mode === "edit" ? openSheet({ mode: "detail", id: sheet.task.id }) : closeSheet()
+                }
+                onSaved={(id, message) => {
+                  openSheet({ mode: "detail", id }, message);
+                  void load();
+                }}
+              />
+            )}
+          </TaskSheet>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function TaskTable({ items, onOpen }: { items: AdminTask[]; onOpen: (id: string) => void }) {
+  return (
+    <div className="organization-table production-tasks" role="table">
+      <div className="organization-table-head">
+        <span>Task</span>
+        <span>Client</span>
+        <span>Assigned to</span>
+        <span>Due</span>
+        <span>Status</span>
+        <span className="production-money">Client price</span>
+        <span>Actions</span>
+      </div>
+      {items.map((task) => (
+        <article key={task.id}>
+          <div className="production-cell">
+            <small>
+              {task.code} · {task.service.name} · {PRIORITY_LABELS[task.priority]}
+            </small>
+            <strong>{task.title}</strong>
+          </div>
+          <span>{task.client.name}</span>
+          <span>{task.assignee ? task.assignee.name : "Not assigned"}</span>
+          <span className={task.is_overdue ? "production-overdue" : undefined}>
+            {task.due_date ? formatDate(task.due_date) : "—"}
+          </span>
+          <em className={statusTone(task.status)}>{STATUS_LABELS[task.status]}</em>
+          <span className="production-money">{money(task.client_price, task.currency)}</span>
+          <CrudActionButtons view={{ label: `View ${task.code}`, onClick: () => onOpen(task.id) }} />
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -380,23 +400,15 @@ const BOARD_COLUMNS: TaskStatus[] = [
   "CANCELLED",
 ];
 
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
-
 /** Kanban board: one column per status. Cards can be dragged to any status the Admin may set. */
 function TaskBoard({
   items,
+  allColumns,
   onOpen,
   onMoved,
 }: {
   items: AdminTask[];
+  allColumns: boolean;
   onOpen: (id: string) => void;
   onMoved: (message: string) => void;
 }) {
@@ -406,9 +418,10 @@ function TaskBoard({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Cancelled work only gets a column when there is some to show.
-  const columns = BOARD_COLUMNS.filter(
-    (status) => status !== "CANCELLED" || items.some((task) => task.status === "CANCELLED"),
+  // Without a filter every workflow column shows (Cancelled only when it has work). With a quick
+  // filter or a status filter, only the columns that hold matching tasks are shown.
+  const columns = BOARD_COLUMNS.filter((status) =>
+    allColumns && status !== "CANCELLED" ? true : items.some((task) => task.status === status),
   );
   const canDrop = (status: TaskStatus) =>
     Boolean(dragging && dragging.status !== status && dragging.allowed_statuses.includes(status));
@@ -475,11 +488,23 @@ function TaskBoard({
                 <p className="production-board-empty">No tasks</p>
               ) : (
                 tasks.map((task) => (
-                  <button
-                    type="button"
+                  <TaskCard
                     key={task.id}
-                    className={`production-board-card${dragging?.id === task.id ? " dragging" : ""}`}
+                    code={task.code}
+                    service={task.service.name}
+                    title={task.title}
+                    client={task.client.name}
+                    priority={task.priority}
+                    person={task.assignee?.name ?? null}
+                    dueDate={task.due_date}
+                    overdue={task.is_overdue}
+                    closed={CLOSED_STATUSES.includes(task.status)}
+                    amount={money(task.client_price, task.currency)}
+                    files={task.files_count}
+                    comments={task.comments_count}
+                    dragging={dragging?.id === task.id}
                     draggable={!saving}
+                    onOpen={() => onOpen(task.id)}
                     onDragStart={(event) => {
                       event.dataTransfer.effectAllowed = "move";
                       event.dataTransfer.setData("text/plain", task.id);
@@ -489,25 +514,7 @@ function TaskBoard({
                       setDragging(null);
                       setHover(null);
                     }}
-                    onClick={() => onOpen(task.id)}
-                    aria-label={`Open ${task.code}: ${task.title}`}
-                  >
-                    <small>
-                      {task.code} · {task.service.name}
-                    </small>
-                    <strong>{task.title}</strong>
-                    <span>{task.client.name}</span>
-                    <footer>
-                      <span className="production-board-person" title={task.assignee?.name ?? "Not assigned"}>
-                        <b aria-hidden="true">{task.assignee ? initials(task.assignee.name) : "–"}</b>
-                        {task.assignee ? task.assignee.name : "Not assigned"}
-                      </span>
-                      <span className={task.is_overdue ? "production-overdue" : undefined}>
-                        {task.due_date ? formatDate(task.due_date) : ""}
-                      </span>
-                    </footer>
-                    <span className="production-board-price">{money(task.client_price, task.currency)}</span>
-                  </button>
+                  />
                 ))
               )}
             </section>
@@ -559,6 +566,7 @@ function TaskForm({
   clients,
   services,
   people,
+  onClose,
   onCancel,
   onSaved,
 }: {
@@ -566,6 +574,7 @@ function TaskForm({
   clients: ChoiceItem[];
   services: ChoiceItem[];
   people: AssigneeOption[];
+  onClose: () => void;
   onCancel: () => void;
   onSaved: (id: string, message: string) => void;
 }) {
@@ -724,23 +733,22 @@ function TaskForm({
 
   return (
     <>
-      <header className="management-toolbar">
-        <button type="button" className="management-back" onClick={onCancel}>
-          <ArrowLeft /> {editing ? "Back to task" : "Back to tasks"}
-        </button>
-        <span>{editing ? `Edit ${task?.code}` : "New task"}</span>
-      </header>
-      <section className="management-editor">
+      <SheetHeader
+        eyebrow={editing ? `${task?.code} · Edit` : "New task"}
+        title={editing ? "Edit task details" : "Create task"}
+        onClose={onClose}
+      />
+      <section className="management-editor production-panel production-sheet-form">
         <header>
           <i aria-hidden="true">
             <ClipboardList />
           </i>
           <div>
-            <span>{editing ? "EDIT TASK" : "NEW TASK"}</span>
-            <h2>{editing ? "Edit task details" : "Create task"}</h2>
+            <span>{editing ? "DETAILS" : "TASK"}</span>
+            <h2>{editing ? "Title, priority and due date" : "Work, assignment and price"}</h2>
             <p>
               {editing
-                ? "Client, service, prices and assignment are changed from the task page so every change is recorded."
+                ? "Client, service, prices and assignment are changed from the task panel so every change is recorded."
                 : "The client's rate fills in automatically. Change it here for special work, such as a long video."}
             </p>
           </div>
@@ -940,15 +948,19 @@ function TaskForm({
 function TaskDetail({
   id,
   people,
-  onBack,
+  notice,
+  onClose,
   onEdit,
   onNotice,
+  onChanged,
 }: {
   id: string;
   people: AssigneeOption[];
-  onBack: () => void;
+  notice: string;
+  onClose: () => void;
   onEdit: (task: AdminTaskDetail) => void;
   onNotice: (message: string) => void;
+  onChanged: () => void;
 }) {
   const [task, setTask] = useState<AdminTaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -976,25 +988,25 @@ function TaskDetail({
     const warning = "budget" in result && result.budget.exceeds_with_new_task ? ` ${result.budget.message}` : "";
     setTask(detail);
     onNotice(`${message}${warning}`);
+    onChanged();
   };
 
   if (loading && !task) {
     return (
-      <div className="organization-skeleton">
-        {[1, 2, 3].map((row) => (
-          <i key={row} />
-        ))}
-      </div>
+      <>
+        <SheetHeader eyebrow="Task" title="Loading…" onClose={onClose} />
+        <div className="organization-skeleton">
+          {[1, 2, 3].map((row) => (
+            <i key={row} />
+          ))}
+        </div>
+      </>
     );
   }
   if (error || !task) {
     return (
       <>
-        <header className="management-toolbar">
-          <button type="button" className="management-back" onClick={onBack}>
-            <ArrowLeft /> Back to tasks
-          </button>
-        </header>
+        <SheetHeader eyebrow="Task" title="Task not available" onClose={onClose} />
         <div className="organization-state">
           <h3>{error || "Task not found."}</h3>
           <button type="button" onClick={() => void load()}>
@@ -1007,92 +1019,92 @@ function TaskDetail({
 
   return (
     <>
-      <header className="management-toolbar">
-        <button type="button" className="management-back" onClick={onBack}>
-          <ArrowLeft /> Back to tasks
-        </button>
-        <button type="button" onClick={() => onEdit(task)}>
-          <Pencil /> Edit details
-        </button>
-      </header>
-      <section className="management-editor">
-        <header>
-          <i aria-hidden="true">
-            <ClipboardList />
-          </i>
-          <div>
-            <span>
-              {task.code} · {task.service.name}
-            </span>
-            <h2>{task.title}</h2>
-            <div className="production-detail-head">
-              <em className={statusTone(task.status)}>{STATUS_LABELS[task.status]}</em>
-              {task.is_overdue && <em className="overdue">Overdue</em>}
-              {task.billable && <em className="active">Billable</em>}
-              <em>{PRIORITY_LABELS[task.priority]} priority</em>
+      <SheetHeader
+        eyebrow={`${task.code} · ${task.service.name}`}
+        title={task.title}
+        onClose={onClose}
+        badges={
+          <>
+            <em className={statusTone(task.status)}>{STATUS_LABELS[task.status]}</em>
+            {task.is_overdue && <em className="overdue">Overdue</em>}
+            {task.billable && <em className="active">Billable</em>}
+            <em>{PRIORITY_LABELS[task.priority]} priority</em>
+          </>
+        }
+        actions={
+          <button type="button" className="management-secondary-action" onClick={() => onEdit(task)}>
+            <Pencil /> Edit
+          </button>
+        }
+      />
+      <StatusProgress status={task.status} />
+      {notice && <div className="organization-notice">{notice}</div>}
+      <Panel icon={<FileText />} eyebrow="OVERVIEW" title="Task details">
+        <div className="production-panel-body">
+          <dl className="production-facts">
+            <div>
+              <dt>Client</dt>
+              <dd>{task.client.name}</dd>
             </div>
-          </div>
-        </header>
-      </section>
-      <div className="production-detail">
-        <div>
-          <Panel icon={<FileText />} eyebrow="OVERVIEW" title="Task details">
-            <div className="production-panel-body">
-              <dl className="production-facts">
-                <div>
-                  <dt>Client</dt>
-                  <dd>{task.client.name}</dd>
-                </div>
-                <div>
-                  <dt>Service</dt>
-                  <dd>{task.service.name}</dd>
-                </div>
-                <div>
-                  <dt>Due date</dt>
-                  <dd>{formatDate(task.due_date)}</dd>
-                </div>
-                <div>
-                  <dt>Created</dt>
-                  <dd>
-                    {formatDateTime(task.created_at)}
-                    <small>by {task.created_by_name}</small>
-                  </dd>
-                </div>
-                {task.approved_at && (
-                  <div>
-                    <dt>Approved</dt>
-                    <dd>{formatDateTime(task.approved_at)}</dd>
-                  </div>
-                )}
-                {task.completed_at && (
-                  <div>
-                    <dt>Completed</dt>
-                    <dd>{formatDateTime(task.completed_at)}</dd>
-                  </div>
-                )}
-              </dl>
-              {task.description ? (
-                <p className="production-description">{task.description}</p>
-              ) : (
-                <p className="production-muted">No description added.</p>
-              )}
+            <div>
+              <dt>Service</dt>
+              <dd>{task.service.name}</dd>
             </div>
-          </Panel>
-          <FilesPanel task={task} onChange={(files) => setTask({ ...task, files })} onNotice={onNotice} />
-          <CommentsPanel task={task} onChange={(comments) => setTask({ ...task, comments })} />
-          <ActivityPanel task={task} />
+            <div>
+              <dt>Due date</dt>
+              <dd>{formatDate(task.due_date)}</dd>
+            </div>
+            <div>
+              <dt>Created</dt>
+              <dd>
+                {formatDateTime(task.created_at)}
+                <small>by {task.created_by_name}</small>
+              </dd>
+            </div>
+            {task.approved_at && (
+              <div>
+                <dt>Approved</dt>
+                <dd>{formatDateTime(task.approved_at)}</dd>
+              </div>
+            )}
+            {task.completed_at && (
+              <div>
+                <dt>Completed</dt>
+                <dd>{formatDateTime(task.completed_at)}</dd>
+              </div>
+            )}
+          </dl>
+          {task.description ? (
+            <p className="production-description">{task.description}</p>
+          ) : (
+            <p className="production-muted">No description added.</p>
+          )}
         </div>
-        <div>
-          <StatusPanel key={task.status} task={task} onSaved={applyWrite} />
-          <PricePanel key={`${task.client_price}|${task.commission}`} task={task} onSaved={applyWrite} />
-          <AssignmentPanel
-            key={`${task.assignee?.id ?? ""}|${task.monitor?.id ?? ""}`}
-            task={task}
-            people={people}
-            onSaved={applyWrite}
-          />
-        </div>
-      </div>
+      </Panel>
+      <PricePanel key={`${task.client_price}|${task.commission}`} task={task} onSaved={applyWrite} />
+      <AssignmentPanel
+        key={`${task.assignee?.id ?? ""}|${task.monitor?.id ?? ""}`}
+        task={task}
+        people={people}
+        onSaved={applyWrite}
+      />
+      <StatusPanel key={task.status} task={task} onSaved={applyWrite} />
+      <FilesPanel
+        task={task}
+        onChange={(files) => {
+          setTask({ ...task, files });
+          onChanged();
+        }}
+        onNotice={onNotice}
+      />
+      <CommentsPanel
+        task={task}
+        onChange={(comments) => {
+          setTask({ ...task, comments });
+          onChanged();
+        }}
+      />
+      <ActivityPanel task={task} />
     </>
   );
 }

@@ -26,6 +26,8 @@ export type WorkerTask = {
   currency: string;
   allowed_statuses: TaskStatus[];
   can_upload_deliverables: boolean;
+  files_count: number;
+  comments_count: number;
   created_at: string;
   assigned_at: string | null;
   submitted_at: string | null;

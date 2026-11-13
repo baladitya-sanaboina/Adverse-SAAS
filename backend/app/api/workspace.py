@@ -63,7 +63,7 @@ def list_my_tasks(
     task_status: TaskStatus | None = Query(None, alias="status"),
     search: str = Query("", max_length=100),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500),
 ) -> WorkerTaskListResponse:
     return task_service.list_worker_tasks(
         context,

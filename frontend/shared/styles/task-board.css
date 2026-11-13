@@ -1,0 +1,632 @@
+/*
+ * Modern Tasks pages (Admin Tasks, Manager/Employee My Tasks). Extends production.css; uses the
+ * existing theme tokens (--surface, --border, --muted, --foreground) and the brand/status colours
+ * already used across the app. No new fonts or palette.
+ */
+
+.production-tasks-page {
+  --priority-urgent: #b74858;
+  --priority-high: #c96f05;
+  --priority-medium: #0876ed;
+  --priority-low: var(--muted);
+}
+
+/* The topbar floats over the page (80px); the old hero used to provide this space. */
+.dash-content.production-tasks-content {
+  grid-template-columns: minmax(0, 1fr);
+  padding-top: 100px;
+}
+
+/* minmax(0, 1fr): the wide board scrolls inside its own box instead of widening the page. */
+.organization-workspace.production-tasks-page {
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.dark .production-tasks-page {
+  --priority-urgent: #f0a6af;
+  --priority-high: #c97f1e;
+  --priority-medium: #3d95f5;
+}
+
+.production-tasks-page > .organization-notice,
+.production-tasks-page > .organization-form-error {
+  margin: 0;
+}
+
+/* Header search: same height and border as the view toggle beside it. */
+.production-task-search {
+  min-width: 240px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--surface);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.production-task-search:focus-within {
+  border-color: rgba(8, 118, 237, 0.5);
+  box-shadow: 0 0 0 3px rgba(8, 118, 237, 0.1);
+}
+
+.production-task-search svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.production-task-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--foreground);
+  background: transparent;
+  font:
+    500 0.68rem var(--font-poppins),
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+.production-tasks-header .production-view-toggle {
+  width: 190px;
+}
+
+.production-tasks-header .management-primary-action {
+  min-height: 40px;
+}
+
+/* Quick filter chips + detailed dropdowns. */
+.production-task-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.production-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.production-chip {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font:
+    700 0.64rem var(--font-poppins),
+    Arial,
+    Helvetica,
+    sans-serif;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.production-chip > b {
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface-muted);
+  font-size: 0.58rem;
+  text-align: center;
+}
+
+.production-chip:hover,
+.production-chip.active {
+  border-color: rgba(8, 118, 237, 0.28);
+  color: #0876ed;
+  background: #eef7ff;
+}
+
+.production-chip.active > b {
+  color: #fff;
+  background: #0876ed;
+}
+
+.production-chip.alert > b {
+  color: #9a4551;
+  background: #fbf0f2;
+}
+
+.production-chip.alert.active > b {
+  color: #fff;
+  background: #b74858;
+}
+
+.dark .production-chip:hover,
+.dark .production-chip.active {
+  border-color: #31496d;
+  color: #a7d7ff;
+  background: #17213a;
+}
+
+.dark .production-chip.alert > b {
+  color: #f0a6af;
+  background: #361f24;
+}
+
+.production-chip:focus-visible,
+.production-sheet-close:focus-visible {
+  outline: 2px solid #0876ed;
+  outline-offset: 2px;
+}
+
+.production-task-selects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.production-task-selects .loopless-select {
+  width: 190px;
+}
+
+/* Richer board cards. */
+.production-board-card.production-task-card {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  padding-left: 16px;
+  overflow: hidden;
+}
+
+.production-task-card::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--priority-medium);
+  content: "";
+}
+
+.production-task-card.priority-urgent::before {
+  background: var(--priority-urgent);
+}
+
+.production-task-card.priority-high::before {
+  background: var(--priority-high);
+}
+
+.production-task-card.priority-low::before {
+  background: var(--priority-low);
+  opacity: 0.45;
+}
+
+.production-task-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.production-task-card-top > small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.production-priority {
+  flex: 0 0 auto;
+  color: var(--priority-medium);
+  font-size: 0.54rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.production-priority.priority-urgent {
+  color: var(--priority-urgent);
+}
+
+.production-priority.priority-high {
+  color: var(--priority-high);
+}
+
+.production-priority.priority-low {
+  color: var(--priority-low);
+}
+
+.production-board-card > .production-task-card-client {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 500;
+}
+
+.production-task-card > footer .production-board-person {
+  flex: 1 1 auto;
+}
+
+.production-board-person > .name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.production-board-person > b.empty {
+  color: var(--muted);
+  background: var(--surface-muted);
+  border: 1px dashed var(--border);
+}
+
+.production-task-card-meta {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.production-task-card-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.production-task-card-meta svg {
+  width: 12px;
+  height: 12px;
+}
+
+.production-due {
+  padding: 2px 7px;
+  border-radius: 7px;
+  background: var(--surface-muted);
+}
+
+.production-due.overdue {
+  color: #9a4551;
+  background: #fbf0f2;
+}
+
+.dark .production-due.overdue {
+  color: #f0a6af;
+  background: #361f24;
+}
+
+.production-due.closed {
+  opacity: 0.7;
+}
+
+/* Slide-in task sheet. Sits under confirmation dialogs (z-index 1000). */
+.production-sheet-layer {
+  position: fixed;
+  z-index: 900;
+  inset: 0;
+}
+
+.production-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 20, 35, 0.32);
+  backdrop-filter: blur(2px);
+  animation: production-sheet-fade 180ms ease-out;
+}
+
+.production-sheet {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: min(760px, 100vw);
+  display: grid;
+  grid-auto-rows: max-content;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 14px;
+  padding: 0 22px 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-left: 1px solid var(--border);
+  color: var(--foreground);
+  background: var(--surface-muted);
+  box-shadow: -24px 0 60px rgba(10, 20, 35, 0.18);
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+  outline: 0;
+  animation: production-sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes production-sheet-in {
+  from {
+    transform: translateX(40px);
+    opacity: 0;
+  }
+}
+
+@keyframes production-sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .production-sheet,
+  .production-sheet-backdrop {
+    animation: none;
+  }
+}
+
+.production-sheet-head {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 -22px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.production-sheet-head > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.production-sheet-head > div > span {
+  color: #0876ed;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dark .production-sheet-head > div > span {
+  color: #8cc8ff;
+}
+
+.production-sheet-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.production-sheet-tools {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.production-sheet-tools .management-secondary-action {
+  min-height: 36px;
+}
+
+.production-sheet-close {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.production-sheet-close:hover {
+  color: var(--foreground);
+  background: var(--surface-muted);
+}
+
+.production-sheet-close svg {
+  width: 17px;
+  height: 17px;
+}
+
+.production-sheet > .organization-notice,
+.production-sheet > .organization-form-error,
+.production-sheet > .management-form-message {
+  margin: 0;
+}
+
+.production-sheet .management-editor {
+  margin: 0;
+}
+
+/* Status progress bar. */
+.production-progress {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.production-progress ol {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.production-progress li {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.production-progress li::before {
+  position: absolute;
+  top: 12px;
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  background: var(--border);
+  content: "";
+}
+
+.production-progress li:first-child::before {
+  display: none;
+}
+
+.production-progress li.done::before,
+.production-progress li.current::before {
+  background: #0876ed;
+}
+
+.production-progress li > b {
+  position: relative;
+  z-index: 1;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 0.58rem;
+}
+
+.production-progress li > b svg {
+  width: 13px;
+  height: 13px;
+}
+
+.production-progress li.done > b {
+  border-color: #0876ed;
+  color: #fff;
+  background: #0876ed;
+}
+
+.production-progress li.current > b {
+  border-color: #0876ed;
+  color: #0876ed;
+  box-shadow: 0 0 0 4px rgba(8, 118, 237, 0.14);
+}
+
+.production-progress li.current {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.production-progress li.done:last-child > b {
+  border-color: #287150;
+  background: #287150;
+}
+
+.dark .production-progress li.current > b {
+  color: #8cc8ff;
+}
+
+.production-progress.cancelled ol {
+  opacity: 0.45;
+}
+
+.production-progress > p {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.production-sheet-form .management-form {
+  padding: 18px 20px;
+}
+
+@media (max-width: 900px) {
+  .production-tasks-header > .production-dash-actions {
+    width: 100%;
+  }
+
+  .production-task-search {
+    flex: 1 1 220px;
+  }
+
+  .production-task-selects,
+  .production-task-selects .loopless-select {
+    width: 100%;
+  }
+
+  .production-task-selects .loopless-select {
+    flex: 1 1 160px;
+  }
+}
+
+@media (max-width: 720px) {
+  .dash-content.production-tasks-content {
+    padding-top: 84px;
+  }
+
+  .production-tasks-header .production-view-toggle,
+  .production-tasks-header .management-primary-action {
+    width: 100%;
+  }
+
+  .production-chips {
+    flex-wrap: nowrap;
+    margin: 0 -2px;
+    padding: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .production-chip {
+    flex: 0 0 auto;
+  }
+
+  /* Full screen on phones. */
+  .production-sheet {
+    width: 100vw;
+    padding: 0 14px 24px;
+    border-left: 0;
+  }
+
+  .production-sheet-head {
+    margin: 0 -14px;
+    padding: 16px 14px 14px;
+  }
+
+  .production-progress {
+    padding: 14px 10px;
+  }
+
+  .production-progress li {
+    font-size: 0.5rem;
+  }
+
+  .production-progress li > b {
+    width: 22px;
+    height: 22px;
+  }
+
+  .production-progress li::before {
+    top: 10px;
+  }
+}

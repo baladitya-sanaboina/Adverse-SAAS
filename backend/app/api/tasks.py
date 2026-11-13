@@ -56,7 +56,7 @@ def list_tasks(
     assignee_user_id: UUID | None = Query(None),
     overdue_only: bool = Query(False),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500),
 ) -> AdminTaskListResponse:
     return task_service.list_tasks(
         context,
