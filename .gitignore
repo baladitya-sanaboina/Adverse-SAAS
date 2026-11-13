@@ -45,6 +45,8 @@ temp/
 # Local refactor playground (never commit or push)
 /refactor/
 /backend/storage/
+# Task files uploaded by the team (client work). Private: never commit or serve publicly.
+/backend/private-storage/
 
 # Local databases and volumes
 *.sqlite

@@ -79,7 +79,7 @@ Example: a budget of ₹12,000 at ₹1,000 per video is exceeded after 12 videos
 
 ### 3.4 Files
 
-Task files (reference files from the Admin, final outputs from the assignee) are stored on the **owner's own server** under `backend/storage/`, which is already git-ignored. There is no Google Drive or S3 integration.
+Task files (reference files from the Admin, final outputs from the assignee) are stored on the **owner's own server** under `backend/private-storage/task-files/` (git-ignored). This is deliberately not `backend/storage/`, which is served publicly for logos. Files are only reachable through the permission-checked download endpoints, and the maximum size is 2 GB per file. There is no Google Drive or S3 integration.
 
 ---
 
@@ -131,7 +131,7 @@ All tables are tenant-scoped with `company_id`, UUID ids and `created_at`/`updat
 | `task_status_history` | `task_id`, `from_status`, `to_status`, `actor_id`, `note` | Audit trail of status changes. |
 | `task_price_changes` | `task_id`, `field`, `old_amount`, `new_amount`, `reason`, `actor_id` | Audit trail of manual price changes. |
 | `task_comments` | `task_id`, `author_id`, `content` | Discussion on a task (internal; never shown to clients). |
-| `task_files` | `task_id`, `kind` (REFERENCE/DELIVERABLE), `file_name`, `storage_path`, `mime_type`, `size_bytes`, `uploaded_by_id` | Files stored in `backend/storage/`. |
+| `task_files` | `task_id`, `kind` (REFERENCE/DELIVERABLE), `file_name`, `storage_path`, `mime_type`, `size_bytes`, `uploaded_by_id` | Files stored in `backend/private-storage/task-files/` (not publicly served). |
 | `client_budget_entries` | `client_id`, `type` (INITIAL/TOP_UP/ADJUSTMENT), `amount`, `note`, `created_by_id` | Budget = the sum of the entries; history is kept. |
 | `client_payments` | `client_id`, `amount`, `received_on`, `method`, `reference`, `note` | Money received from clients. |
 | `employee_salaries` | `employee_id`, `monthly_amount`, `effective_from`, `effective_to` | Salary with history. |
@@ -169,9 +169,9 @@ All tables are tenant-scoped with `company_id`, UUID ids and `created_at`/`updat
 
 | Phase | Status | Notes |
 |---|---|---|
-| 0. Backup | ✅ Done (2026-11-13) | Git baseline commit `e810dee`. "Before" screenshots in `qa/ui-baseline/` (git-ignored, local only), captured with `qa/capture-ui.mjs`: every screen in all 4 apps at desktop-light, desktop-dark and mobile-light. |
+| 0. Backup | ✅ Done (2026-11-13) | Git baseline commit `e810dee`. 132 "before" screenshots in `qa/ui-baseline/` (git-ignored, local only), captured with `qa/capture-ui.mjs`: 44 screens across the 4 apps, each at desktop-light, desktop-dark and mobile-dark. The script sets the theme through localStorage `loopless-theme` and waits until no "Loading…" text remains. |
 | 1. Database | ✅ Done (2026-11-13) | Models added to `backend/prisma/schema.prisma` (purely additive; no existing table changed). Migration `20261113150000_production_management` creates 10 tables and 7 enums, plus check constraints: no negative money, commission only for manager assignees, one open salary per person, salary periods on the 1st of the month. Dry-run in a rolled-back transaction first, then applied via `docker compose run --rm migrations`; backend health reports the new version. |
-| 2. Backend | ⏳ Not started | |
+| 2. Backend | ✅ Done (2026-11-13) | 33 endpoints (see "Backend API" below). Rules in `app/services/production_rules.py`; services `task_service.py` and `finance_service.py`; repositories `task_repository.py` and `finance_repository.py`; per-role response shapes in `app/schemas/production.py`. Seed gives COMPANY_ADMIN the `TASKS` and `FINANCE` permissions. 27 new unit tests (200 total pass), plus a 62-check end-to-end run against the live stack covering every role, privacy, workflow, files and money maths. Test data was deleted afterwards. |
 | 3. Admin app | ⏳ Not started | |
 | 4. Manager app | ⏳ Not started | |
 | 5. Employee app | ⏳ Not started | |
@@ -180,7 +180,26 @@ All tables are tenant-scoped with `company_id`, UUID ids and `created_at`/`updat
 
 Approve/Complete stay Admin-only (confirmed by the owner's "go", 2026-11-13).
 
+### Backend API (Phase 2)
+
+Every request needs `Authorization: Bearer <token>` and `X-Company-ID` (the tenant middleware requires it; the frontend's `authenticatedBackend` already sends it). The company used for data access always comes from the login token, never from the header.
+
+| Who | Prefix | Endpoints |
+|---|---|---|
+| Admin | `/company/tasks` | `GET ""` (list, filters: status, client, service, assignee, overdue, search) · `POST ""` (create, optional assign; returns `{task, budget}`) · `GET /assignee-options` · `GET /pricing-preview?client_id&service_id&assignee_user_id&client_price` · `GET/PATCH /{id}` · `POST /{id}/assign` · `PUT /{id}/monitor` · `POST /{id}/prices` · `POST /{id}/status` · `POST /{id}/comments` · `POST /{id}/files` (multipart `file`, `kind`) · `GET/DELETE /{id}/files/{file_id}` |
+| Admin | `/company/finance` | `GET /summary?period` · `GET /reports/clients\|team\|services?period` · `GET /budgets/{client_id}` · `POST /budgets/{client_id}/entries` · `GET/POST /client-payments` · `GET /people/{user_id}` · `PUT /people/{user_id}/salary` · `GET/POST /salary-payments` · `GET/POST /manager-payouts` · `DELETE /{client\|salary\|payout}/{id}` |
+| Manager / Employee | `/workspace` | `GET /dashboard` · `GET /tasks?role=ASSIGNEE\|MONITOR` · `GET /tasks/{id}` · `POST /tasks/{id}/status` · `POST /tasks/{id}/comments` · `POST /tasks/{id}/files` · `GET/DELETE /tasks/{id}/files/{file_id}` · `GET /earnings/commission` (manager) · `GET /earnings/salary` (employee) |
+| Client | `/client-portal` | `GET /summary` (counts per service, budget, charges, payments; no task list) |
+
+`period` is one of `all`, `today`, `this_week`, `this_month`, `previous_month` or `custom` (with `start` and `end`), resolved in the company timezone. Each task response includes `allowed_statuses`, so the UI only offers moves the backend will accept.
+
 Working notes for later phases:
+
+- Task files are stored in `backend/private-storage/task-files/` (git-ignored), **not** `backend/storage/`: `main.py` serves `/storage` publicly for logos.
+- Pre-existing issue, not fixed: any request under `/storage/...` returns a 500 while the `backend/storage` folder doesn't exist (no logo uploaded yet). This is in the existing branding setup.
+- The test company's currency is set to **USD** (Settings → Regional). Prices and reports display in that currency until it is changed to INR.
+- The seed still gives `COMPANY_MANAGER` a `TASKS: ASSIGN` permission. It has no effect, because assignment endpoints require the Admin role.
+- The ECC plugin's GateGuard hook asks for facts before the first edit of each file and before destructive commands. Answer it and retry.
 
 - On the host, port 5432 is a separate Homebrew Postgres. Reach the Docker database with `docker exec loopless-postgres-1 psql -U loopless -d loopless_dev`.
 - To re-capture screenshots for the Phase 7 comparison: install `playwright` in any scratch folder, then run `PLAYWRIGHT_FROM=<that folder> CHROMIUM_PATH=<chromium binary> node qa/capture-ui.mjs qa/ui-after`.

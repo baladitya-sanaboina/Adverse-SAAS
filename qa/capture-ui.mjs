@@ -80,17 +80,30 @@ const apps = [
   },
 ];
 
+// The apps read the theme from localStorage "loopless-theme" (default "dark"), not from the OS setting.
 const variants = [
-  { label: "desktop-light", viewport: { width: 1440, height: 900 }, colorScheme: "light" },
-  { label: "desktop-dark", viewport: { width: 1440, height: 900 }, colorScheme: "dark" },
-  { label: "mobile-light", viewport: { width: 390, height: 844 }, colorScheme: "light", isMobile: true },
+  { label: "desktop-light", viewport: { width: 1440, height: 900 }, theme: "light" },
+  { label: "desktop-dark", viewport: { width: 1440, height: 900 }, theme: "dark" },
+  { label: "mobile-dark", viewport: { width: 390, height: 844 }, theme: "dark", isMobile: true },
 ];
 
 const slug = (value) => value.replace(/^\//, "").replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "root";
 
+const slowPages = [];
+
+// Wait until the page has finished loading its data: no visible "Loading…" text and no aria-busy element.
 async function settle(page) {
-  await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
-  await page.waitForTimeout(1500);
+  await page.waitForLoadState("load").catch(() => {});
+  const ready = await page
+    .waitForFunction(
+      () => !/\bLoading\b/i.test(document.body?.innerText ?? "") && !document.querySelector('[aria-busy="true"]'),
+      null,
+      { timeout: 20000, polling: 250 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  if (!ready) slowPages.push(page.url());
+  await page.waitForTimeout(800);
 }
 
 async function shot(page, file) {
@@ -106,23 +119,39 @@ function firstId(payload) {
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const failures = [];
 
+async function visit(page, url) {
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+    return true;
+  } catch (error) {
+    failures.push(`could not open ${url}: ${error.message.split("\n")[0]}`);
+    return false;
+  }
+}
+
 for (const app of apps) {
   for (const variant of variants) {
     const dir = join(outDir, app.name, variant.label);
     mkdirSync(dir, { recursive: true });
     const context = await browser.newContext({
       viewport: variant.viewport,
-      colorScheme: variant.colorScheme,
+      colorScheme: variant.theme,
       isMobile: variant.isMobile ?? false,
       deviceScaleFactor: 1,
     });
+    await context.addInitScript((theme) => {
+      try {
+        localStorage.setItem("loopless-theme", theme);
+      } catch {}
+    }, variant.theme);
     const page = await context.newPage();
     page.on("pageerror", (error) => failures.push(`${app.name}/${variant.label}: page error ${error.message}`));
 
     // Logged-out login screen
-    await page.goto(`${app.base}/login`);
-    await settle(page);
-    await shot(page, join(dir, "login.png"));
+    if (await visit(page, `${app.base}/login`)) {
+      await settle(page);
+      await shot(page, join(dir, "login.png"));
+    }
 
     const login = await context.request.post(`${app.base}/api/auth/login`, {
       data: { email: app.email, password: PASSWORD },
@@ -134,14 +163,13 @@ for (const app of apps) {
     }
 
     for (const route of app.routes) {
-      await page.goto(`${app.base}${route}`);
+      if (!(await visit(page, `${app.base}${route}`))) continue;
       await settle(page);
       await shot(page, join(dir, `${slug(route)}.png`));
     }
 
     if (app.settingsTabs) {
-      await page.goto(`${app.base}/settings`);
-      await settle(page);
+      if (await visit(page, `${app.base}/settings`)) await settle(page);
       for (const tab of SETTINGS_TABS) {
         const button = page.locator(".company-settings-tabs button", { hasText: tab }).first();
         if ((await button.count()) === 0) {
@@ -161,7 +189,7 @@ for (const app of apps) {
         failures.push(`${app.name}/${variant.label}: no record for ${detail.label} (${response.status()})`);
         continue;
       }
-      await page.goto(`${app.base}${detail.path(id)}`);
+      if (!(await visit(page, `${app.base}${detail.path(id)}`))) continue;
       await settle(page);
       await shot(page, join(dir, `${detail.label}.png`));
     }
@@ -171,6 +199,10 @@ for (const app of apps) {
 }
 
 await browser.close();
+if (slowPages.length) {
+  console.log("\nStill loading after 20s (screenshot taken anyway; check these by eye):");
+  for (const item of slowPages) console.log(" -", item);
+}
 if (failures.length) {
   console.log("\nNOTES:");
   for (const failure of failures) console.log(" -", failure);

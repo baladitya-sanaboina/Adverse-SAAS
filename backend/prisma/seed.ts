@@ -70,6 +70,8 @@ const permissionMatrix: Record<string, Record<string, string[]>> = {
     CLIENTS: allActions,
     CRM: ["VIEW", "CREATE", "EDIT"],
     PROJECTS: allActions,
+    TASKS: allActions,
+    FINANCE: allActions,
     REPORTS: ["VIEW"],
     SETTINGS: ["VIEW", "MANAGE"],
   },

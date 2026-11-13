@@ -30,6 +30,10 @@ from app.api.profile import router as profile_router
 from app.api.registration import router as registration_router
 from app.api.role_management import router as role_management_router
 from app.api.service_pricing import router as service_pricing_router
+from app.api.finance import router as finance_router
+from app.api.tasks import router as tasks_router
+from app.api.workspace import portal_router as client_portal_router
+from app.api.workspace import router as workspace_router
 from app.api.subscription_management import router as subscription_management_router
 from app.api.tenant import router as tenant_router
 from app.api.user_assignments import router as user_assignments_router
@@ -194,6 +198,22 @@ app = FastAPI(
             "name": "audit-logs",
             "description": "Platform Owner read-only inventory of critical platform management audit events.",
         },
+        {
+            "name": "tasks",
+            "description": "Company Admin task management: create with price snapshot, assign, re-price, approve, files and comments.",
+        },
+        {
+            "name": "team-workspace",
+            "description": "Manager and Employee workspace: own tasks, status updates, deliverables and own earnings only.",
+        },
+        {
+            "name": "client-portal",
+            "description": "Client's own work counts, budget and payments. No task list and no internal costs.",
+        },
+        {
+            "name": "finance",
+            "description": "Company Admin money: revenue, margin, budgets, client payments, salaries, payouts and reports.",
+        },
     ],
 )
 
@@ -253,6 +273,10 @@ app.include_router(role_management_router, prefix=settings.api_prefix)
 app.include_router(employees_router, prefix=settings.api_prefix)
 app.include_router(clients_router, prefix=settings.api_prefix)
 app.include_router(service_pricing_router, prefix=settings.api_prefix)
+app.include_router(tasks_router, prefix=settings.api_prefix)
+app.include_router(workspace_router, prefix=settings.api_prefix)
+app.include_router(client_portal_router, prefix=settings.api_prefix)
+app.include_router(finance_router, prefix=settings.api_prefix)
 app.include_router(crm_router, prefix=settings.api_prefix)
 app.include_router(audit_logs_router, prefix=settings.api_prefix)
 app.mount("/storage", StaticFiles(directory="storage", check_dir=False), name="storage")
