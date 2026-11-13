@@ -173,6 +173,17 @@ class TaskCountsRow:
     overdue: int
 
 
+@dataclass(frozen=True)
+class AttentionTaskRow:
+    id: UUID
+    number: int
+    title: str
+    client_name: str
+    assignee_name: str | None
+    due_date: date
+    status: str
+
+
 class SalaryDateConflict(Exception):
     pass
 
@@ -906,6 +917,34 @@ class FinanceRepository:
                 "monitoring",
             )
             return {key: int(value) for key, value in zip(keys, row, strict=True)}
+
+    def status_counts(self, company_id: UUID) -> dict[str, int]:
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT status::text, COUNT(*) FROM tasks WHERE company_id=%s GROUP BY status",
+                (company_id,),
+            )
+            return {str(row[0]): int(row[1]) for row in cursor.fetchall()}
+
+    def attention_tasks(
+        self, company_id: UUID, due_by: date, limit: int = 8
+    ) -> list[AttentionTaskRow]:
+        """Open tasks that are overdue or due on or before ``due_by``, soonest first."""
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT t.id, t.number, t.title, c.name, a.name, t.due_date, t.status::text
+                FROM tasks t
+                JOIN clients c ON c.id = t.client_id
+                LEFT JOIN users a ON a.id = t.assignee_user_id
+                WHERE t.company_id = %s AND t.status NOT IN {_CLOSED}
+                  AND t.due_date IS NOT NULL AND t.due_date <= %s
+                ORDER BY t.due_date ASC, t.number ASC
+                LIMIT %s
+                """,
+                (company_id, due_by, limit),
+            )
+            return [AttentionTaskRow(*row) for row in cursor.fetchall()]
 
     def top_client_by_open_tasks(self, company_id: UUID) -> tuple[UUID, str, str, int] | None:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:

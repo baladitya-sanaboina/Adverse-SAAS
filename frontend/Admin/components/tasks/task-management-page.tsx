@@ -95,14 +95,21 @@ function peopleOptions(people: AssigneeOption[], empty: string, filter?: (person
 
 export function TaskManagementPage() {
   const [view, setView] = useState<View>({ mode: "list" });
+  const [initialStatus, setInitialStatus] = useState("");
   const [notice, setNotice] = useState("");
   const [clients, setClients] = useState<ChoiceItem[]>([]);
   const [services, setServices] = useState<ChoiceItem[]>([]);
   const [people, setPeople] = useState<AssigneeOption[]>([]);
 
   useEffect(() => {
+    // Links from the dashboard: ?mode=create, ?task=<id> (open it) or ?status=<STATUS> (filter).
     const fromUrl = window.setTimeout(() => {
-      if (new URLSearchParams(window.location.search).get("mode") === "create") setView({ mode: "create" });
+      const params = new URLSearchParams(window.location.search);
+      const taskId = params.get("task");
+      const statusFilter = params.get("status");
+      if (params.get("mode") === "create") setView({ mode: "create" });
+      else if (taskId && /^[0-9a-f-]{36}$/i.test(taskId)) setView({ mode: "detail", id: taskId });
+      if (statusFilter && statusFilter in STATUS_LABELS) setInitialStatus(statusFilter);
     }, 0);
     void (async () => {
       try {
@@ -140,6 +147,8 @@ export function TaskManagementPage() {
           {notice && <div className="organization-notice">{notice}</div>}
           {view.mode === "list" && (
             <TaskList
+              key={initialStatus}
+              initialStatus={initialStatus}
               clients={clients}
               onCreate={() => open({ mode: "create" })}
               onOpen={(id) => open({ mode: "detail", id })}
@@ -175,11 +184,13 @@ type TaskView = "board" | "list";
 const VIEW_STORAGE_KEY = "adverse-task-view";
 
 function TaskList({
+  initialStatus,
   clients,
   onCreate,
   onOpen,
   onNotice,
 }: {
+  initialStatus: string;
   clients: ChoiceItem[];
   onCreate: () => void;
   onOpen: (id: string) => void;
@@ -210,7 +221,7 @@ function TaskList({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(initialStatus);
   const [client, setClient] = useState("");
 
   const load = useCallback(async () => {

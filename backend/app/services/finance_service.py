@@ -7,7 +7,7 @@ Money visibility (docs/ProductionManagementPlan.md, section 4):
 - Client: only their own budget, charges and payments, as counts and totals (no task list).
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -23,6 +23,7 @@ from app.repositories.finance_repository import (
 from app.repositories.task_repository import PersonRow, TaskRepository
 from app.schemas.authentication import AuthContext
 from app.schemas.production import (
+    AdminDashboardResponse,
     BudgetEntryRequest,
     BudgetEntryResponse,
     ClientBudgetResponse,
@@ -36,6 +37,11 @@ from app.schemas.production import (
     ClientServiceCount,
     ClientWorkspaceSummaryResponse,
     CommissionTaskLine,
+    DashboardAttentionTask,
+    DashboardBudgetWatch,
+    DashboardMoney,
+    DashboardTeamLoad,
+    DashboardTrendPoint,
     EmployeeSalaryResponse,
     FinanceSummaryResponse,
     ManagerEarningsResponse,
@@ -744,6 +750,142 @@ class FinanceService:
             currency=self.repository.company_currency(company_id),
             rows=rows,
             totals=totals if rows else None,
+        )
+
+    # -- admin: home dashboard ---------------------------------------------------------------
+
+    def _previous_range(
+        self, period: str, today: date, start: date | None, end: date | None
+    ) -> tuple[date, date] | None:
+        """The comparison range: previous month for "this month", else the same-length range before."""
+        if start is None or end is None:
+            return None
+        if period == "this_month":
+            previous_start, previous_end = resolve_period("previous_month", today)
+            assert previous_start is not None and previous_end is not None
+            return previous_start, previous_end
+        length = (end - start).days + 1
+        previous_end = start - timedelta(days=1)
+        return previous_end - timedelta(days=length - 1), previous_end
+
+    def admin_dashboard(self, context: AuthContext, query: PeriodQuery) -> AdminDashboardResponse:
+        company_id = self._admin(context, "FINANCE", "VIEW")
+        tz, today = self._zone(company_id)
+        start, end, period = self._period(query, today)
+        summary = self.finance_summary(context, query)
+        currency = summary.currency
+
+        previous_revenue: Decimal | None = None
+        previous_period: PeriodResponse | None = None
+        previous = self._previous_range(query.period, today, start, end)
+        if previous is not None:
+            previous_revenue, _, _ = self.repository.revenue_in_range(
+                company_id, tz, previous[0], previous[1]
+            )
+            previous_revenue = money(previous_revenue)
+            previous_period = PeriodResponse(period="custom", start=previous[0], end=previous[1])
+        revenue = summary.revenue
+        change = (
+            float((revenue - previous_revenue) / previous_revenue * 100)
+            if previous_revenue is not None and previous_revenue > 0
+            else None
+        )
+
+        trend = []
+        month_start = today.replace(day=1)
+        months = []
+        for _ in range(6):
+            months.append(month_start)
+            month_start = (month_start - timedelta(days=1)).replace(day=1)
+        for first in reversed(months):
+            last = resolve_period("this_month", first)[1]
+            assert last is not None
+            month_revenue, month_commission, _ = self.repository.revenue_in_range(
+                company_id, tz, first, last
+            )
+            month_cost = money(month_commission) + self._salary_cost(company_id, first, last, today)
+            trend.append(
+                DashboardTrendPoint(
+                    month=first,
+                    revenue=money(month_revenue),
+                    team_cost=month_cost,
+                    margin=money(month_revenue) - month_cost,
+                )
+            )
+
+        attention_rows = self.repository.attention_tasks(company_id, today + timedelta(days=7))
+        due_this_week = sum(1 for row in attention_rows if row.due_date >= today)
+
+        team = sorted(
+            (
+                DashboardTeamLoad(
+                    person=row.person,
+                    open_tasks=row.open_tasks,
+                    completed_tasks=row.completed_tasks,
+                    pending=row.pending,
+                )
+                for row in self.team_report(context, query).rows
+            ),
+            key=lambda item: (-item.open_tasks, item.person.name),
+        )
+
+        budgets = []
+        for row in self.repository.client_balances(company_id, tz, None, None):
+            total = money(row.budget_total)
+            if total <= 0:
+                continue
+            used = money(row.billed_all_time)
+            committed = money(self.tasks.budget_totals(company_id, row.client_id).committed)
+            budgets.append(
+                DashboardBudgetWatch(
+                    client=NamedRef(id=row.client_id, name=row.client_name, code=row.client_code),
+                    total=total,
+                    used=used,
+                    committed=committed,
+                    remaining=max(total - used, ZERO),
+                    percent_used=float(used / total * 100),
+                    over=used > total,
+                )
+            )
+        budgets.sort(key=lambda item: -item.percent_used)
+
+        return AdminDashboardResponse(
+            period=period,
+            previous_period=previous_period,
+            currency=currency,
+            money=DashboardMoney(
+                revenue=revenue,
+                previous_revenue=previous_revenue,
+                revenue_change_pct=change,
+                team_cost=summary.team_cost,
+                commission_cost=summary.commission_cost,
+                salary_cost=summary.salary_cost,
+                gross_margin=summary.gross_margin,
+                margin_pct=float(summary.gross_margin / revenue * 100) if revenue > 0 else None,
+                pending_client_payments=summary.pending_client_payments,
+                pending_team_payments=summary.pending_team_payments,
+                approved_items=summary.approved_items,
+            ),
+            trend=trend,
+            status_counts=self.repository.status_counts(company_id),
+            open_tasks=summary.open_tasks,
+            overdue_tasks=summary.overdue_tasks,
+            due_this_week=due_this_week,
+            attention=[
+                DashboardAttentionTask(
+                    id=row.id,
+                    code=f"TSK-{row.number:04d}",
+                    title=row.title,
+                    client_name=row.client_name,
+                    assignee_name=row.assignee_name,
+                    due_date=row.due_date,
+                    status=row.status,
+                    is_overdue=row.due_date < today,
+                )
+                for row in attention_rows
+            ],
+            team=team[:8],
+            budgets=budgets[:6],
         )
 
 

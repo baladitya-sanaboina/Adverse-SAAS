@@ -800,3 +800,604 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ===================================================================== Admin dashboard */
+/* Chart series colours: validated with the dataviz palette checker (CVD + contrast) on
+   --surface #ffffff (light) and #121D31 (dark). Revenue = brand blue, team cost = amber. */
+.production-dashboard {
+  --chart-revenue: #0876ed;
+  --chart-cost: #c96f05;
+  display: grid;
+  gap: 20px;
+}
+
+.dark .production-dashboard {
+  --chart-revenue: #3d95f5;
+  --chart-cost: #c97f1e;
+}
+
+.production-dash-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px #2b1f380a;
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+}
+
+.production-dash-header h1 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.production-dash-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.production-dash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.production-dash-actions .loopless-select {
+  min-width: 170px;
+}
+
+.production-dash-actions a {
+  text-decoration: none;
+}
+
+.production-dash-body {
+  display: grid;
+  gap: 20px;
+  transition: opacity 160ms ease;
+}
+
+.production-dash-body.refreshing {
+  opacity: 0.6;
+}
+
+.production-dash-tile strong {
+  font-size: 1.55rem;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.production-dash-tile strong.negative {
+  color: #b74858;
+}
+
+.dark .production-dash-tile strong.negative {
+  color: #f0a6af;
+}
+
+.production-dash-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+}
+
+.production-dash-tile .production-dash-delta {
+  font-size: inherit;
+}
+
+.production-dash-delta svg {
+  width: 14px;
+  height: 14px;
+}
+
+.production-dash-delta.up {
+  color: #287150;
+}
+
+.production-dash-delta.down {
+  color: #b74858;
+}
+
+.dark .production-dash-delta.up {
+  color: #86d3a9;
+}
+
+.dark .production-dash-delta.down {
+  color: #f0a6af;
+}
+
+.company-dashboard-panel.production-dash-panel {
+  min-height: 0;
+}
+
+.production-dash-panel > header {
+  align-items: center;
+}
+
+.production-dash-panel-body {
+  padding: 18px 24px 20px;
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+}
+
+.production-dash-link {
+  color: #0876ed;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.dark .production-dash-link {
+  color: #8cc8ff;
+}
+
+.production-dash-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 18px 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.production-dash-empty svg {
+  width: 18px;
+  height: 18px;
+  color: #0876ed;
+}
+
+/* Legend + table toggle in the chart header. */
+.production-dash-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+
+.production-dash-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.production-dash-legend i,
+.production-dash-tooltip i {
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+  border-radius: 3px;
+}
+
+.production-dash-legend i.revenue,
+.production-dash-tooltip i.revenue {
+  background: var(--chart-revenue);
+}
+
+.production-dash-legend i.cost,
+.production-dash-tooltip i.cost {
+  background: var(--chart-cost);
+}
+
+/* Bar chart. */
+.production-dash-chart {
+  position: relative;
+}
+
+.production-dash-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.production-dash-chart .grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.production-dash-chart .baseline {
+  stroke: var(--muted);
+  stroke-opacity: 0.45;
+  stroke-width: 1;
+}
+
+.production-dash-chart .axis {
+  fill: var(--muted);
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.production-dash-chart path.revenue {
+  fill: var(--chart-revenue);
+}
+
+.production-dash-chart path.cost {
+  fill: var(--chart-cost);
+}
+
+.production-dash-chart g.dim path {
+  opacity: 0.35;
+}
+
+.production-dash-chart .hit {
+  fill: transparent;
+  outline: 0;
+  cursor: default;
+}
+
+.production-dash-tooltip {
+  position: absolute;
+  top: 6px;
+  z-index: 5;
+  min-width: 180px;
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--foreground);
+  background: var(--surface);
+  box-shadow: 0 18px 42px #25172f24;
+  font-size: 0.64rem;
+  font-weight: 500;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.production-dash-tooltip b {
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.production-dash-tooltip span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.production-dash-tooltip strong {
+  margin-left: auto;
+  font-weight: 700;
+}
+
+.production-dash-tooltip strong.negative,
+.production-dash-table .negative {
+  color: #b74858;
+}
+
+.production-dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.66rem;
+}
+
+.production-dash-table th,
+.production-dash-table td {
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+
+.production-dash-table thead th {
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.production-dash-table th:first-child {
+  text-align: left;
+}
+
+.production-dash-table tbody th {
+  font-weight: 700;
+}
+
+/* Work by status: one-hue horizontal bars. */
+.production-dash-bars {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.production-dash-bars a {
+  display: grid;
+  grid-template-columns: 90px 1fr 32px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  color: var(--foreground);
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.production-dash-bars a:hover > span:first-child,
+.production-dash-bars a:focus-visible > span:first-child {
+  color: #0876ed;
+}
+
+.production-dash-bars b {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.production-dash-bars .track,
+.production-dash-team .track,
+.production-dash-meters .meter {
+  height: 10px;
+  display: block;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--surface-muted);
+}
+
+.production-dash-bars .track i,
+.production-dash-team .track i,
+.production-dash-meters .meter i {
+  height: 100%;
+  display: block;
+  border-radius: 5px;
+  background: var(--chart-revenue);
+}
+
+.production-dash-footnote {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+/* Needs attention list. */
+.production-dash-rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.production-dash-rows a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.production-dash-rows li:last-child a {
+  border-bottom: 0;
+}
+
+.production-dash-rows a > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.production-dash-rows a > span.meta {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.production-dash-rows small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.production-dash-rows strong {
+  overflow: hidden;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.production-dash-rows a:hover strong {
+  color: #0876ed;
+}
+
+.production-dash-rows em {
+  color: #065ec1;
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.production-dash-rows em.overdue {
+  color: #b74858;
+}
+
+.dark .production-dash-rows em {
+  color: #8cc8ff;
+}
+
+.dark .production-dash-rows em.overdue {
+  color: #f0a6af;
+}
+
+/* Team workload. */
+.production-dash-team {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.production-dash-team li {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 0;
+}
+
+.production-dash-team li > b {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #fff;
+  background: #0876ed;
+  font-size: 0.6rem;
+}
+
+.production-dash-team li > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.production-dash-team strong {
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.production-dash-team small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 500;
+}
+
+.production-dash-team .track {
+  height: 6px;
+}
+
+/* Budget watch meters. */
+.production-dash-meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.production-dash-meters li {
+  display: grid;
+  gap: 7px;
+}
+
+.production-dash-meters li > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.production-dash-meters strong {
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.production-dash-meters li > div > span {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.production-dash-meters li > div > span.over {
+  color: #b74858;
+  font-weight: 700;
+}
+
+.production-dash-meters .meter.over i {
+  background: #b74858;
+}
+
+.dark .production-dash-meters li > div > span.over {
+  color: #f0a6af;
+}
+
+.dark .production-dash-meters .meter.over i {
+  background: #e0707e;
+}
+
+.production-dash-meters small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 500;
+}
+
+@media (max-width: 1100px) {
+  .company-dashboard-grid.production-dash-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .production-dash-header {
+    padding: 18px;
+  }
+
+  .production-dash-actions,
+  .production-dash-actions .loopless-select,
+  .production-dash-actions a {
+    width: 100%;
+  }
+
+  .production-dash-panel-body {
+    padding: 16px 18px;
+  }
+
+  .production-dash-rows a {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .production-dash-rows a > span.meta {
+    text-align: left;
+  }
+}
+
+/* The topbar floats over the page (80px); the old hero used to provide this space. */
+.dash-content.production-dashboard {
+  padding-top: 100px;
+}
+
+/* Legend labels are not eyebrows: beat ".company-dashboard-panel header span". */
+.company-dashboard-panel .production-dash-legend > span,
+.dark .company-dashboard-panel .production-dash-legend > span {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+@media (max-width: 720px) {
+  .dash-content.production-dashboard {
+    padding-top: 84px;
+  }
+}

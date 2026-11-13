@@ -720,5 +720,71 @@ class ServiceReportResponse(BaseModel):
     totals: ServiceReportRow | None
 
 
+class DashboardMoney(BaseModel):
+    revenue: Money
+    previous_revenue: Money | None
+    revenue_change_pct: float | None
+    team_cost: Money
+    commission_cost: Money
+    salary_cost: Money
+    gross_margin: Money
+    margin_pct: float | None
+    pending_client_payments: Money
+    pending_team_payments: Money
+    approved_items: int
+
+
+class DashboardTrendPoint(BaseModel):
+    month: date
+    revenue: Money
+    team_cost: Money
+    margin: Money
+
+
+class DashboardAttentionTask(BaseModel):
+    id: UUID
+    code: str
+    title: str
+    client_name: str
+    assignee_name: str | None
+    due_date: date
+    status: TaskStatus
+    is_overdue: bool
+
+
+class DashboardTeamLoad(BaseModel):
+    person: PersonRef
+    open_tasks: int
+    completed_tasks: int
+    pending: Money
+
+
+class DashboardBudgetWatch(BaseModel):
+    client: NamedRef
+    total: Money
+    used: Money
+    committed: Money
+    remaining: Money
+    percent_used: float
+    over: bool
+
+
+class AdminDashboardResponse(BaseModel):
+    """Admin home: money, trend, work, team and budgets in one call (Admin only)."""
+
+    period: PeriodResponse
+    previous_period: PeriodResponse | None
+    currency: str
+    money: DashboardMoney
+    trend: list[DashboardTrendPoint]
+    status_counts: dict[str, int]
+    open_tasks: int
+    overdue_tasks: int
+    due_this_week: int
+    attention: list[DashboardAttentionTask]
+    team: list[DashboardTeamLoad]
+    budgets: list[DashboardBudgetWatch]
+
+
 ManagerEarningsResponse.model_rebuild()
 EmployeeSalaryResponse.model_rebuild()

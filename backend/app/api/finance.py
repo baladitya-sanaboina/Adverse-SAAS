@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from app.middleware.authentication import AuthenticatedContext
 from app.schemas.production import (
+    AdminDashboardResponse,
     BudgetEntryRequest,
     ClientBudgetResponse,
     ClientPaymentListResponse,
@@ -62,6 +63,21 @@ def _payments(
 
 
 # -- dashboard and reports ----------------------------------------------------------------
+
+
+@router.get(
+    "/dashboard",
+    response_model=AdminDashboardResponse,
+    summary="Admin home: money with change, 6-month trend, work, team load and budget watch",
+    responses=ERRORS,
+)
+def dashboard(
+    context: AuthenticatedContext,
+    period: ReportPeriod = Query("this_month"),
+    start: date | None = Query(None),
+    end: date | None = Query(None),
+) -> AdminDashboardResponse:
+    return finance_service.admin_dashboard(context, _period(period, start, end))
 
 
 @router.get(

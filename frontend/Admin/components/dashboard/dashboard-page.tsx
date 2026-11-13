@@ -1,81 +1,150 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { BriefcaseBusiness, CircleDollarSign, Contact, RefreshCw, UsersRound, type LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { DashboardHero } from "./dashboard-hero";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  AlarmClock,
+  CircleDollarSign,
+  HandCoins,
+  PiggyBank,
+  Plus,
+  Table2,
+  TrendingDown,
+  TrendingUp,
+  UsersRound,
+  Wallet,
+} from "lucide-react";
+import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { loadCompanyDashboard } from "@/lib/company-dashboard/client";
 import type { CompanyDashboard } from "@/lib/company-dashboard/types";
+import { STATUS_LABELS, api, errorText, formatDate, money, query } from "@/lib/production/client";
+import type { ReportPeriod, TaskStatus } from "@/lib/production/types";
+import "@/styles/production.css";
 
-const quickActionPrefixes = ["/employees", "/clients", "/crm", "/settings", "/tasks"];
+type Trend = { month: string; revenue: string; team_cost: string; margin: string };
+type AdminDashboard = {
+  period: { period: ReportPeriod; start: string | null; end: string | null };
+  previous_period: { start: string | null; end: string | null } | null;
+  currency: string;
+  money: {
+    revenue: string;
+    previous_revenue: string | null;
+    revenue_change_pct: number | null;
+    team_cost: string;
+    commission_cost: string;
+    salary_cost: string;
+    gross_margin: string;
+    margin_pct: number | null;
+    pending_client_payments: string;
+    pending_team_payments: string;
+    approved_items: number;
+  };
+  trend: Trend[];
+  status_counts: Partial<Record<TaskStatus, number>>;
+  open_tasks: number;
+  overdue_tasks: number;
+  due_this_week: number;
+  attention: {
+    id: string;
+    code: string;
+    title: string;
+    client_name: string;
+    assignee_name: string | null;
+    due_date: string;
+    status: TaskStatus;
+    is_overdue: boolean;
+  }[];
+  team: {
+    person: { id: string; name: string; role: "MANAGER" | "EMPLOYEE" };
+    open_tasks: number;
+    completed_tasks: number;
+    pending: string;
+  }[];
+  budgets: {
+    client: { id: string; name: string; code: string };
+    total: string;
+    used: string;
+    committed: string;
+    remaining: string;
+    percent_used: number;
+    over: boolean;
+  }[];
+};
 
-function isVisibleQuickAction(href: string) {
-  return quickActionPrefixes.some((prefix) => href === prefix || href.startsWith(`${prefix}/`) || href.startsWith(`${prefix}?`));
+const PERIODS: { value: ReportPeriod; label: string }[] = [
+  { value: "this_month", label: "This month" },
+  { value: "previous_month", label: "Previous month" },
+  { value: "this_week", label: "This week" },
+  { value: "today", label: "Today" },
+  { value: "all", label: "All time" },
+];
+const WORKFLOW: TaskStatus[] = ["PENDING", "ASSIGNED", "IN_PROGRESS", "SUBMITTED", "REVIEW", "APPROVED", "COMPLETED"];
+
+function greeting(): string {
+  const hour = new Date().getHours();
+  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 }
 
-function DashboardSkeleton() {
-  return (
-    <div className="company-dashboard-loading" aria-label="Loading company dashboard" aria-busy="true">
-      <div className="company-dashboard-loading__hero" />
-      <div className="company-dashboard-loading__cards">
-        {[1, 2, 3, 4].map((item) => (
-          <i key={item} />
-        ))}
-      </div>
-      <div className="company-dashboard-loading__panels">
-        <i />
-        <i />
-      </div>
-    </div>
+function compact(value: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(value);
+  } catch {
+    return String(Math.round(value));
+  }
+}
+
+function monthLabel(value: string, style: "short" | "long" = "short"): string {
+  return new Intl.DateTimeFormat("en-IN", { month: style, ...(style === "long" ? { year: "numeric" } : {}) }).format(
+    new Date(`${value}T00:00:00`),
   );
 }
 
-function relativeTime(value: string) {
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
-  if (seconds < 60) return "Just now";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`;
-  return new Intl.DateTimeFormat("en", { day: "numeric", month: "short" }).format(new Date(value));
-}
-
-function KpiCard({
+function Tile({
   title,
   value,
-  description,
-  emptyDescription,
-  href,
-  icon: Icon,
+  icon,
+  children,
+  tone,
 }: {
   title: string;
-  value: number | string | null;
-  description: string;
-  emptyDescription: string;
-  href?: string;
-  icon: LucideIcon;
+  value: string;
+  icon: ReactNode;
+  children: ReactNode;
+  tone?: "negative";
 }) {
-  const isEmpty = value === 0;
-  const isUnavailable = value == null;
   return (
-    <article className={`company-dashboard-kpi${isUnavailable ? " is-unavailable" : ""}`}>
+    <article className="company-dashboard-kpi production-dash-tile">
       <div>
         <span>{title}</span>
-        <i>
-          <Icon aria-hidden="true" />
-        </i>
+        <i aria-hidden="true">{icon}</i>
       </div>
-      <strong>{isUnavailable ? "—" : value}</strong>
-      {isEmpty && href ? (
-        <Link href={href}>{emptyDescription}</Link>
-      ) : (
-        <small>{isEmpty || isUnavailable ? emptyDescription : description}</small>
-      )}
+      <strong className={tone === "negative" ? "negative" : undefined}>{value}</strong>
+      <small>{children}</small>
     </article>
   );
 }
 
+function PanelHead({ eyebrow, title, aside }: { eyebrow: string; title: string; aside?: ReactNode }) {
+  return (
+    <header>
+      <div>
+        <span>{eyebrow}</span>
+        <h2>{title}</h2>
+      </div>
+      {aside}
+    </header>
+  );
+}
+
 export function DashboardPage() {
-  const [dashboard, setDashboard] = useState<CompanyDashboard | null>(null);
+  const [company, setCompany] = useState<CompanyDashboard | null>(null);
+  const [data, setData] = useState<AdminDashboard | null>(null);
+  const [period, setPeriod] = useState<ReportPeriod>("this_month");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -83,159 +152,498 @@ export function DashboardPage() {
     setLoading(true);
     setError("");
     try {
-      setDashboard(await loadCompanyDashboard());
-    } catch {
-      setError("Something went wrong while loading your company data.");
+      const [dashboard, overview] = await Promise.all([
+        api<AdminDashboard>(`/api/company/finance/dashboard${query({ period })}`),
+        loadCompanyDashboard().catch(() => null),
+      ]);
+      setData(dashboard);
+      if (overview) setCompany(overview);
+    } catch (requestError) {
+      setError(errorText(requestError, "Unable to load the dashboard."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [period]);
 
   useEffect(() => {
-    let active = true;
-    void loadCompanyDashboard()
-      .then((data) => {
-        if (active) setDashboard(data);
-      })
-      .catch(() => {
-        if (active) setError("Something went wrong while loading your company data.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  if (loading) return <DashboardSkeleton />;
-  if (error || !dashboard) {
-    return (
-      <div className="company-dashboard-error" role="alert">
-        <RefreshCw aria-hidden="true" />
-        <h1>Unable to load dashboard</h1>
-        <p>{error}</p>
-        <button type="button" onClick={() => void load()}>
-          Retry
-        </button>
-      </div>
-    );
-  }
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
-  const metrics = [
-    {
-      title: "Employees",
-      value: dashboard.statistics.employees,
-      icon: UsersRound,
-      description: "Total employees in this company",
-      emptyDescription: "No employees yet",
-      href: "/employees?mode=create",
-    },
-    {
-      title: "Projects",
-      value: dashboard.statistics.projects,
-      icon: BriefcaseBusiness,
-      description: "Projects recorded for this company",
-      emptyDescription: "No projects recorded yet",
-    },
-    {
-      title: "Clients",
-      value: dashboard.statistics.clients,
-      icon: Contact,
-      description: "Total clients in this company",
-      emptyDescription: "No clients yet",
-      href: "/clients?mode=create",
-    },
-    {
-      title: "Finance",
-      value: dashboard.statistics.finance_total,
-      icon: CircleDollarSign,
-      description: "Current supported financial summary",
-      emptyDescription: "Available when Finance launches",
-    },
-  ];
-  const quickActions = dashboard.quick_actions.filter((action) => isVisibleQuickAction(action.href));
+  const firstName = company?.current_user.name.split(/\s+/)[0] ?? "";
+  const todayText = new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long" }).format(
+    new Date(),
+  );
 
   return (
-    <>
-      <DashboardHero
-        title={`Good morning, ${dashboard.current_user.name.split(" ")[0]} · `}
-        highlight={dashboard.company.name}
-        description="Your tenant-scoped company overview, recent activity, and permitted actions in one place."
-        action={
-          dashboard.company.logo_url ? (
-            <span className="company-dashboard-logo">
-              <Image
-                unoptimized
-                src={`/api/company/dashboard/logo?path=${encodeURIComponent(dashboard.company.logo_url)}`}
-                alt={`${dashboard.company.name} logo`}
-                width={54}
-                height={54}
-              />
+    <div className="dash-content production-dashboard">
+      <header className="production-dash-header">
+        <div>
+          <h1>
+            {greeting()}
+            {firstName ? `, ${firstName}` : ""}
+          </h1>
+          <p>
+            {todayText}
+            {company ? ` · ${company.company.name}` : ""}
+          </p>
+        </div>
+        <div className="production-dash-actions">
+          <LooplessSelect
+            value={period}
+            onValueChange={(value) => setPeriod(value as ReportPeriod)}
+            ariaLabel="Dashboard period"
+            options={PERIODS}
+          />
+          <Link href="/payments" className="management-secondary-action">
+            <Wallet /> Record payment
+          </Link>
+          <Link href="/tasks?mode=create" className="management-primary-action">
+            <Plus /> Create task
+          </Link>
+        </div>
+      </header>
+
+      {error ? (
+        <div className="organization-state">
+          <h3>{error}</h3>
+          <button type="button" onClick={() => void load()}>
+            Retry
+          </button>
+        </div>
+      ) : !data ? (
+        <div className="company-dashboard-loading" aria-busy="true" aria-label="Loading dashboard">
+          <div className="company-dashboard-loading__cards">
+            {[1, 2, 3, 4].map((item) => (
+              <i key={item} />
+            ))}
+          </div>
+          <div className="company-dashboard-loading__panels">
+            <i />
+            <i />
+          </div>
+        </div>
+      ) : (
+        <DashboardBody data={data} refreshing={loading} />
+      )}
+    </div>
+  );
+}
+
+function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing: boolean }) {
+  const { currency, money: m } = data;
+  const change = m.revenue_change_pct;
+  const marginNegative = Number(m.gross_margin) < 0;
+
+  return (
+    <div className={`production-dash-body${refreshing ? " refreshing" : ""}`}>
+      <section className="company-dashboard-kpis" aria-label="Money summary">
+        <Tile title="Revenue" value={money(m.revenue, currency)} icon={<CircleDollarSign />}>
+          {change === null ? (
+            `${m.approved_items} approved ${m.approved_items === 1 ? "item" : "items"}`
+          ) : (
+            <span className={`production-dash-delta ${change >= 0 ? "up" : "down"}`}>
+              {change >= 0 ? <TrendingUp aria-hidden="true" /> : <TrendingDown aria-hidden="true" />}
+              {change >= 0 ? "Up" : "Down"} {Math.abs(change).toFixed(0)}% vs previous period
             </span>
-          ) : undefined
+          )}
+        </Tile>
+        <Tile title="Team cost" value={money(m.team_cost, currency)} icon={<HandCoins />}>
+          Commission {money(m.commission_cost, currency)} · salaries {money(m.salary_cost, currency)}
+        </Tile>
+        <Tile
+          title="Gross margin"
+          value={money(m.gross_margin, currency)}
+          icon={<TrendingUp />}
+          tone={marginNegative ? "negative" : undefined}
+        >
+          {m.margin_pct === null ? "No revenue in this period" : `${m.margin_pct.toFixed(0)}% of revenue`}
+        </Tile>
+        <Tile title="Pending from clients" value={money(m.pending_client_payments, currency)} icon={<Wallet />}>
+          To your team: {money(m.pending_team_payments, currency)}
+        </Tile>
+      </section>
+
+      <section className="company-dashboard-grid production-dash-grid">
+        <TrendPanel trend={data.trend} currency={currency} />
+        <StatusPanel data={data} />
+      </section>
+
+      <section className="company-dashboard-grid production-dash-grid">
+        <AttentionPanel data={data} />
+        <TeamPanel data={data} />
+      </section>
+
+      <BudgetPanel data={data} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ revenue vs cost */
+
+function TrendPanel({ trend, currency }: { trend: Trend[]; currency: string }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const [asTable, setAsTable] = useState(false);
+  // Draw at the real pixel width so axis text stays 10px on phones instead of being scaled down.
+  const box = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(640);
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(280, Math.round(entry.contentRect.width))));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [asTable]);
+  const values = trend.flatMap((point) => [Number(point.revenue), Number(point.team_cost)]);
+  const max = Math.max(...values, 0);
+  const empty = max === 0;
+
+  // Chart geometry (SVG user units; the SVG scales to the panel width).
+  const height = width < 480 ? 200 : 230;
+  const pad = { top: 12, right: 8, bottom: 26, left: width < 480 ? 44 : 52 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const scaleMax = useMemo(() => {
+    if (max <= 0) return 1;
+    const magnitude = 10 ** Math.floor(Math.log10(max));
+    return Math.ceil(max / magnitude) * magnitude;
+  }, [max]);
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((step) => step * scaleMax);
+  const groupW = plotW / Math.max(trend.length, 1);
+  const barW = Math.min(26, (groupW - 18) / 2);
+  const y = (value: number) => pad.top + plotH - (value / scaleMax) * plotH;
+
+  // Bar with 4px rounded top corners, square at the baseline.
+  const bar = (x: number, value: number) => {
+    const top = y(value);
+    const h = pad.top + plotH - top;
+    if (h <= 0) return "";
+    const r = Math.min(4, h, barW / 2);
+    return `M${x},${top + h} V${top + r} Q${x},${top} ${x + r},${top} H${x + barW - r} Q${x + barW},${top} ${
+      x + barW
+    },${top + r} V${top + h} Z`;
+  };
+
+  const active = hover === null ? null : trend[hover];
+
+  return (
+    <article className="company-dashboard-panel production-dash-panel">
+      <PanelHead
+        eyebrow="LAST 6 MONTHS"
+        title="Revenue vs team cost"
+        aside={
+          <div className="production-dash-legend">
+            <span>
+              <i className="revenue" aria-hidden="true" />
+              Revenue
+            </span>
+            <span>
+              <i className="cost" aria-hidden="true" />
+              Team cost
+            </span>
+            <button
+              type="button"
+              className="production-icon-button"
+              aria-pressed={asTable}
+              aria-label={asTable ? "Show chart" : "Show as table"}
+              title={asTable ? "Show chart" : "Show as table"}
+              onClick={() => setAsTable(!asTable)}
+            >
+              <Table2 />
+            </button>
+          </div>
         }
       />
-      <div className="dash-content company-dashboard-content">
-        <section className="company-dashboard-kpis" aria-label="Company summary">
-          {metrics.map((metric) => (
-            <KpiCard key={metric.title} {...metric} />
-          ))}
-        </section>
-        <section className="company-dashboard-grid">
-          <article className="company-dashboard-panel company-dashboard-activity">
-            <header>
-              <div>
-                <span>COMPANY ACTIVITY</span>
-                <h2>Recent activity</h2>
-              </div>
-              <p>Latest events from {dashboard.company.name}</p>
-            </header>
-            {dashboard.recent_activity.length ? (
-              <ol>
-                {dashboard.recent_activity.map((activity, index) => (
-                  <li key={`${activity.occurred_at}-${index}`}>
-                    <i aria-hidden="true" />
-                    <div>
-                      <strong>{activity.subject}</strong>
-                      <p>{activity.description}</p>
-                    </div>
-                    <time dateTime={activity.occurred_at}>{relativeTime(activity.occurred_at)}</time>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <div className="company-dashboard-empty">
-                <h3>No activity yet</h3>
-                <p>Company activity will appear here as your team gets started.</p>
+      <div className="production-dash-panel-body">
+        {asTable ? (
+          <table className="production-dash-table">
+            <thead>
+              <tr>
+                <th scope="col">Month</th>
+                <th scope="col">Revenue</th>
+                <th scope="col">Team cost</th>
+                <th scope="col">Margin</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trend.map((point) => (
+                <tr key={point.month}>
+                  <th scope="row">{monthLabel(point.month, "long")}</th>
+                  <td>{money(point.revenue, currency)}</td>
+                  <td>{money(point.team_cost, currency)}</td>
+                  <td className={Number(point.margin) < 0 ? "negative" : undefined}>{money(point.margin, currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : empty ? (
+          <p className="production-dash-empty">No approved work or salaries in the last 6 months yet.</p>
+        ) : (
+          <div className="production-dash-chart" ref={box} onMouseLeave={() => setHover(null)}>
+            <svg
+              width={width}
+              height={height}
+              viewBox={`0 0 ${width} ${height}`}
+              role="img"
+              aria-label="Revenue and team cost for the last 6 months"
+            >
+              {ticks.map((tick) => (
+                <g key={tick}>
+                  <line className="grid" x1={pad.left} x2={width - pad.right} y1={y(tick)} y2={y(tick)} />
+                  <text className="axis" x={pad.left - 8} y={y(tick) + 3} textAnchor="end">
+                    {compact(tick, currency)}
+                  </text>
+                </g>
+              ))}
+              {trend.map((point, index) => {
+                const x0 = pad.left + index * groupW + (groupW - (barW * 2 + 2)) / 2;
+                return (
+                  <g key={point.month} className={hover !== null && hover !== index ? "dim" : undefined}>
+                    <path className="revenue" d={bar(x0, Number(point.revenue))} />
+                    <path className="cost" d={bar(x0 + barW + 2, Number(point.team_cost))} />
+                    <text
+                      className="axis"
+                      x={pad.left + index * groupW + groupW / 2}
+                      y={height - 8}
+                      textAnchor="middle"
+                    >
+                      {monthLabel(point.month)}
+                    </text>
+                    <rect
+                      className="hit"
+                      x={pad.left + index * groupW}
+                      y={pad.top}
+                      width={groupW}
+                      height={plotH}
+                      onMouseEnter={() => setHover(index)}
+                      onFocus={() => setHover(index)}
+                      onBlur={() => setHover(null)}
+                      tabIndex={0}
+                      aria-label={`${monthLabel(point.month, "long")}: revenue ${money(point.revenue, currency)}, team cost ${money(
+                        point.team_cost,
+                        currency,
+                      )}`}
+                    />
+                  </g>
+                );
+              })}
+              <line className="baseline" x1={pad.left} x2={width - pad.right} y1={y(0)} y2={y(0)} />
+            </svg>
+            {active && hover !== null && (
+              <div
+                className="production-dash-tooltip"
+                style={{ left: `${((pad.left + hover * groupW + groupW / 2) / width) * 100}%` }}
+                role="status"
+              >
+                <b>{monthLabel(active.month, "long")}</b>
+                <span>
+                  <i className="revenue" aria-hidden="true" />
+                  Revenue <strong>{money(active.revenue, currency)}</strong>
+                </span>
+                <span>
+                  <i className="cost" aria-hidden="true" />
+                  Team cost <strong>{money(active.team_cost, currency)}</strong>
+                </span>
+                <span>
+                  Margin{" "}
+                  <strong className={Number(active.margin) < 0 ? "negative" : undefined}>
+                    {money(active.margin, currency)}
+                  </strong>
+                </span>
               </div>
             )}
-          </article>
-          <article className="company-dashboard-panel company-dashboard-actions">
-            <header>
-              <div>
-                <span>PERMITTED ACTIONS</span>
-                <h2>Quick actions</h2>
-              </div>
-              <p>Shortcuts based on your access.</p>
-            </header>
-            {quickActions.length ? (
-              <div>
-                {quickActions.map((action) => (
-                  <Link href={action.href} key={action.href}>
-                    <span>+</span>
-                    {action.label}
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="company-dashboard-empty">
-                <h3>No quick actions</h3>
-                <p>Your current permissions do not include create actions.</p>
-              </div>
-            )}
-          </article>
-        </section>
+          </div>
+        )}
       </div>
-    </>
+    </article>
+  );
+}
+
+/* ------------------------------------------------------------------ work by status */
+
+function StatusPanel({ data }: { data: AdminDashboard }) {
+  const rows = WORKFLOW.map((status) => ({ status, count: data.status_counts[status] ?? 0 }));
+  const max = Math.max(...rows.map((row) => row.count), 1);
+  return (
+    <article className="company-dashboard-panel production-dash-panel">
+      <PanelHead eyebrow="WORK" title={`${data.open_tasks} open ${data.open_tasks === 1 ? "task" : "tasks"}`} />
+      <div className="production-dash-panel-body">
+        <ul className="production-dash-bars" aria-label="Tasks by status">
+          {rows.map((row) => (
+            <li key={row.status}>
+              <Link href={`/tasks?status=${row.status}`}>
+                <span>{STATUS_LABELS[row.status]}</span>
+                <span className="track" aria-hidden="true">
+                  {row.count > 0 && <i style={{ width: `${(row.count / max) * 100}%` }} />}
+                </span>
+                <b>{row.count}</b>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        <p className="production-dash-footnote">
+          {data.overdue_tasks > 0 ? `${data.overdue_tasks} overdue · ` : ""}
+          {data.due_this_week} due within 7 days
+        </p>
+      </div>
+    </article>
+  );
+}
+
+/* ------------------------------------------------------------------ needs attention */
+
+function AttentionPanel({ data }: { data: AdminDashboard }) {
+  return (
+    <article className="company-dashboard-panel production-dash-panel">
+      <PanelHead
+        eyebrow="NEEDS ATTENTION"
+        title="Overdue and due this week"
+        aside={
+          <Link href="/tasks" className="production-dash-link">
+            All tasks
+          </Link>
+        }
+      />
+      <div className="production-dash-panel-body">
+        {data.attention.length === 0 ? (
+          <p className="production-dash-empty">
+            <AlarmClock aria-hidden="true" />
+            Nothing overdue or due in the next 7 days.
+          </p>
+        ) : (
+          <ul className="production-dash-rows">
+            {data.attention.map((task) => (
+              <li key={task.id}>
+                <Link href={`/tasks?task=${task.id}`}>
+                  <span>
+                    <small>
+                      {task.code} · {task.client_name}
+                    </small>
+                    <strong>{task.title}</strong>
+                  </span>
+                  <span className="meta">
+                    <em className={task.is_overdue ? "overdue" : undefined}>
+                      {task.is_overdue ? "Overdue" : "Due"} {formatDate(task.due_date)}
+                    </em>
+                    <small>
+                      {STATUS_LABELS[task.status]} · {task.assignee_name ?? "Not assigned"}
+                    </small>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/* ------------------------------------------------------------------ team workload */
+
+function TeamPanel({ data }: { data: AdminDashboard }) {
+  const max = Math.max(...data.team.map((row) => row.open_tasks), 1);
+  return (
+    <article className="company-dashboard-panel production-dash-panel">
+      <PanelHead
+        eyebrow="TEAM"
+        title="Workload"
+        aside={
+          <Link href="/payments" className="production-dash-link">
+            Payouts
+          </Link>
+        }
+      />
+      <div className="production-dash-panel-body">
+        {data.team.length === 0 ? (
+          <p className="production-dash-empty">
+            <UsersRound aria-hidden="true" />
+            No managers or employees yet.
+          </p>
+        ) : (
+          <ul className="production-dash-team">
+            {data.team.map((row) => (
+              <li key={row.person.id}>
+                <b aria-hidden="true">
+                  {row.person.name
+                    .split(/\s+/)
+                    .slice(0, 2)
+                    .map((part) => part[0])
+                    .join("")
+                    .toUpperCase()}
+                </b>
+                <span>
+                  <strong>{row.person.name}</strong>
+                  <small>
+                    {row.person.role === "MANAGER" ? "Manager" : "Employee"} · {row.open_tasks} open ·{" "}
+                    {Number(row.pending) > 0 ? `${money(row.pending, data.currency)} to pay` : "nothing to pay"}
+                  </small>
+                  <span className="track" aria-hidden="true">
+                    {row.open_tasks > 0 && <i style={{ width: `${(row.open_tasks / max) * 100}%` }} />}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/* ------------------------------------------------------------------ budgets */
+
+function BudgetPanel({ data }: { data: AdminDashboard }) {
+  return (
+    <article className="company-dashboard-panel production-dash-panel production-dash-budgets">
+      <PanelHead
+        eyebrow="CLIENT BUDGETS"
+        title="Budget watch"
+        aside={
+          <Link href="/payments" className="production-dash-link">
+            Manage budgets
+          </Link>
+        }
+      />
+      <div className="production-dash-panel-body">
+        {data.budgets.length === 0 ? (
+          <p className="production-dash-empty">
+            <PiggyBank aria-hidden="true" />
+            No client budgets set. Add them in Payments → Budgets.
+          </p>
+        ) : (
+          <ul className="production-dash-meters">
+            {data.budgets.map((row) => {
+              const pct = Math.min(row.percent_used, 100);
+              const near = !row.over && row.percent_used >= 80;
+              return (
+                <li key={row.client.id}>
+                  <div>
+                    <strong>{row.client.name}</strong>
+                    <span className={row.over ? "over" : undefined}>
+                      {row.over ? "Over budget" : near ? "Near limit" : `${row.percent_used.toFixed(0)}% used`}
+                    </span>
+                  </div>
+                  <span
+                    className={`meter${row.over ? " over" : ""}`}
+                    role="meter"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(row.percent_used)}
+                    aria-label={`${row.client.name} budget used`}
+                  >
+                    <i style={{ width: `${pct}%` }} />
+                  </span>
+                  <small>
+                    {money(row.used, data.currency)} of {money(row.total, data.currency)}
+                    {Number(row.committed) > 0 ? ` · ${money(row.committed, data.currency)} in progress` : ""}
+                  </small>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </article>
   );
 }
