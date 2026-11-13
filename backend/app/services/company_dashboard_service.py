@@ -1,4 +1,9 @@
+from datetime import datetime
+from uuid import UUID
+from zoneinfo import ZoneInfo
+
 from app.repositories.company_dashboard_repository import CompanyDashboardRepository
+from app.repositories.finance_repository import FinanceRepository
 from app.schemas.authentication import AuthContext
 from app.schemas.company_dashboard import (
     CompanyDashboardActivity,
@@ -10,11 +15,31 @@ from app.schemas.company_dashboard import (
 )
 from app.services.authentication_service import AuthenticationError
 from app.services.permission_service import validate_user_action_access
+from app.services.production_rules import money, resolve_period
 
 
 class CompanyDashboardService:
-    def __init__(self, repository: CompanyDashboardRepository | None = None):
+    def __init__(
+        self,
+        repository: CompanyDashboardRepository | None = None,
+        finance_repository: FinanceRepository | None = None,
+    ):
         self.repository = repository or CompanyDashboardRepository()
+        self.finance = finance_repository or FinanceRepository()
+
+    def _month_revenue(self, context: AuthContext, company_id: UUID) -> str | None:
+        """This month's approved revenue for the Finance card, or None to keep the card empty."""
+        if not validate_user_action_access(str(context.user_id), context.role, "FINANCE", "VIEW"):
+            return None
+        try:
+            zone_name = self.finance.company_timezone(company_id)
+            today = datetime.now(ZoneInfo(zone_name)).date()
+            start, end = resolve_period("this_month", today)
+            revenue, _, _ = self.finance.revenue_in_range(company_id, zone_name, start, end)
+            currency = self.finance.company_currency(company_id)
+        except Exception:
+            return None
+        return f"{currency} {money(revenue):,.2f}"
 
     @staticmethod
     def _authorize(context: AuthContext) -> None:
@@ -39,6 +64,7 @@ class CompanyDashboardService:
         action_specs = (
             ("Add Employee", "/employees?mode=create", "EMPLOYEES", "CREATE"),
             ("Add Client", "/clients?mode=create", "CLIENTS", "CREATE"),
+            ("Create Task", "/tasks?mode=create", "TASKS", "CREATE"),
         )
         quick_actions = [
             CompanyDashboardQuickAction(label=label, href=href, module=module, action=action)
@@ -56,6 +82,7 @@ class CompanyDashboardService:
                 employees=record.employees,
                 projects=record.projects,
                 clients=record.clients,
+                finance_total=self._month_revenue(context, context.company_id),
             ),
             recent_activity=[
                 CompanyDashboardActivity(**activity.__dict__) for activity in activities

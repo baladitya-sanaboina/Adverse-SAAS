@@ -8,7 +8,7 @@ import { DashboardHero } from "./dashboard-hero";
 import { loadCompanyDashboard } from "@/lib/company-dashboard/client";
 import type { CompanyDashboard } from "@/lib/company-dashboard/types";
 
-const quickActionPrefixes = ["/employees", "/clients", "/crm", "/settings"];
+const quickActionPrefixes = ["/employees", "/clients", "/crm", "/settings", "/tasks"];
 
 function isVisibleQuickAction(href: string) {
   return quickActionPrefixes.some((prefix) => href === prefix || href.startsWith(`${prefix}/`) || href.startsWith(`${prefix}?`));

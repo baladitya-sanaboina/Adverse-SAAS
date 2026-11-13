@@ -62,9 +62,17 @@ export function money(value: string | number | null | undefined, currency = "INR
   }
 }
 
+/**
+ * Backend timestamps are UTC but are sent without a zone marker (the database columns have no
+ * time zone). Parse them as UTC so the browser shows the correct local time.
+ */
+function parseTimestamp(value: string): Date {
+  return new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? value : `${value}Z`);
+}
+
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : parseTimestamp(value);
   return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
@@ -75,7 +83,7 @@ export function formatDateTime(value: string | null | undefined): string {
     month: "short",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(parseTimestamp(value));
 }
 
 export function formatMonth(value: string): string {

@@ -784,3 +784,19 @@
     grid-auto-columns: minmax(78vw, 1fr);
   }
 }
+
+/* Reports: period selector plus optional custom dates, left aligned. */
+.organization-tools.production-period {
+  grid-template-columns: 240px repeat(2, 190px);
+  justify-content: start;
+}
+
+.organization-tools.production-period input[type="date"] {
+  min-width: 0;
+}
+
+@media (max-width: 620px) {
+  .organization-tools.production-period {
+    grid-template-columns: 1fr;
+  }
+}
