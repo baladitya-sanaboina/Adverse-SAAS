@@ -467,6 +467,7 @@ function TaskBoard({
               className={`production-board-column${hover === status && droppable ? " drop-target" : ""}${
                 dragging && !droppable && dragging.status !== status ? " drop-blocked" : ""
               }`}
+              data-status={status}
               aria-label={`${STATUS_LABELS[status]}, ${tasks.length} tasks`}
               onDragOver={(event) => {
                 if (!droppable) return;

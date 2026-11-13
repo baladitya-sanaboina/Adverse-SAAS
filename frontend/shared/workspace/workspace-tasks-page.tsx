@@ -236,6 +236,7 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
                     className={`production-board-column${hover === column && droppable ? " drop-target" : ""}${
                       dragging && !droppable && dragging.status !== column ? " drop-blocked" : ""
                     }`}
+                    data-status={column}
                     aria-label={`${STATUS_LABELS[column]}, ${tasks.length} tasks`}
                     onDragOver={(event) => {
                       if (!droppable) return;
@@ -275,7 +276,7 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
                           dueDate={task.due_date}
                           overdue={task.is_overdue}
                           closed={CLOSED.includes(task.status)}
-                          amount={task.my_commission ? `${money(task.my_commission, task.currency)} commission` : null}
+                          amount={task.my_commission ? money(task.my_commission, task.currency) : null}
                           files={task.files_count}
                           comments={task.comments_count}
                           dragging={dragging?.id === task.id}

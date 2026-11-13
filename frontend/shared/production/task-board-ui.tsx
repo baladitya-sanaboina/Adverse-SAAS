@@ -174,7 +174,7 @@ export function QuickFilters({
   );
 }
 
-/** Board card: priority stripe, assignee initials, due chip, money line and file/comment counts. */
+/** Board card: code (with Urgent/High flag), amount, title, client, assignee, counts and due date. */
 export function TaskCard({
   code,
   service,
@@ -214,33 +214,36 @@ export function TaskCard({
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
   onDragEnd: () => void;
 }) {
+  const flagged = priority === "URGENT" || priority === "HIGH";
   return (
     <button
       type="button"
-      className={`production-board-card production-task-card priority-${priority.toLowerCase()}${
-        dragging ? " dragging" : ""
-      }`}
+      className={`production-board-card production-task-card${dragging ? " dragging" : ""}`}
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onOpen}
-      aria-label={`Open ${code}: ${title}`}
+      aria-label={`Open ${code}: ${title}, ${PRIORITY_LABELS[priority]} priority`}
     >
       <span className="production-task-card-top">
         <small>
-          {code} · {service}
+          {code}
+          {flagged && (
+            <em className={`production-priority priority-${priority.toLowerCase()}`}>{PRIORITY_LABELS[priority]}</em>
+          )}
         </small>
-        <em className={`production-priority priority-${priority.toLowerCase()}`}>{PRIORITY_LABELS[priority]}</em>
+        {amount && <span className="production-task-card-amount">{amount}</span>}
       </span>
       <strong>{title}</strong>
-      <span className="production-task-card-client">{client}</span>
-      {amount && <span className="production-board-price">{amount}</span>}
+      <span className="production-task-card-client">
+        {client} · {service}
+      </span>
       <footer>
         <span className="production-board-person" title={personTitle ?? person ?? "Not assigned"}>
           <b aria-hidden="true" className={person ? undefined : "empty"}>
-            {person ? initials(person) : "–"}
+            {person ? initials(person) : ""}
           </b>
-          <span className="name">{person ?? "Not assigned"}</span>
+          <span className="name">{person ?? "Unassigned"}</span>
         </span>
         <span className="production-task-card-meta">
           {files > 0 && (
