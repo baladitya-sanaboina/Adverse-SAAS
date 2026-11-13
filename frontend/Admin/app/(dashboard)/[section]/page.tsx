@@ -6,6 +6,7 @@ import { CompanySettingsPage } from "@/components/settings/company-settings-page
 import { EmployeeDirectoryPage } from "@/components/employees/employee-directory-page";
 import { ClientManagementPage } from "@/components/clients/client-management-page";
 import { CrmPipelinePage } from "@/components/crm/crm-pipeline-page";
+import { TaskManagementPage } from "@/components/tasks/task-management-page";
 
 const errors: Record<string, string> = {
   "401": "Unauthorized",
@@ -21,6 +22,7 @@ export default async function SectionPage({ params }: { params: Promise<{ sectio
   if (section === "employees") return <EmployeeDirectoryPage />;
   if (section === "clients") return <ClientManagementPage />;
   if (section === "crm") return <CrmPipelinePage />;
+  if (section === "tasks") return <TaskManagementPage />;
   if (section === "profile") return <ProfilePage />;
   if (section === "settings") return <CompanySettingsPage />;
   const item = navigationItems.find(({ href }) => href === `/${section}`);
