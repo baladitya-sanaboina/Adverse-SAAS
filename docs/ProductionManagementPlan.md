@@ -169,8 +169,8 @@ All tables are tenant-scoped with `company_id`, UUID ids and `created_at`/`updat
 
 | Phase | Status | Notes |
 |---|---|---|
-| 0. Backup | ⏳ Not started | Waiting for the owner's "go". |
-| 1. Database | ⏳ Not started | |
+| 0. Backup | ✅ Done (2026-11-13) | Git baseline commit `e810dee`. "Before" screenshots in `qa/ui-baseline/` (git-ignored, local only), captured with `qa/capture-ui.mjs`: every screen in all 4 apps at desktop-light, desktop-dark and mobile-light. |
+| 1. Database | ✅ Done (2026-11-13) | Models added to `backend/prisma/schema.prisma` (purely additive; no existing table changed). Migration `20261113150000_production_management` creates 10 tables and 7 enums, plus check constraints: no negative money, commission only for manager assignees, one open salary per person, salary periods on the 1st of the month. Dry-run in a rolled-back transaction first, then applied via `docker compose run --rm migrations`; backend health reports the new version. |
 | 2. Backend | ⏳ Not started | |
 | 3. Admin app | ⏳ Not started | |
 | 4. Manager app | ⏳ Not started | |
@@ -178,7 +178,13 @@ All tables are tenant-scoped with `company_id`, UUID ids and `created_at`/`updat
 | 6. Client app | ⏳ Not started | |
 | 7. Final check | ⏳ Not started | |
 
-Open item: the owner still has to confirm that Approve/Complete stay Admin-only (section 3.2).
+Approve/Complete stay Admin-only (confirmed by the owner's "go", 2026-11-13).
+
+Working notes for later phases:
+
+- On the host, port 5432 is a separate Homebrew Postgres. Reach the Docker database with `docker exec loopless-postgres-1 psql -U loopless -d loopless_dev`.
+- To re-capture screenshots for the Phase 7 comparison: install `playwright` in any scratch folder, then run `PLAYWRIGHT_FROM=<that folder> CHROMIUM_PATH=<chromium binary> node qa/capture-ui.mjs qa/ui-after`.
+- Development test accounts (password `1234`): `adverseadmin@`, `adversemanager@`, `adverseemployee@`, `adverseclient@` (all `gmail.com`).
 
 ---
 

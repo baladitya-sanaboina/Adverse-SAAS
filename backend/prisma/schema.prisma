@@ -63,47 +63,57 @@ enum CompanySubscriptionStatus {
 }
 
 model Company {
-  id                 String                         @id @default(uuid()) @db.Uuid
-  name               String                         @unique
-  description        String?
-  code               String                         @unique
-  subscriptionPlan   String                         @map("subscription_plan")
-  status             CompanyStatus                  @default(ACTIVE)
-  contactEmail       String?                        @unique @map("contact_email")
-  phone              String?
-  address            String?
-  website            String?
-  timezone           String                         @default("UTC")
-  language           String                         @default("en")
-  createdAt          DateTime                       @default(now()) @map("created_at")
-  updatedAt          DateTime                       @updatedAt @map("updated_at")
-  users              User[]
-  registrationLogs   RegistrationAudit[]
-  authSessions       AuthSession[]
-  managementAudits   CompanyManagementAudit[]
-  subscription       CompanySubscription?
-  subscriptionAudits SubscriptionAudit[]
-  usageMetrics       CompanyUsageMetric?
-  usageAlerts        SubscriptionUsageAlert[]
-  enforcementAudits  SubscriptionEnforcementAudit[]
-  onboarding         CompanyOnboarding?
-  tenantDefaults     CompanyTenantDefault?
-  onboardingAudits   CompanyOnboardingAudit[]
-  settingAudits      CompanySettingAudit[]
-  departments        Department[]
-  branches           Branch[]
-  roles              Role[]
-  employees          Employee[]
-  employeeAudits     EmployeeAudit[]
-  clients            Client[]
-  clientNotes        ClientNote[]
-  clientFeedback     ClientFeedback[]
-  clientActivities   ClientActivity[]
-  services           CompanyService[]
-  servicePricing     ServicePricing[]
-  leads              Lead[]
-  opportunities      Opportunity[]
-  crmAudits          CrmAudit[]
+  id                  String                         @id @default(uuid()) @db.Uuid
+  name                String                         @unique
+  description         String?
+  code                String                         @unique
+  subscriptionPlan    String                         @map("subscription_plan")
+  status              CompanyStatus                  @default(ACTIVE)
+  contactEmail        String?                        @unique @map("contact_email")
+  phone               String?
+  address             String?
+  website             String?
+  timezone            String                         @default("UTC")
+  language            String                         @default("en")
+  createdAt           DateTime                       @default(now()) @map("created_at")
+  updatedAt           DateTime                       @updatedAt @map("updated_at")
+  users               User[]
+  registrationLogs    RegistrationAudit[]
+  authSessions        AuthSession[]
+  managementAudits    CompanyManagementAudit[]
+  subscription        CompanySubscription?
+  subscriptionAudits  SubscriptionAudit[]
+  usageMetrics        CompanyUsageMetric?
+  usageAlerts         SubscriptionUsageAlert[]
+  enforcementAudits   SubscriptionEnforcementAudit[]
+  onboarding          CompanyOnboarding?
+  tenantDefaults      CompanyTenantDefault?
+  onboardingAudits    CompanyOnboardingAudit[]
+  settingAudits       CompanySettingAudit[]
+  departments         Department[]
+  branches            Branch[]
+  roles               Role[]
+  employees           Employee[]
+  employeeAudits      EmployeeAudit[]
+  clients             Client[]
+  clientNotes         ClientNote[]
+  clientFeedback      ClientFeedback[]
+  clientActivities    ClientActivity[]
+  services            CompanyService[]
+  servicePricing      ServicePricing[]
+  leads               Lead[]
+  opportunities       Opportunity[]
+  crmAudits           CrmAudit[]
+  tasks               Task[]
+  taskStatusHistory   TaskStatusHistory[]
+  taskPriceChanges    TaskPriceChange[]
+  taskComments        TaskComment[]
+  taskFiles           TaskFile[]
+  clientBudgetEntries ClientBudgetEntry[]
+  clientPayments      ClientPayment[]
+  employeeSalaries    EmployeeSalary[]
+  salaryPayments      SalaryPayment[]
+  managerPayouts      ManagerPayout[]
 
   @@index([status, createdAt])
   @@index([subscriptionPlan, status])
@@ -170,6 +180,54 @@ enum ServicePricingModel {
 enum ServicePricingScope {
   CLIENT
   MANAGER
+}
+
+enum TaskStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  SUBMITTED
+  REVIEW
+  APPROVED
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskAssigneeType {
+  MANAGER
+  EMPLOYEE
+}
+
+enum TaskFileKind {
+  REFERENCE
+  DELIVERABLE
+}
+
+enum TaskPriceField {
+  CLIENT_PRICE
+  COMMISSION
+}
+
+enum ClientBudgetEntryType {
+  INITIAL
+  TOP_UP
+  ADJUSTMENT
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  UPI
+  CHEQUE
+  CARD
+  OTHER
 }
 
 model Department {
@@ -440,6 +498,21 @@ model User {
   clientAccountProfile    Client?                  @relation("ClientAccountUser")
   managerPricingRecords   ServicePricing[]         @relation("ManagerPricingUser")
   servicePricingChanges   ServicePricing[]         @relation("ServicePricingActor")
+  tasksCreated            Task[]                   @relation("TaskCreator")
+  tasksAssigned           Task[]                   @relation("TaskAssignee")
+  tasksMonitored          Task[]                   @relation("TaskMonitor")
+  taskStatusChanges       TaskStatusHistory[]      @relation("TaskStatusActor")
+  taskPriceChanges        TaskPriceChange[]        @relation("TaskPriceActor")
+  taskComments            TaskComment[]            @relation("TaskCommentAuthor")
+  taskFilesUploaded       TaskFile[]               @relation("TaskFileUploader")
+  clientBudgetEntries     ClientBudgetEntry[]      @relation("ClientBudgetActor")
+  clientPaymentsRecorded  ClientPayment[]          @relation("ClientPaymentActor")
+  salaries                EmployeeSalary[]         @relation("SalaryEmployee")
+  salariesSet             EmployeeSalary[]         @relation("SalaryActor")
+  salaryPayments          SalaryPayment[]          @relation("SalaryPaymentEmployee")
+  salaryPaymentsRecorded  SalaryPayment[]          @relation("SalaryPaymentActor")
+  managerPayouts          ManagerPayout[]          @relation("PayoutManager")
+  managerPayoutsRecorded  ManagerPayout[]          @relation("PayoutActor")
 
   @@index([companyId])
   @@index([roleId])
@@ -496,28 +569,31 @@ model EmployeeAudit {
 }
 
 model Client {
-  id                    String             @id @default(uuid()) @db.Uuid
-  companyId             String             @map("company_id") @db.Uuid
-  userId                String?            @unique @map("user_id") @db.Uuid
+  id                    String              @id @default(uuid()) @db.Uuid
+  companyId             String              @map("company_id") @db.Uuid
+  userId                String?             @unique @map("user_id") @db.Uuid
   name                  String
   code                  String
   email                 String?
   phone                 String?
   website               String?
-  address               String             @default("")
-  city                  String             @default("")
-  state                 String             @default("")
-  country               String             @default("")
-  status                OrganizationStatus @default(ACTIVE)
-  createdAt             DateTime           @default(now()) @map("created_at")
-  updatedAt             DateTime           @updatedAt @map("updated_at")
-  company               Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  accountUser           User?              @relation("ClientAccountUser", fields: [userId], references: [id], onDelete: SetNull)
+  address               String              @default("")
+  city                  String              @default("")
+  state                 String              @default("")
+  country               String              @default("")
+  status                OrganizationStatus  @default(ACTIVE)
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+  company               Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accountUser           User?               @relation("ClientAccountUser", fields: [userId], references: [id], onDelete: SetNull)
   contacts              ClientContact[]
   notes                 ClientNote[]
   feedback              ClientFeedback[]
   activities            ClientActivity[]
   servicePricingRecords ServicePricing[]
+  tasks                 Task[]
+  budgetEntries         ClientBudgetEntry[]
+  payments              ClientPayment[]
   leads                 Lead[]
   opportunities         Opportunity[]
 
@@ -613,6 +689,7 @@ model CompanyService {
   updatedAt           DateTime            @updatedAt @map("updated_at")
   company             Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   pricingRecords      ServicePricing[]
+  tasks               Task[]
 
   @@unique([companyId, name])
   @@unique([companyId, code])
@@ -1087,4 +1164,236 @@ model InvitationAudit {
   @@index([companyId, createdAt])
   @@index([invitationId, createdAt])
   @@map("invitation_audits")
+}
+
+// ---------------------------------------------------------------------------
+// Production management (docs/ProductionManagementPlan.md, section 6)
+// People are referenced by users.id, matching ServicePricing.managerUserId.
+// ---------------------------------------------------------------------------
+
+model Task {
+  id                 String              @id @default(uuid()) @db.Uuid
+  companyId          String              @map("company_id") @db.Uuid
+  number             Int
+  clientId           String              @map("client_id") @db.Uuid
+  serviceId          String              @map("service_id") @db.Uuid
+  title              String
+  description        String              @default("")
+  priority           TaskPriority        @default(MEDIUM)
+  status             TaskStatus          @default(PENDING)
+  assigneeUserId     String?             @map("assignee_user_id") @db.Uuid
+  assigneeType       TaskAssigneeType?   @map("assignee_type")
+  monitorUserId      String?             @map("monitor_user_id") @db.Uuid
+  dueDate            DateTime?           @map("due_date") @db.Date
+  currency           String              @default("INR") @db.VarChar(3)
+  clientPricingModel ServicePricingModel @map("client_pricing_model")
+  clientPriceDefault Decimal?            @map("client_price_default") @db.Decimal(12, 2)
+  clientPriceFinal   Decimal             @map("client_price_final") @db.Decimal(12, 2)
+  clientPriceReason  String              @default("") @map("client_price_reason")
+  commissionDefault  Decimal?            @map("commission_default") @db.Decimal(12, 2)
+  commissionFinal    Decimal?            @map("commission_final") @db.Decimal(12, 2)
+  commissionReason   String              @default("") @map("commission_reason")
+  createdById        String              @map("created_by_id") @db.Uuid
+  assignedAt         DateTime?           @map("assigned_at")
+  startedAt          DateTime?           @map("started_at")
+  submittedAt        DateTime?           @map("submitted_at")
+  approvedAt         DateTime?           @map("approved_at")
+  completedAt        DateTime?           @map("completed_at")
+  cancelledAt        DateTime?           @map("cancelled_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client             Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  service            CompanyService      @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  assignee           User?               @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  monitor            User?               @relation("TaskMonitor", fields: [monitorUserId], references: [id], onDelete: SetNull)
+  createdBy          User                @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  statusHistory      TaskStatusHistory[]
+  priceChanges       TaskPriceChange[]
+  comments           TaskComment[]
+  files              TaskFile[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status, dueDate])
+  @@index([companyId, clientId, status])
+  @@index([companyId, serviceId, status])
+  @@index([companyId, assigneeUserId, status])
+  @@index([companyId, monitorUserId, status])
+  @@index([companyId, approvedAt])
+  @@map("tasks")
+}
+
+model TaskStatusHistory {
+  id         String      @id @default(uuid()) @db.Uuid
+  companyId  String      @map("company_id") @db.Uuid
+  taskId     String      @map("task_id") @db.Uuid
+  fromStatus TaskStatus? @map("from_status")
+  toStatus   TaskStatus  @map("to_status")
+  actorId    String      @map("actor_id") @db.Uuid
+  note       String      @default("")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  task       Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor      User        @relation("TaskStatusActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("task_status_history")
+}
+
+model TaskPriceChange {
+  id        String         @id @default(uuid()) @db.Uuid
+  companyId String         @map("company_id") @db.Uuid
+  taskId    String         @map("task_id") @db.Uuid
+  field     TaskPriceField
+  oldAmount Decimal?       @map("old_amount") @db.Decimal(12, 2)
+  newAmount Decimal?       @map("new_amount") @db.Decimal(12, 2)
+  reason    String         @default("")
+  actorId   String         @map("actor_id") @db.Uuid
+  createdAt DateTime       @default(now()) @map("created_at")
+  company   Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor     User           @relation("TaskPriceActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt])
+  @@map("task_price_changes")
+}
+
+model TaskComment {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author    User     @relation("TaskCommentAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt])
+  @@map("task_comments")
+}
+
+model TaskFile {
+  id           String       @id @default(uuid()) @db.Uuid
+  companyId    String       @map("company_id") @db.Uuid
+  taskId       String       @map("task_id") @db.Uuid
+  kind         TaskFileKind
+  fileName     String       @map("file_name")
+  storagePath  String       @unique @map("storage_path")
+  mimeType     String       @map("mime_type")
+  sizeBytes    BigInt       @map("size_bytes")
+  uploadedById String       @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime     @default(now()) @map("created_at")
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  task         Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy   User         @relation("TaskFileUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([taskId, kind, createdAt])
+  @@map("task_files")
+}
+
+model ClientBudgetEntry {
+  id          String                @id @default(uuid()) @db.Uuid
+  companyId   String                @map("company_id") @db.Uuid
+  clientId    String                @map("client_id") @db.Uuid
+  type        ClientBudgetEntryType
+  amount      Decimal               @db.Decimal(12, 2)
+  currency    String                @default("INR") @db.VarChar(3)
+  note        String                @default("")
+  createdById String                @map("created_by_id") @db.Uuid
+  createdAt   DateTime              @default(now()) @map("created_at")
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client      Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy   User                  @relation("ClientBudgetActor", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, clientId, createdAt])
+  @@map("client_budget_entries")
+}
+
+model ClientPayment {
+  id          String        @id @default(uuid()) @db.Uuid
+  companyId   String        @map("company_id") @db.Uuid
+  clientId    String        @map("client_id") @db.Uuid
+  amount      Decimal       @db.Decimal(12, 2)
+  currency    String        @default("INR") @db.VarChar(3)
+  receivedOn  DateTime      @map("received_on") @db.Date
+  method      PaymentMethod @default(BANK_TRANSFER)
+  reference   String        @default("")
+  note        String        @default("")
+  createdById String        @map("created_by_id") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client      Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy   User          @relation("ClientPaymentActor", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, clientId, receivedOn])
+  @@index([companyId, receivedOn])
+  @@map("client_payments")
+}
+
+model EmployeeSalary {
+  id            String    @id @default(uuid()) @db.Uuid
+  companyId     String    @map("company_id") @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  monthlyAmount Decimal   @map("monthly_amount") @db.Decimal(12, 2)
+  currency      String    @default("INR") @db.VarChar(3)
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  note          String    @default("")
+  createdById   String    @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user          User      @relation("SalaryEmployee", fields: [userId], references: [id], onDelete: Restrict)
+  createdBy     User      @relation("SalaryActor", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, userId, effectiveFrom])
+  @@map("employee_salaries")
+}
+
+model SalaryPayment {
+  id          String        @id @default(uuid()) @db.Uuid
+  companyId   String        @map("company_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  periodMonth DateTime      @map("period_month") @db.Date
+  amount      Decimal       @db.Decimal(12, 2)
+  currency    String        @default("INR") @db.VarChar(3)
+  paidOn      DateTime      @map("paid_on") @db.Date
+  method      PaymentMethod @default(BANK_TRANSFER)
+  reference   String        @default("")
+  note        String        @default("")
+  createdById String        @map("created_by_id") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User          @relation("SalaryPaymentEmployee", fields: [userId], references: [id], onDelete: Restrict)
+  createdBy   User          @relation("SalaryPaymentActor", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, userId, periodMonth])
+  @@index([companyId, paidOn])
+  @@map("salary_payments")
+}
+
+model ManagerPayout {
+  id            String        @id @default(uuid()) @db.Uuid
+  companyId     String        @map("company_id") @db.Uuid
+  managerUserId String        @map("manager_user_id") @db.Uuid
+  amount        Decimal       @db.Decimal(12, 2)
+  currency      String        @default("INR") @db.VarChar(3)
+  paidOn        DateTime      @map("paid_on") @db.Date
+  method        PaymentMethod @default(BANK_TRANSFER)
+  reference     String        @default("")
+  note          String        @default("")
+  createdById   String        @map("created_by_id") @db.Uuid
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager       User          @relation("PayoutManager", fields: [managerUserId], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("PayoutActor", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, managerUserId, paidOn])
+  @@index([companyId, paidOn])
+  @@map("manager_payouts")
 }
