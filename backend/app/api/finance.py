@@ -15,17 +15,21 @@ from app.schemas.production import (
     ClientPaymentListResponse,
     ClientPaymentRequest,
     ClientPaymentResponse,
+    ClientPaymentUpdate,
     ClientReportResponse,
     FinanceSummaryResponse,
     ManagerPayoutListResponse,
     ManagerPayoutRequest,
     ManagerPayoutResponse,
+    ManagerPayoutUpdate,
     PaymentListFilters,
     PeriodQuery,
     PersonFinanceResponse,
     SalaryPaymentListResponse,
     SalaryPaymentRequest,
     SalaryPaymentResponse,
+    SalaryPaymentUpdate,
+    SalaryRecordUpdate,
     SalaryRequest,
     ServiceReportResponse,
     TeamReportResponse,
@@ -291,6 +295,67 @@ def record_payout(
     request: ManagerPayoutRequest, context: AuthenticatedContext
 ) -> ManagerPayoutResponse:
     return finance_service.record_payout(context, request)
+
+
+# -- edits (declared before the generic DELETE /{kind}/{id} so these paths win) --------------
+
+
+@router.patch(
+    "/client-payments/{payment_id}",
+    response_model=ClientPaymentResponse,
+    summary="Edit a payment received from a client",
+    responses=ERRORS,
+)
+def update_client_payment(
+    payment_id: UUID, request: ClientPaymentUpdate, context: AuthenticatedContext
+) -> ClientPaymentResponse:
+    return finance_service.update_client_payment(context, payment_id, request)
+
+
+@router.patch(
+    "/salary-payments/{payment_id}",
+    response_model=SalaryPaymentResponse,
+    summary="Edit a salary payment",
+    responses=ERRORS,
+)
+def update_salary_payment(
+    payment_id: UUID, request: SalaryPaymentUpdate, context: AuthenticatedContext
+) -> SalaryPaymentResponse:
+    return finance_service.update_salary_payment(context, payment_id, request)
+
+
+@router.patch(
+    "/manager-payouts/{payment_id}",
+    response_model=ManagerPayoutResponse,
+    summary="Edit a commission payout",
+    responses=ERRORS,
+)
+def update_payout(
+    payment_id: UUID, request: ManagerPayoutUpdate, context: AuthenticatedContext
+) -> ManagerPayoutResponse:
+    return finance_service.update_payout(context, payment_id, request)
+
+
+@router.patch(
+    "/salary-records/{record_id}",
+    response_model=PersonFinanceResponse,
+    summary="Correct a salary rate's amount or note",
+    responses=ERRORS,
+)
+def update_salary_record(
+    record_id: UUID, request: SalaryRecordUpdate, context: AuthenticatedContext
+) -> PersonFinanceResponse:
+    return finance_service.update_salary_record(context, record_id, request)
+
+
+@router.delete(
+    "/salary-records/{record_id}",
+    response_model=PersonFinanceResponse,
+    summary="Delete a salary rate (the previous rate runs until the next one)",
+    responses=ERRORS,
+)
+def delete_salary_record(record_id: UUID, context: AuthenticatedContext) -> PersonFinanceResponse:
+    return finance_service.delete_salary_record(context, record_id)
 
 
 # -- corrections --------------------------------------------------------------------------

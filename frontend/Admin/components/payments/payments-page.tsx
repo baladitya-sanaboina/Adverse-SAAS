@@ -33,16 +33,20 @@ import {
   today,
 } from "@/lib/production/client";
 import type {
+  AssigneeOption,
   BudgetEntryType,
   ClientBudget,
   ClientPayment,
   ClientReportRow,
+  ManagerPayout,
   NamedRef,
   Paged,
   PaymentList,
   PaymentMethod,
   PersonFinance,
   Report,
+  SalaryPayment,
+  SalaryRecord,
   TeamReportRow,
 } from "@/lib/production/types";
 import "@/styles/organization.css";
@@ -51,6 +55,8 @@ import "@/styles/production.css";
 
 type Tab = "client-payments" | "budgets" | "salaries" | "payouts";
 type ChoiceItem = { id: string; name: string; status?: string };
+type PaymentKind = "client" | "salary" | "payout";
+type AnyPayment = ClientPayment | SalaryPayment | ManagerPayout;
 
 const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   { id: "client-payments", label: "Client payments", icon: <Wallet /> },
@@ -65,8 +71,25 @@ const BUDGET_TYPE_OPTIONS: { value: BudgetEntryType; label: string }[] = [
   { value: "ADJUSTMENT", label: "Adjustment (can be negative)" },
 ];
 
+/** Where each kind of payment lives in the API. */
+const PAYMENT_API: Record<PaymentKind, { collection: string; remove: string }> = {
+  client: { collection: "client-payments", remove: "client" },
+  salary: { collection: "salary-payments", remove: "salary" },
+  payout: { collection: "manager-payouts", remove: "payout" },
+};
+
 function firstOfMonth(): string {
   return `${today().slice(0, 7)}-01`;
+}
+
+function paymentDate(payment: AnyPayment): string {
+  return "received_on" in payment ? payment.received_on : payment.paid_on;
+}
+
+function paymentSubject(payment: AnyPayment): string {
+  if ("client" in payment) return payment.client.name;
+  if ("employee_name" in payment) return payment.employee_name;
+  return payment.manager_name;
 }
 
 export function PaymentsPage() {
@@ -103,8 +126,8 @@ export function PaymentsPage() {
           {notice && <div className="organization-notice">{notice}</div>}
           {tab === "client-payments" && <ClientPaymentsTab onNotice={setNotice} />}
           {tab === "budgets" && <BudgetsTab onNotice={setNotice} />}
-          {tab === "salaries" && <PeopleTab role="EMPLOYEE" onNotice={setNotice} />}
-          {tab === "payouts" && <PeopleTab role="MANAGER" onNotice={setNotice} />}
+          {tab === "salaries" && <PeopleTab key="salaries" role="EMPLOYEE" onNotice={setNotice} />}
+          {tab === "payouts" && <PeopleTab key="payouts" role="MANAGER" onNotice={setNotice} />}
         </section>
       </div>
     </>
@@ -123,13 +146,15 @@ function StateBlock({ error, onRetry, children }: { error: string; onRetry: () =
   );
 }
 
+type PaymentValues = { amount: string; date: string; method: PaymentMethod; reference: string; note: string };
+
 function PaymentFields({
   values,
   onChange,
   dateLabel,
 }: {
-  values: { amount: string; date: string; method: PaymentMethod; reference: string; note: string };
-  onChange: (key: "amount" | "date" | "method" | "reference" | "note", value: string) => void;
+  values: PaymentValues;
+  onChange: (key: keyof PaymentValues, value: string) => void;
   dateLabel: string;
 }) {
   return (
@@ -187,249 +212,13 @@ function PaymentFields({
   );
 }
 
-const emptyPayment = () => ({
+const emptyPayment = (): PaymentValues => ({
   amount: "",
   date: today(),
-  method: "BANK_TRANSFER" as PaymentMethod,
+  method: "BANK_TRANSFER",
   reference: "",
   note: "",
 });
-
-/* ------------------------------------------------------------------ client payments */
-
-function ClientPaymentsTab({ onNotice }: { onNotice: (message: string) => void }) {
-  const [data, setData] = useState<PaymentList<ClientPayment> | null>(null);
-  const [clients, setClients] = useState<ChoiceItem[]>([]);
-  const [client, setClient] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [removeItem, setRemoveItem] = useState<ClientPayment | null>(null);
-  const [removing, setRemoving] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setData(
-        await api<PaymentList<ClientPayment>>(
-          `/api/company/finance/client-payments${query({ client_id: client, page_size: 100 })}`,
-        ),
-      );
-    } catch (requestError) {
-      setError(errorText(requestError, "Unable to load client payments."));
-    } finally {
-      setLoading(false);
-    }
-  }, [client]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
-  }, [load]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(async () => {
-      try {
-        const result = await api<Paged<ChoiceItem> | ChoiceItem[]>("/api/company/clients?page_size=100");
-        setClients(Array.isArray(result) ? result : result.items);
-      } catch {
-        // The filter falls back to "All clients".
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  async function remove() {
-    if (!removeItem) return;
-    setRemoving(true);
-    try {
-      await api(`/api/company/finance/client/${removeItem.id}`, { method: "DELETE" });
-      onNotice("Payment deleted.");
-      setRemoveItem(null);
-      await load();
-    } catch (requestError) {
-      setError(errorText(requestError, "Unable to delete the payment."));
-      setRemoveItem(null);
-    } finally {
-      setRemoving(false);
-    }
-  }
-
-  if (creating) {
-    return (
-      <ClientPaymentForm
-        clients={clients}
-        defaultClient={client}
-        onCancel={() => setCreating(false)}
-        onSaved={(message) => {
-          setCreating(false);
-          onNotice(message);
-          void load();
-        }}
-      />
-    );
-  }
-
-  const currency = data?.items[0]?.currency;
-  return (
-    <>
-      <header className="management-toolbar">
-        <div>
-          <span>Payments received from clients</span>
-          <strong>
-            {data ? `${data.total} ${data.total === 1 ? "payment" : "payments"}` : "Payments"}
-            {data && data.total > 0 && ` · ${money(data.total_amount, currency)}`}
-          </strong>
-        </div>
-        <button type="button" onClick={() => setCreating(true)}>
-          <Plus /> Record payment
-        </button>
-      </header>
-      <div className="organization-tools production-tools" style={{ ["--production-filters" as string]: 1 }}>
-        <span aria-hidden="true" />
-        <LooplessSelect
-          value={client}
-          onValueChange={setClient}
-          ariaLabel="Filter payments by client"
-          options={[
-            { value: "", label: "All clients" },
-            ...clients.map((item) => ({ value: item.id, label: item.name })),
-          ]}
-        />
-      </div>
-      {error ? (
-        <StateBlock error={error} onRetry={() => void load()} />
-      ) : loading ? (
-        <TableSkeleton />
-      ) : !data || data.items.length === 0 ? (
-        <div className="organization-state">
-          <Wallet />
-          <h3>No payments recorded</h3>
-          <p>Record money as it arrives from clients to track what is still pending.</p>
-          <button type="button" onClick={() => setCreating(true)}>
-            <Plus /> Record payment
-          </button>
-        </div>
-      ) : (
-        <div className="organization-table production-client-payments" role="table">
-          <div className="organization-table-head">
-            <span>Date</span>
-            <span>Client</span>
-            <span>Method</span>
-            <span>Reference</span>
-            <span className="production-money">Amount</span>
-            <span>Actions</span>
-          </div>
-          {data.items.map((item) => (
-            <article key={item.id}>
-              <span>{formatDate(item.received_on)}</span>
-              <div className="production-cell">
-                <strong>{item.client.name}</strong>
-                {item.note && <small>{item.note}</small>}
-              </div>
-              <span>{methodLabel(item.method)}</span>
-              <span>{item.reference || "—"}</span>
-              <span className="production-money">{money(item.amount, item.currency)}</span>
-              <CrudActionButtons
-                remove={{ label: `Delete payment from ${item.client.name}`, onClick: () => setRemoveItem(item) }}
-              />
-            </article>
-          ))}
-        </div>
-      )}
-      <ConfirmationDialog
-        open={Boolean(removeItem)}
-        title="Delete this payment?"
-        description={`${removeItem ? money(removeItem.amount, removeItem.currency) : ""} from ${
-          removeItem?.client.name ?? "the client"
-        } will be removed, and their pending amount will go up again.`}
-        confirmLabel="Delete payment"
-        tone="danger"
-        loading={removing}
-        onCancel={() => setRemoveItem(null)}
-        onConfirm={() => void remove()}
-      />
-    </>
-  );
-}
-
-function ClientPaymentForm({
-  clients,
-  defaultClient,
-  onCancel,
-  onSaved,
-}: {
-  clients: ChoiceItem[];
-  defaultClient: string;
-  onCancel: () => void;
-  onSaved: (message: string) => void;
-}) {
-  const [clientId, setClientId] = useState(defaultClient);
-  const [values, setValues] = useState(emptyPayment);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    if (!clientId) return setError("Choose the client who paid.");
-    if (!values.amount || Number(values.amount) <= 0) return setError("Enter an amount greater than zero.");
-    if (!values.date) return setError("Enter the date the payment was received.");
-    setSaving(true);
-    setError("");
-    try {
-      const payment = await api<ClientPayment>("/api/company/finance/client-payments", {
-        method: "POST",
-        json: {
-          client_id: clientId,
-          amount: values.amount,
-          received_on: values.date,
-          method: values.method,
-          reference: values.reference.trim(),
-          note: values.note.trim(),
-        },
-      });
-      onSaved(`${money(payment.amount, payment.currency)} received from ${payment.client.name} recorded.`);
-    } catch (requestError) {
-      setError(errorText(requestError, "Unable to record the payment."));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <EditorShell
-      back="Back to payments"
-      label="New payment"
-      icon={<Wallet />}
-      eyebrow="RECORD PAYMENT"
-      title="Payment received"
-      description="Recording money from a client lowers their pending amount. It does not change their budget."
-      onCancel={onCancel}
-    >
-      <form className="management-form organization-form-grid" noValidate onSubmit={save}>
-        {error && <div className="management-form-message">{error}</div>}
-        <Field label="Client" wide>
-          <LooplessSelect
-            value={clientId}
-            onValueChange={setClientId}
-            ariaLabel="Client"
-            options={[
-              { value: "", label: "Choose a client" },
-              ...clients.map((item) => ({ value: item.id, label: item.name })),
-            ]}
-          />
-        </Field>
-        <PaymentFields
-          values={values}
-          dateLabel="Received on"
-          onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))}
-        />
-        <FormFooter saving={saving} label="Record payment" onCancel={onCancel} />
-      </form>
-    </EditorShell>
-  );
-}
 
 function EditorShell({
   back,
@@ -486,6 +275,493 @@ function FormFooter({ saving, label, onCancel }: { saving: boolean; label: strin
         {saving ? "Saving…" : label}
       </button>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ shared payment editor */
+
+/**
+ * Create or edit any payment. For an edit, the employee or manager cannot change (delete and
+ * re-record instead); a client payment can be moved to another client.
+ */
+function PaymentEditor({
+  kind,
+  payment,
+  subjects,
+  defaultSubject = "",
+  defaultAmount = "",
+  back,
+  onCancel,
+  onSaved,
+}: {
+  kind: PaymentKind;
+  payment: AnyPayment | null;
+  subjects: ChoiceItem[];
+  defaultSubject?: string;
+  defaultAmount?: string;
+  back: string;
+  onCancel: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const editing = Boolean(payment);
+  const [subject, setSubject] = useState(() => {
+    if (!payment) return defaultSubject;
+    if ("client" in payment) return payment.client.id;
+    if ("user_id" in payment) return payment.user_id;
+    return payment.manager_user_id;
+  });
+  const [month, setMonth] = useState(() =>
+    payment && "period_month" in payment ? payment.period_month.slice(0, 7) : firstOfMonth().slice(0, 7),
+  );
+  const [values, setValues] = useState<PaymentValues>(() =>
+    payment
+      ? {
+          amount: payment.amount,
+          date: paymentDate(payment),
+          method: payment.method,
+          reference: payment.reference,
+          note: payment.note,
+        }
+      : { ...emptyPayment(), amount: defaultAmount },
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const subjectLabel = kind === "client" ? "Client" : kind === "salary" ? "Employee" : "Manager";
+  const subjectLocked = editing && kind !== "client";
+  const noun = kind === "client" ? "payment" : kind === "salary" ? "salary payment" : "payout";
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (!subject) return setError(`Choose the ${subjectLabel.toLowerCase()}.`);
+    if (kind === "salary" && !month) return setError("Choose the month this salary is for.");
+    if (!values.amount || Number(values.amount) <= 0) return setError("Enter an amount greater than zero.");
+    if (!values.date) return setError("Enter the date.");
+    setSaving(true);
+    setError("");
+    const dateKey = kind === "client" ? "received_on" : "paid_on";
+    const body: Record<string, unknown> = {
+      amount: values.amount,
+      [dateKey]: values.date,
+      method: values.method,
+      reference: values.reference.trim(),
+      note: values.note.trim(),
+      ...(kind === "salary" ? { period_month: `${month}-01` } : {}),
+      ...(kind === "client" ? { client_id: subject } : {}),
+    };
+    if (!editing) {
+      if (kind === "salary") body.user_id = subject;
+      if (kind === "payout") body.manager_user_id = subject;
+    }
+    try {
+      const path = `/api/company/finance/${PAYMENT_API[kind].collection}`;
+      const saved = await api<AnyPayment>(editing && payment ? `${path}/${payment.id}` : path, {
+        method: editing ? "PATCH" : "POST",
+        json: body,
+      });
+      onSaved(
+        `${money(saved.amount, saved.currency)} ${noun} ${editing ? "updated" : "recorded"} for ${paymentSubject(saved)}.`,
+      );
+    } catch (requestError) {
+      setError(errorText(requestError, `Unable to save the ${noun}.`));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <EditorShell
+      back={back}
+      label={editing ? `Edit ${noun}` : `New ${noun}`}
+      icon={kind === "client" ? <Wallet /> : kind === "salary" ? <Banknote /> : <HandCoins />}
+      eyebrow={editing ? `EDIT ${noun.toUpperCase()}` : `RECORD ${noun.toUpperCase()}`}
+      title={editing ? `Edit ${noun}` : kind === "client" ? "Payment received" : `Record ${noun}`}
+      description={
+        kind === "client"
+          ? "Money from a client lowers their pending amount. It does not change their budget."
+          : kind === "salary"
+            ? "Salary paid lowers what is pending for that month."
+            : "A payout lowers the commission still owed to the manager."
+      }
+      onCancel={onCancel}
+    >
+      <form className="management-form organization-form-grid" noValidate onSubmit={save}>
+        {error && <div className="management-form-message">{error}</div>}
+        <Field
+          label={subjectLabel}
+          wide={kind !== "salary"}
+          hint={subjectLocked ? `To pay someone else, delete this ${noun} and record a new one.` : undefined}
+        >
+          <LooplessSelect
+            value={subject}
+            onValueChange={setSubject}
+            ariaLabel={subjectLabel}
+            disabled={subjectLocked}
+            options={[
+              { value: "", label: `Choose ${subjectLabel.toLowerCase()}` },
+              ...subjects.map((item) => ({ value: item.id, label: item.name })),
+              // Keep a deactivated person visible on their own old payment.
+              ...(payment && subject && !subjects.some((item) => item.id === subject)
+                ? [{ value: subject, label: paymentSubject(payment) }]
+                : []),
+            ]}
+          />
+        </Field>
+        {kind === "salary" && (
+          <Field label="For month">
+            <span className="management-input">
+              <CalendarDays aria-hidden="true" />
+              <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
+            </span>
+          </Field>
+        )}
+        <PaymentFields
+          values={values}
+          dateLabel={kind === "client" ? "Received on" : "Paid on"}
+          onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))}
+        />
+        <FormFooter saving={saving} label={editing ? "Save changes" : `Record ${noun}`} onCancel={onCancel} />
+      </form>
+    </EditorShell>
+  );
+}
+
+/** Set a new salary rate, or correct an existing one (amount and note). */
+function SalaryEditor({
+  record,
+  employees,
+  defaultEmployee = "",
+  defaultAmount = "",
+  back,
+  onCancel,
+  onSaved,
+}: {
+  record: SalaryRecord | null;
+  employees: ChoiceItem[];
+  defaultEmployee?: string;
+  defaultAmount?: string;
+  back: string;
+  onCancel: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const editing = Boolean(record);
+  const [employee, setEmployee] = useState(defaultEmployee);
+  const [values, setValues] = useState({
+    amount: record?.monthly_amount ?? defaultAmount,
+    from: record?.effective_from ?? firstOfMonth(),
+    note: record?.note ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (!editing && !employee) return setError("Choose the employee.");
+    if (values.amount === "" || Number(values.amount) < 0) return setError("Enter the monthly salary.");
+    if (!values.from) return setError("Enter the date it starts from.");
+    setSaving(true);
+    setError("");
+    try {
+      if (record) {
+        await api(`/api/company/finance/salary-records/${record.id}`, {
+          method: "PATCH",
+          json: { monthly_amount: values.amount, note: values.note.trim() },
+        });
+      } else {
+        await api(`/api/company/finance/people/${employee}/salary`, {
+          method: "PUT",
+          json: { monthly_amount: values.amount, effective_from: values.from, note: values.note.trim() },
+        });
+      }
+      onSaved(`Salary ${editing ? "updated" : "set"} to ${money(values.amount, record?.currency)} a month.`);
+    } catch (requestError) {
+      setError(errorText(requestError, "Unable to save the salary."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <EditorShell
+      back={back}
+      label={editing ? "Edit salary" : "Set salary"}
+      icon={<Banknote />}
+      eyebrow={editing ? "EDIT SALARY" : "SET SALARY"}
+      title={editing ? "Correct this salary" : "Set monthly salary"}
+      description={
+        editing
+          ? "Fix the amount or note. To change the start date, delete this salary and set it again."
+          : "A new salary starts from the date you choose. Earlier months keep their old salary."
+      }
+      onCancel={onCancel}
+    >
+      <form className="management-form organization-form-grid" noValidate onSubmit={save}>
+        {error && <div className="management-form-message">{error}</div>}
+        {!editing && (
+          <Field label="Employee" wide>
+            <LooplessSelect
+              value={employee}
+              onValueChange={setEmployee}
+              ariaLabel="Employee"
+              options={[
+                { value: "", label: "Choose employee" },
+                ...employees.map((item) => ({ value: item.id, label: item.name })),
+              ]}
+            />
+          </Field>
+        )}
+        <Field label="Monthly salary">
+          <span className="management-input">
+            <Wallet aria-hidden="true" />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={values.amount}
+              onChange={(event) => setValues({ ...values, amount: event.target.value })}
+              placeholder="0.00"
+            />
+          </span>
+        </Field>
+        <Field label="Starts from">
+          <span className={`management-input${editing ? " readonly" : ""}`}>
+            <CalendarDays aria-hidden="true" />
+            <input
+              type="date"
+              value={values.from}
+              readOnly={editing}
+              onChange={(event) => setValues({ ...values, from: event.target.value })}
+            />
+          </span>
+        </Field>
+        <Field label="Note" wide>
+          <span className="management-input">
+            <FileText aria-hidden="true" />
+            <input
+              value={values.note}
+              onChange={(event) => setValues({ ...values, note: event.target.value })}
+              placeholder="For example: yearly raise"
+              maxLength={500}
+            />
+          </span>
+        </Field>
+        <FormFooter saving={saving} label={editing ? "Save changes" : "Save salary"} onCancel={onCancel} />
+      </form>
+    </EditorShell>
+  );
+}
+
+/** Row table for a list of payments with Edit and Delete actions. */
+function PaymentTable({
+  kind,
+  items,
+  onEdit,
+  onDelete,
+}: {
+  kind: PaymentKind;
+  items: AnyPayment[];
+  onEdit: (payment: AnyPayment) => void;
+  onDelete: (payment: AnyPayment) => void;
+}) {
+  return (
+    <div className="organization-table production-client-payments" role="table">
+      <div className="organization-table-head">
+        <span>{kind === "client" ? "Received" : "Paid on"}</span>
+        <span>{kind === "client" ? "Client" : kind === "salary" ? "Employee" : "Manager"}</span>
+        <span>Method</span>
+        <span>Reference</span>
+        <span className="production-money">Amount</span>
+        <span>Actions</span>
+      </div>
+      {items.map((item) => (
+        <article key={item.id}>
+          <span>{formatDate(paymentDate(item))}</span>
+          <div className="production-cell">
+            <strong>{paymentSubject(item)}</strong>
+            {"period_month" in item ? (
+              <small>For {formatMonth(item.period_month)}</small>
+            ) : (
+              item.note && <small>{item.note}</small>
+            )}
+          </div>
+          <span>{methodLabel(item.method)}</span>
+          <span>{item.reference || "—"}</span>
+          <span className="production-money">{money(item.amount, item.currency)}</span>
+          <CrudActionButtons
+            edit={{ label: `Edit ${paymentSubject(item)} payment`, onClick: () => onEdit(item) }}
+            remove={{ label: `Delete ${paymentSubject(item)} payment`, onClick: () => onDelete(item) }}
+          />
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function DeletePaymentDialog({
+  kind,
+  payment,
+  onCancel,
+  onDeleted,
+  onError,
+}: {
+  kind: PaymentKind;
+  payment: AnyPayment | null;
+  onCancel: () => void;
+  onDeleted: () => void;
+  onError: (message: string) => void;
+}) {
+  const [removing, setRemoving] = useState(false);
+  async function remove() {
+    if (!payment) return;
+    setRemoving(true);
+    try {
+      await api(`/api/company/finance/${PAYMENT_API[kind].remove}/${payment.id}`, { method: "DELETE" });
+      onDeleted();
+    } catch (requestError) {
+      onError(errorText(requestError, "Unable to delete the payment."));
+      onCancel();
+    } finally {
+      setRemoving(false);
+    }
+  }
+  return (
+    <ConfirmationDialog
+      open={Boolean(payment)}
+      title="Delete this payment?"
+      description={`${payment ? money(payment.amount, payment.currency) : ""} for ${
+        payment ? paymentSubject(payment) : ""
+      } will be removed and the pending amount will go up again. Use this only for a mistake.`}
+      confirmLabel="Delete payment"
+      tone="danger"
+      loading={removing}
+      onCancel={onCancel}
+      onConfirm={() => void remove()}
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ client payments */
+
+function ClientPaymentsTab({ onNotice }: { onNotice: (message: string) => void }) {
+  const [data, setData] = useState<PaymentList<ClientPayment> | null>(null);
+  const [clients, setClients] = useState<ChoiceItem[]>([]);
+  const [client, setClient] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editor, setEditor] = useState<{ payment: ClientPayment | null } | null>(null);
+  const [removeItem, setRemoveItem] = useState<AnyPayment | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setData(
+        await api<PaymentList<ClientPayment>>(
+          `/api/company/finance/client-payments${query({ client_id: client, page_size: 100 })}`,
+        ),
+      );
+    } catch (requestError) {
+      setError(errorText(requestError, "Unable to load client payments."));
+    } finally {
+      setLoading(false);
+    }
+  }, [client]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      try {
+        const result = await api<Paged<ChoiceItem> | ChoiceItem[]>("/api/company/clients?page_size=100");
+        setClients(Array.isArray(result) ? result : result.items);
+      } catch {
+        // The filter falls back to "All clients".
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (editor) {
+    return (
+      <PaymentEditor
+        kind="client"
+        payment={editor.payment}
+        subjects={clients}
+        defaultSubject={client}
+        back="Back to payments"
+        onCancel={() => setEditor(null)}
+        onSaved={(message) => {
+          setEditor(null);
+          onNotice(message);
+          void load();
+        }}
+      />
+    );
+  }
+
+  const currency = data?.items[0]?.currency;
+  return (
+    <>
+      <header className="management-toolbar">
+        <div>
+          <span>Payments received from clients</span>
+          <strong>
+            {data ? `${data.total} ${data.total === 1 ? "payment" : "payments"}` : "Payments"}
+            {data && data.total > 0 && ` · ${money(data.total_amount, currency)}`}
+          </strong>
+        </div>
+        <button type="button" onClick={() => setEditor({ payment: null })}>
+          <Plus /> Record payment
+        </button>
+      </header>
+      <div className="organization-tools production-tools" style={{ ["--production-filters" as string]: 1 }}>
+        <span aria-hidden="true" />
+        <LooplessSelect
+          value={client}
+          onValueChange={setClient}
+          ariaLabel="Filter payments by client"
+          options={[
+            { value: "", label: "All clients" },
+            ...clients.map((item) => ({ value: item.id, label: item.name })),
+          ]}
+        />
+      </div>
+      {error ? (
+        <StateBlock error={error} onRetry={() => void load()} />
+      ) : loading ? (
+        <TableSkeleton />
+      ) : !data || data.items.length === 0 ? (
+        <div className="organization-state">
+          <Wallet />
+          <h3>No payments recorded</h3>
+          <p>Record money as it arrives from clients to track what is still pending.</p>
+          <button type="button" onClick={() => setEditor({ payment: null })}>
+            <Plus /> Record payment
+          </button>
+        </div>
+      ) : (
+        <PaymentTable
+          kind="client"
+          items={data.items}
+          onEdit={(payment) => setEditor({ payment: payment as ClientPayment })}
+          onDelete={setRemoveItem}
+        />
+      )}
+      <DeletePaymentDialog
+        kind="client"
+        payment={removeItem}
+        onCancel={() => setRemoveItem(null)}
+        onError={setError}
+        onDeleted={() => {
+          setRemoveItem(null);
+          onNotice("Payment deleted.");
+          void load();
+        }}
+      />
+    </>
   );
 }
 
@@ -769,42 +1045,93 @@ function BudgetDetail({
 
 /* ------------------------------------------------------------------ salaries & payouts */
 
+type PeopleView =
+  | { mode: "list" }
+  | { mode: "person"; userId: string }
+  | { mode: "payment"; payment: AnyPayment | null; subject?: string; amount?: string }
+  | { mode: "salary"; record: SalaryRecord | null; employee?: string; amount?: string };
+
 function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice: (message: string) => void }) {
+  const isManager = role === "MANAGER";
+  const kind: PaymentKind = isManager ? "payout" : "salary";
   const [rows, setRows] = useState<TeamReportRow[]>([]);
+  const [history, setHistory] = useState<AnyPayment[]>([]);
+  const [people, setPeople] = useState<ChoiceItem[]>([]);
   const [currency, setCurrency] = useState("INR");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [openId, setOpenId] = useState<string | null>(null);
-  const isManager = role === "MANAGER";
+  const [view, setView] = useState<PeopleView>({ mode: "list" });
+  const [removeItem, setRemoveItem] = useState<AnyPayment | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const report = await api<Report<TeamReportRow>>("/api/company/finance/reports/team?period=all");
+      const [report, payments, options] = await Promise.all([
+        api<Report<TeamReportRow>>("/api/company/finance/reports/team?period=all"),
+        api<PaymentList<AnyPayment>>(`/api/company/finance/${PAYMENT_API[kind].collection}?page_size=100`),
+        api<AssigneeOption[]>("/api/company/tasks/assignee-options"),
+      ]);
       setRows(report.rows.filter((row) => row.person.role === role));
       setCurrency(report.currency);
+      setHistory(payments.items);
+      setPeople(
+        options.filter((person) => person.role === role).map((person) => ({ id: person.id, name: person.name })),
+      );
     } catch (requestError) {
       setError(errorText(requestError, "Unable to load the team."));
     } finally {
       setLoading(false);
     }
-  }, [role]);
+  }, [role, kind]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (openId) {
+  const backToList = (message?: string) => {
+    setView({ mode: "list" });
+    if (message) onNotice(message);
+    void load();
+  };
+  const backLabel = isManager ? "Back to manager payouts" : "Back to salaries";
+
+  if (view.mode === "person") {
     return (
       <PersonDetail
-        userId={openId}
-        onBack={() => {
-          setOpenId(null);
-          void load();
-        }}
+        userId={view.userId}
+        people={people}
+        backLabel={backLabel}
+        onBack={() => backToList()}
         onNotice={onNotice}
+      />
+    );
+  }
+  if (view.mode === "payment") {
+    return (
+      <PaymentEditor
+        kind={kind}
+        payment={view.payment}
+        subjects={people}
+        defaultSubject={view.subject}
+        defaultAmount={view.amount}
+        back={backLabel}
+        onCancel={() => setView({ mode: "list" })}
+        onSaved={backToList}
+      />
+    );
+  }
+  if (view.mode === "salary") {
+    return (
+      <SalaryEditor
+        record={view.record}
+        employees={people}
+        defaultEmployee={view.employee}
+        defaultAmount={view.amount}
+        back={backLabel}
+        onCancel={() => setView({ mode: "list" })}
+        onSaved={backToList}
       />
     );
   }
@@ -821,6 +1148,16 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
             {rows.length > 0 && ` · ${money(pending, currency)} pending`}
           </strong>
         </div>
+        <span className="production-toolbar-actions">
+          {!isManager && (
+            <button type="button" className="management-back" onClick={() => setView({ mode: "salary", record: null })}>
+              <Banknote /> Set salary
+            </button>
+          )}
+          <button type="button" onClick={() => setView({ mode: "payment", payment: null })}>
+            <Plus /> {isManager ? "Record payout" : "Record payment"}
+          </button>
+        </span>
       </header>
       {error ? (
         <StateBlock error={error} onRetry={() => void load()} />
@@ -833,48 +1170,108 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
           <p>Add team members from Employees first.</p>
         </div>
       ) : (
-        <div className="organization-table production-people" role="table">
-          <div className="organization-table-head">
-            <span>{isManager ? "Manager" : "Employee"}</span>
-            <span className="production-money">{isManager ? "Earned" : "Salary due"}</span>
-            <span className="production-money">Paid</span>
-            <span className="production-money">Pending</span>
-            <span className="production-money">Open tasks</span>
-            <span>Actions</span>
+        <>
+          <div className="organization-table production-people" role="table">
+            <div className="organization-table-head">
+              <span>{isManager ? "Manager" : "Employee"}</span>
+              <span className="production-money">{isManager ? "Earned" : "Salary due"}</span>
+              <span className="production-money">Paid</span>
+              <span className="production-money">Pending</span>
+              <span className="production-money">Open tasks</span>
+              <span>Actions</span>
+            </div>
+            {rows.map((row) => (
+              <article key={row.person.id}>
+                <div className="production-cell">
+                  <small>{isManager ? "Manager" : "Employee"}</small>
+                  <strong>{row.person.name}</strong>
+                </div>
+                <span className="production-money">{money(row.earnings, currency)}</span>
+                <span className="production-money">{money(row.paid, currency)}</span>
+                <span className={`production-money${Number(row.pending) > 0 ? " production-overdue" : ""}`}>
+                  {money(row.pending, currency)}
+                </span>
+                <span className="production-money">{row.open_tasks}</span>
+                <CrudActionButtons
+                  view={{
+                    label: `Open ${row.person.name}`,
+                    onClick: () => setView({ mode: "person", userId: row.person.id }),
+                  }}
+                  edit={
+                    isManager
+                      ? {
+                          label: `Record payout for ${row.person.name}`,
+                          onClick: () =>
+                            setView({
+                              mode: "payment",
+                              payment: null,
+                              subject: row.person.id,
+                              amount: Number(row.pending) > 0 ? row.pending : "",
+                            }),
+                        }
+                      : {
+                          label: `Set salary for ${row.person.name}`,
+                          onClick: () => setView({ mode: "salary", record: null, employee: row.person.id }),
+                        }
+                  }
+                />
+              </article>
+            ))}
           </div>
-          {rows.map((row) => (
-            <article key={row.person.id}>
-              <div className="production-cell">
-                <small>{isManager ? "Manager" : "Employee"}</small>
-                <strong>{row.person.name}</strong>
-              </div>
-              <span className="production-money">{money(row.earnings, currency)}</span>
-              <span className="production-money">{money(row.paid, currency)}</span>
-              <span className={`production-money${Number(row.pending) > 0 ? " production-overdue" : ""}`}>
-                {money(row.pending, currency)}
-              </span>
-              <span className="production-money">{row.open_tasks}</span>
-              <CrudActionButtons view={{ label: `Open ${row.person.name}`, onClick: () => setOpenId(row.person.id) }} />
-            </article>
-          ))}
-        </div>
+          <div className="production-section-title">
+            <span>{isManager ? "Payout history" : "Salary payment history"}</span>
+            <small>Edit or delete a payment recorded by mistake.</small>
+          </div>
+          {history.length === 0 ? (
+            <p className="production-muted">No {isManager ? "payouts" : "salary payments"} recorded yet.</p>
+          ) : (
+            <PaymentTable
+              kind={kind}
+              items={history}
+              onEdit={(payment) => setView({ mode: "payment", payment })}
+              onDelete={setRemoveItem}
+            />
+          )}
+        </>
       )}
+      <DeletePaymentDialog
+        kind={kind}
+        payment={removeItem}
+        onCancel={() => setRemoveItem(null)}
+        onError={setError}
+        onDeleted={() => {
+          setRemoveItem(null);
+          onNotice("Payment deleted.");
+          void load();
+        }}
+      />
     </>
   );
 }
 
+type PersonView =
+  | { mode: "detail" }
+  | { mode: "payment"; payment: AnyPayment | null; amount?: string }
+  | { mode: "salary"; record: SalaryRecord | null; amount?: string };
+
 function PersonDetail({
   userId,
+  people,
+  backLabel,
   onBack,
   onNotice,
 }: {
   userId: string;
+  people: ChoiceItem[];
+  backLabel: string;
   onBack: () => void;
   onNotice: (message: string) => void;
 }) {
   const [data, setData] = useState<PersonFinance | null>(null);
   const [error, setError] = useState("");
-  const [removeId, setRemoveId] = useState<{ kind: "salary" | "payout"; id: string } | null>(null);
+  const [view, setView] = useState<PersonView>({ mode: "detail" });
+  const [removePayment, setRemovePayment] = useState<AnyPayment | null>(null);
+  const [removeRecord, setRemoveRecord] = useState<SalaryRecord | null>(null);
   const [removing, setRemoving] = useState(false);
 
   const load = useCallback(async () => {
@@ -891,30 +1288,89 @@ function PersonDetail({
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  async function remove() {
-    if (!removeId) return;
+  const isManager = data?.person.role === "MANAGER";
+  const kind: PaymentKind = isManager ? "payout" : "salary";
+  const backToDetail = (message: string) => {
+    setView({ mode: "detail" });
+    onNotice(message);
+    void load();
+  };
+
+  async function deleteRecord() {
+    if (!removeRecord) return;
     setRemoving(true);
     try {
-      await api(`/api/company/finance/${removeId.kind}/${removeId.id}`, { method: "DELETE" });
-      setRemoveId(null);
-      onNotice("Payment deleted.");
-      await load();
+      setData(await api<PersonFinance>(`/api/company/finance/salary-records/${removeRecord.id}`, { method: "DELETE" }));
+      onNotice("Salary deleted. The previous salary now continues until the next one.");
+      setRemoveRecord(null);
     } catch (requestError) {
-      setRemoveId(null);
-      setError(errorText(requestError, "Unable to delete the payment."));
+      setError(errorText(requestError, "Unable to delete the salary."));
+      setRemoveRecord(null);
     } finally {
       setRemoving(false);
     }
   }
 
-  const isManager = data?.person.role === "MANAGER";
+  if (data && view.mode === "payment") {
+    return (
+      <PaymentEditor
+        kind={kind}
+        payment={view.payment}
+        subjects={people.length ? people : [{ id: data.person.id, name: data.person.name }]}
+        defaultSubject={data.person.id}
+        defaultAmount={view.amount}
+        back={`Back to ${data.person.name}`}
+        onCancel={() => setView({ mode: "detail" })}
+        onSaved={backToDetail}
+      />
+    );
+  }
+  if (data && view.mode === "salary") {
+    return (
+      <SalaryEditor
+        record={view.record}
+        employees={[{ id: data.person.id, name: data.person.name }]}
+        defaultEmployee={data.person.id}
+        defaultAmount={view.amount}
+        back={`Back to ${data.person.name}`}
+        onCancel={() => setView({ mode: "detail" })}
+        onSaved={backToDetail}
+      />
+    );
+  }
+
   return (
     <>
       <header className="management-toolbar">
         <button type="button" className="management-back" onClick={onBack}>
-          <ArrowLeft /> {isManager ? "Back to manager payouts" : "Back to salaries"}
+          <ArrowLeft /> {backLabel}
         </button>
-        <span>{data?.person.name ?? ""}</span>
+        {data && (
+          <span className="production-toolbar-actions">
+            {!isManager && (
+              <button
+                type="button"
+                className="management-back"
+                onClick={() =>
+                  setView({ mode: "salary", record: null, amount: data.employee?.current_monthly_salary ?? "" })
+                }
+              >
+                <Banknote /> Set salary
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const pending = isManager
+                  ? data.manager?.pending
+                  : data.employee?.months.find((line) => line.month === firstOfMonth())?.pending;
+                setView({ mode: "payment", payment: null, amount: pending && Number(pending) > 0 ? pending : "" });
+              }}
+            >
+              <Plus /> {isManager ? "Record payout" : "Record payment"}
+            </button>
+          </span>
+        )}
       </header>
       {error ? (
         <StateBlock error={error} onRetry={() => void load()} />
@@ -923,80 +1379,96 @@ function PersonDetail({
       ) : data.manager ? (
         <ManagerFinance
           data={data}
-          onReload={load}
-          onNotice={onNotice}
-          onRemove={(id) => setRemoveId({ kind: "payout", id })}
+          onEdit={(payment) => setView({ mode: "payment", payment })}
+          onRemove={setRemovePayment}
         />
       ) : data.employee ? (
         <EmployeeFinance
           data={data}
-          onReload={load}
-          onNotice={onNotice}
-          onRemove={(id) => setRemoveId({ kind: "salary", id })}
+          onEdit={(payment) => setView({ mode: "payment", payment })}
+          onRemove={setRemovePayment}
+          onEditRecord={(record) => setView({ mode: "salary", record })}
+          onRemoveRecord={setRemoveRecord}
         />
       ) : null}
+      <DeletePaymentDialog
+        kind={kind}
+        payment={removePayment}
+        onCancel={() => setRemovePayment(null)}
+        onError={setError}
+        onDeleted={() => {
+          setRemovePayment(null);
+          onNotice("Payment deleted.");
+          void load();
+        }}
+      />
       <ConfirmationDialog
-        open={Boolean(removeId)}
-        title="Delete this payment?"
-        description="Use this only for a payment recorded by mistake. The pending amount will go up again."
-        confirmLabel="Delete payment"
+        open={Boolean(removeRecord)}
+        title="Delete this salary?"
+        description={`${removeRecord ? money(removeRecord.monthly_amount, removeRecord.currency) : ""} a month from ${
+          removeRecord ? formatDate(removeRecord.effective_from) : ""
+        } will be removed. The salary before it will continue until the next change.`}
+        confirmLabel="Delete salary"
         tone="danger"
         loading={removing}
-        onCancel={() => setRemoveId(null)}
-        onConfirm={() => void remove()}
+        onCancel={() => setRemoveRecord(null)}
+        onConfirm={() => void deleteRecord()}
       />
     </>
   );
 }
 
+function PaymentList({
+  items,
+  currency,
+  onEdit,
+  onRemove,
+  empty,
+}: {
+  items: AnyPayment[];
+  currency: string;
+  onEdit: (payment: AnyPayment) => void;
+  onRemove: (payment: AnyPayment) => void;
+  empty: string;
+}) {
+  if (items.length === 0) return <p className="production-muted">{empty}</p>;
+  return (
+    <ul className="production-list">
+      {items.map((item) => (
+        <li key={item.id}>
+          <div>
+            <strong>{"period_month" in item ? formatMonth(item.period_month) : formatDate(paymentDate(item))}</strong>
+            <small>
+              {"period_month" in item ? `Paid ${formatDate(item.paid_on)} · ` : ""}
+              {methodLabel(item.method)}
+              {item.reference ? ` · ${item.reference}` : ""}
+              {item.note ? ` · ${item.note}` : ""}
+            </small>
+          </div>
+          <span className="production-inline-actions">
+            <b>{money(item.amount, currency)}</b>
+            <CrudActionButtons
+              edit={{ label: "Edit payment", onClick: () => onEdit(item) }}
+              remove={{ label: "Delete payment", onClick: () => onRemove(item) }}
+            />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ManagerFinance({
   data,
-  onReload,
-  onNotice,
+  onEdit,
   onRemove,
 }: {
   data: PersonFinance;
-  onReload: () => Promise<void>;
-  onNotice: (message: string) => void;
-  onRemove: (id: string) => void;
+  onEdit: (payment: AnyPayment) => void;
+  onRemove: (payment: AnyPayment) => void;
 }) {
   const earnings = data.manager!;
   const currency = earnings.currency;
-  const [values, setValues] = useState(() => ({
-    ...emptyPayment(),
-    amount: Number(earnings.pending) > 0 ? earnings.pending : "",
-  }));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    if (!values.amount || Number(values.amount) <= 0) return setError("Enter an amount greater than zero.");
-    if (!values.date) return setError("Enter the date it was paid.");
-    setSaving(true);
-    setError("");
-    try {
-      await api("/api/company/finance/manager-payouts", {
-        method: "POST",
-        json: {
-          manager_user_id: data.person.id,
-          amount: values.amount,
-          paid_on: values.date,
-          method: values.method,
-          reference: values.reference.trim(),
-          note: values.note.trim(),
-        },
-      });
-      onNotice(`${money(values.amount, currency)} paid to ${data.person.name} recorded.`);
-      setValues({ ...emptyPayment(), amount: "" });
-      await onReload();
-    } catch (requestError) {
-      setError(errorText(requestError, "Unable to record the payout."));
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <>
       <div className="services-pricing-summary-grid production-summary">
@@ -1054,49 +1526,18 @@ function ManagerFinance({
               )}
             </div>
           </Panel>
-          <Panel icon={<History />} eyebrow="PAYOUTS" title="Paid to this manager">
-            <div className="production-panel-body">
-              {earnings.payouts.length === 0 ? (
-                <p className="production-muted">No payouts recorded yet.</p>
-              ) : (
-                <ul className="production-list">
-                  {earnings.payouts.map((payout) => (
-                    <li key={payout.id}>
-                      <div>
-                        <strong>{formatDate(payout.paid_on)}</strong>
-                        <small>
-                          {methodLabel(payout.method)}
-                          {payout.reference ? ` · ${payout.reference}` : ""}
-                          {payout.note ? ` · ${payout.note}` : ""}
-                        </small>
-                      </div>
-                      <span className="production-inline-actions">
-                        <b>{money(payout.amount, payout.currency)}</b>
-                        <CrudActionButtons remove={{ label: "Delete payout", onClick: () => onRemove(payout.id) }} />
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </Panel>
         </div>
         <div>
-          <Panel
-            icon={<HandCoins />}
-            eyebrow="RECORD PAYOUT"
-            title={`Pay ${data.person.name}`}
-            description="The amount is filled with what is pending. Change it for part payments."
-          >
-            <form className="management-form" noValidate onSubmit={save}>
-              {error && <div className="management-form-message">{error}</div>}
-              <PaymentFields
-                values={values}
-                dateLabel="Paid on"
-                onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))}
+          <Panel icon={<History />} eyebrow="PAYOUTS" title="Paid to this manager">
+            <div className="production-panel-body">
+              <PaymentList
+                items={earnings.payouts}
+                currency={currency}
+                onEdit={onEdit}
+                onRemove={onRemove}
+                empty="No payouts recorded yet."
               />
-              <FormFooter saving={saving} label="Record payout" />
-            </form>
+            </div>
           </Panel>
         </div>
       </div>
@@ -1106,91 +1547,20 @@ function ManagerFinance({
 
 function EmployeeFinance({
   data,
-  onReload,
-  onNotice,
+  onEdit,
   onRemove,
+  onEditRecord,
+  onRemoveRecord,
 }: {
   data: PersonFinance;
-  onReload: () => Promise<void>;
-  onNotice: (message: string) => void;
-  onRemove: (id: string) => void;
+  onEdit: (payment: AnyPayment) => void;
+  onRemove: (payment: AnyPayment) => void;
+  onEditRecord: (record: SalaryRecord) => void;
+  onRemoveRecord: (record: SalaryRecord) => void;
 }) {
   const salary = data.employee!;
   const currency = salary.currency;
-  const currentMonth = firstOfMonth();
-  const monthLine = useMemo(
-    () => salary.months.find((line) => line.month === currentMonth),
-    [salary.months, currentMonth],
-  );
-  const [salaryValues, setSalaryValues] = useState({
-    amount: salary.current_monthly_salary ?? "",
-    from: currentMonth,
-    note: "",
-  });
-  const [payment, setPayment] = useState(() => ({
-    ...emptyPayment(),
-    month: currentMonth.slice(0, 7),
-    amount: monthLine && Number(monthLine.pending) > 0 ? monthLine.pending : "",
-  }));
-  const [savingSalary, setSavingSalary] = useState(false);
-  const [savingPayment, setSavingPayment] = useState(false);
-  const [salaryError, setSalaryError] = useState("");
-  const [paymentError, setPaymentError] = useState("");
-
-  async function saveSalary(event: FormEvent) {
-    event.preventDefault();
-    if (salaryValues.amount === "" || Number(salaryValues.amount) < 0)
-      return setSalaryError("Enter the monthly salary.");
-    if (!salaryValues.from) return setSalaryError("Enter the date it starts from.");
-    setSavingSalary(true);
-    setSalaryError("");
-    try {
-      await api(`/api/company/finance/people/${data.person.id}/salary`, {
-        method: "PUT",
-        json: {
-          monthly_amount: salaryValues.amount,
-          effective_from: salaryValues.from,
-          note: salaryValues.note.trim(),
-        },
-      });
-      onNotice(`Salary for ${data.person.name} set to ${money(salaryValues.amount, currency)} a month.`);
-      await onReload();
-    } catch (requestError) {
-      setSalaryError(errorText(requestError, "Unable to save the salary."));
-    } finally {
-      setSavingSalary(false);
-    }
-  }
-
-  async function savePayment(event: FormEvent) {
-    event.preventDefault();
-    if (!payment.month) return setPaymentError("Choose the month this payment is for.");
-    if (!payment.amount || Number(payment.amount) <= 0) return setPaymentError("Enter an amount greater than zero.");
-    if (!payment.date) return setPaymentError("Enter the date it was paid.");
-    setSavingPayment(true);
-    setPaymentError("");
-    try {
-      await api("/api/company/finance/salary-payments", {
-        method: "POST",
-        json: {
-          user_id: data.person.id,
-          period_month: `${payment.month}-01`,
-          amount: payment.amount,
-          paid_on: payment.date,
-          method: payment.method,
-          reference: payment.reference.trim(),
-          note: payment.note.trim(),
-        },
-      });
-      onNotice(`${money(payment.amount, currency)} salary paid to ${data.person.name} recorded.`);
-      await onReload();
-    } catch (requestError) {
-      setPaymentError(errorText(requestError, "Unable to record the salary payment."));
-    } finally {
-      setSavingPayment(false);
-    }
-  }
-
+  const months = useMemo(() => salary.months, [salary.months]);
   return (
     <>
       <div className="services-pricing-summary-grid production-summary">
@@ -1221,11 +1591,11 @@ function EmployeeFinance({
         <div>
           <Panel icon={<CalendarDays />} eyebrow="MONTHS" title="Salary by month" description="Newest first.">
             <div className="production-panel-body">
-              {salary.months.length === 0 ? (
+              {months.length === 0 ? (
                 <p className="production-muted">Set a salary to start tracking months.</p>
               ) : (
                 <ul className="production-list">
-                  {salary.months.map((line) => (
+                  {months.map((line) => (
                     <li key={line.month}>
                       <div>
                         <strong>{formatMonth(line.month)}</strong>
@@ -1244,99 +1614,28 @@ function EmployeeFinance({
           </Panel>
           <Panel icon={<History />} eyebrow="PAYMENTS" title="Salary payments">
             <div className="production-panel-body">
-              {salary.payments.length === 0 ? (
-                <p className="production-muted">No salary payments recorded yet.</p>
-              ) : (
-                <ul className="production-list">
-                  {salary.payments.map((item) => (
-                    <li key={item.id}>
-                      <div>
-                        <strong>{formatMonth(item.period_month)}</strong>
-                        <small>
-                          Paid {formatDate(item.paid_on)} · {methodLabel(item.method)}
-                          {item.reference ? ` · ${item.reference}` : ""}
-                        </small>
-                      </div>
-                      <span className="production-inline-actions">
-                        <b>{money(item.amount, item.currency)}</b>
-                        <CrudActionButtons
-                          remove={{ label: "Delete salary payment", onClick: () => onRemove(item.id) }}
-                        />
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <PaymentList
+                items={salary.payments}
+                currency={currency}
+                onEdit={onEdit}
+                onRemove={onRemove}
+                empty="No salary payments recorded yet."
+              />
             </div>
           </Panel>
         </div>
         <div>
-          <Panel icon={<Banknote />} eyebrow="RECORD PAYMENT" title={`Pay ${data.person.name}`}>
-            <form className="management-form" noValidate onSubmit={savePayment}>
-              {paymentError && <div className="management-form-message">{paymentError}</div>}
-              <Field label="For month" wide>
-                <span className="management-input">
-                  <CalendarDays aria-hidden="true" />
-                  <input
-                    type="month"
-                    value={payment.month}
-                    onChange={(event) => setPayment({ ...payment, month: event.target.value })}
-                  />
-                </span>
-              </Field>
-              <PaymentFields
-                values={payment}
-                dateLabel="Paid on"
-                onChange={(key, value) => setPayment((current) => ({ ...current, [key]: value }))}
-              />
-              <FormFooter saving={savingPayment} label="Record salary payment" />
-            </form>
-          </Panel>
           <Panel
             icon={<Wallet />}
-            eyebrow="SALARY"
-            title="Set monthly salary"
-            description="A new salary starts from the date you choose. Earlier months keep their old salary."
+            eyebrow="SALARY HISTORY"
+            title="Salary rates"
+            description="Each rate applies from its start date until the next one."
           >
-            <form className="management-form" noValidate onSubmit={saveSalary}>
-              {salaryError && <div className="management-form-message">{salaryError}</div>}
-              <Field label={`Monthly salary (${currency})`} wide>
-                <span className="management-input">
-                  <Wallet aria-hidden="true" />
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={salaryValues.amount}
-                    onChange={(event) => setSalaryValues({ ...salaryValues, amount: event.target.value })}
-                    placeholder="0.00"
-                  />
-                </span>
-              </Field>
-              <Field label="Starts from" wide>
-                <span className="management-input">
-                  <CalendarDays aria-hidden="true" />
-                  <input
-                    type="date"
-                    value={salaryValues.from}
-                    onChange={(event) => setSalaryValues({ ...salaryValues, from: event.target.value })}
-                  />
-                </span>
-              </Field>
-              <Field label="Note" wide>
-                <span className="management-input">
-                  <FileText aria-hidden="true" />
-                  <input
-                    value={salaryValues.note}
-                    onChange={(event) => setSalaryValues({ ...salaryValues, note: event.target.value })}
-                    placeholder="For example: yearly raise"
-                    maxLength={500}
-                  />
-                </span>
-              </Field>
-              <FormFooter saving={savingSalary} label="Save salary" />
-              {data.salary_history.length > 0 && (
-                <ul className="production-list wide" style={{ gridColumn: "1 / -1" }}>
+            <div className="production-panel-body">
+              {data.salary_history.length === 0 ? (
+                <p className="production-muted">No salary set yet. Use “Set salary” above.</p>
+              ) : (
+                <ul className="production-list">
                   {data.salary_history.map((record) => (
                     <li key={record.id}>
                       <div>
@@ -1347,11 +1646,15 @@ function EmployeeFinance({
                           {record.note ? ` · ${record.note}` : ""}
                         </small>
                       </div>
+                      <CrudActionButtons
+                        edit={{ label: "Edit salary", onClick: () => onEditRecord(record) }}
+                        remove={{ label: "Delete salary", onClick: () => onRemoveRecord(record) }}
+                      />
                     </li>
                   ))}
                 </ul>
               )}
-            </form>
+            </div>
           </Panel>
         </div>
       </div>

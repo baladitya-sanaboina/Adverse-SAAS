@@ -498,6 +498,58 @@ class PaymentRequestBase(_Strict):
     _strip_text = field_validator("reference", "note")(_strip_required)
 
 
+class PaymentUpdateBase(_Strict):
+    """Edit a recorded payment: send only the fields that change."""
+
+    amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
+    method: PaymentMethod | None = None
+    reference: str | None = Field(default=None, max_length=200)
+    note: str | None = Field(default=None, max_length=500)
+
+    _strip_text = field_validator("reference", "note")(_strip)
+
+    @model_validator(mode="after")
+    def require_change(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("Provide at least one field to change.")
+        for name in self.model_fields_set:
+            if name not in {"reference", "note"} and getattr(self, name) is None:
+                raise ValueError(f"{name.replace('_', ' ').capitalize()} cannot be empty.")
+        return self
+
+
+class ClientPaymentUpdate(PaymentUpdateBase):
+    client_id: UUID | None = None
+    received_on: date | None = None
+
+
+class SalaryPaymentUpdate(PaymentUpdateBase):
+    period_month: date | None = None
+    paid_on: date | None = None
+
+    @field_validator("period_month")
+    @classmethod
+    def first_of_month(cls, value: date | None) -> date | None:
+        return value.replace(day=1) if value else None
+
+
+class ManagerPayoutUpdate(PaymentUpdateBase):
+    paid_on: date | None = None
+
+
+class SalaryRecordUpdate(_Strict):
+    monthly_amount: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    note: str | None = Field(default=None, max_length=500)
+
+    _strip_text = field_validator("note")(_strip)
+
+    @model_validator(mode="after")
+    def require_change(self) -> Self:
+        if self.monthly_amount is None and self.note is None:
+            raise ValueError("Provide a new amount or note.")
+        return self
+
+
 class ClientPaymentRequest(PaymentRequestBase):
     client_id: UUID
     received_on: date

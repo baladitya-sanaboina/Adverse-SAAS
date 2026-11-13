@@ -125,7 +125,7 @@
 }
 
 .organization-table.production-client-payments :is(.organization-table-head, article) {
-  grid-template-columns: 104px minmax(150px, 1.3fr) 110px minmax(110px, 1fr) 120px 56px;
+  grid-template-columns: 104px minmax(150px, 1.3fr) 110px minmax(110px, 1fr) 120px 96px;
 }
 
 .organization-table.production-budgets :is(.organization-table-head, article) {
@@ -133,7 +133,7 @@
 }
 
 .organization-table.production-people :is(.organization-table-head, article) {
-  grid-template-columns: minmax(170px, 1.4fr) 120px 120px 120px 120px 56px;
+  grid-template-columns: minmax(170px, 1.4fr) 120px 120px 120px 120px 96px;
 }
 
 .organization-table.production-report-clients :is(.organization-table-head, article) {
@@ -1399,5 +1399,19 @@
 @media (max-width: 720px) {
   .dash-content.production-dashboard {
     padding-top: 84px;
+  }
+}
+
+/* Two actions in a management toolbar (e.g. "Set salary" + "Record payment"). */
+.management-toolbar .production-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 680px) {
+  .management-toolbar .production-toolbar-actions {
+    flex-direction: column;
   }
 }

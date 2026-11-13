@@ -32,6 +32,7 @@ from app.schemas.production import (
     ClientPaymentListResponse,
     ClientPaymentRequest,
     ClientPaymentResponse,
+    ClientPaymentUpdate,
     ClientReportResponse,
     ClientReportRow,
     ClientServiceCount,
@@ -48,6 +49,7 @@ from app.schemas.production import (
     ManagerPayoutListResponse,
     ManagerPayoutRequest,
     ManagerPayoutResponse,
+    ManagerPayoutUpdate,
     NamedRef,
     PaymentListFilters,
     PeriodQuery,
@@ -58,7 +60,9 @@ from app.schemas.production import (
     SalaryPaymentListResponse,
     SalaryPaymentRequest,
     SalaryPaymentResponse,
+    SalaryPaymentUpdate,
     SalaryRecordResponse,
+    SalaryRecordUpdate,
     SalaryRequest,
     ServiceReportResponse,
     ServiceReportRow,
@@ -476,7 +480,74 @@ class FinanceService:
         if not self.repository.delete_payment(table, company_id, payment_id, context.user_id):
             raise AuthenticationError(404, "PAYMENT_NOT_FOUND", "Payment was not found.")
 
+    def update_client_payment(
+        self, context: AuthContext, payment_id: UUID, request: ClientPaymentUpdate
+    ) -> ClientPaymentResponse:
+        company_id = self._admin(context, "FINANCE", "EDIT")
+        if request.client_id is not None:
+            self._require_client(company_id, request.client_id)
+        self._update_payment("client_payments", company_id, payment_id, context, request)
+        row = self.repository.get_client_payment(company_id, payment_id)
+        assert row is not None
+        return self._client_payment(row)
+
+    def update_salary_payment(
+        self, context: AuthContext, payment_id: UUID, request: SalaryPaymentUpdate
+    ) -> SalaryPaymentResponse:
+        company_id = self._admin(context, "FINANCE", "EDIT")
+        self._update_payment("salary_payments", company_id, payment_id, context, request)
+        row = self.repository.get_salary_payment(company_id, payment_id)
+        assert row is not None
+        return self._salary_payment(row)
+
+    def update_payout(
+        self, context: AuthContext, payout_id: UUID, request: ManagerPayoutUpdate
+    ) -> ManagerPayoutResponse:
+        company_id = self._admin(context, "FINANCE", "EDIT")
+        self._update_payment("manager_payouts", company_id, payout_id, context, request)
+        row = self.repository.get_payout(company_id, payout_id)
+        assert row is not None
+        return self._payout(row)
+
+    def _update_payment(
+        self,
+        table: str,
+        company_id: UUID,
+        payment_id: UUID,
+        context: AuthContext,
+        request: ClientPaymentUpdate | SalaryPaymentUpdate | ManagerPayoutUpdate,
+    ) -> None:
+        updates = request.model_dump(exclude_unset=True)
+        if "amount" in updates:
+            updates["amount"] = money(updates["amount"])
+        if not self.repository.update_payment(
+            table, company_id, payment_id, context.user_id, updates
+        ):
+            raise AuthenticationError(404, "PAYMENT_NOT_FOUND", "Payment was not found.")
+
     # -- admin: salaries and payouts -------------------------------------------------------
+
+    def update_salary_record(
+        self, context: AuthContext, record_id: UUID, request: SalaryRecordUpdate
+    ) -> PersonFinanceResponse:
+        company_id = self._admin(context, "FINANCE", "EDIT")
+        user_id = self.repository.update_salary_record(
+            company_id,
+            record_id,
+            context.user_id,
+            money(request.monthly_amount) if request.monthly_amount is not None else None,
+            request.note,
+        )
+        if user_id is None:
+            raise AuthenticationError(404, "SALARY_NOT_FOUND", "Salary record was not found.")
+        return self.person_finance(context, user_id)
+
+    def delete_salary_record(self, context: AuthContext, record_id: UUID) -> PersonFinanceResponse:
+        company_id = self._admin(context, "FINANCE", "DELETE")
+        user_id = self.repository.delete_salary_record(company_id, record_id, context.user_id)
+        if user_id is None:
+            raise AuthenticationError(404, "SALARY_NOT_FOUND", "Salary record was not found.")
+        return self.person_finance(context, user_id)
 
     def set_salary(
         self, context: AuthContext, user_id: UUID, request: SalaryRequest

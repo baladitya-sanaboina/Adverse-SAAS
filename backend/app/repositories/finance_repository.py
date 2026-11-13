@@ -363,7 +363,117 @@ class FinanceRepository:
             )
             return True
 
+    _EDITABLE_PAYMENT_COLUMNS = {
+        "client_payments": {"client_id", "amount", "received_on", "method", "reference", "note"},
+        "salary_payments": {"period_month", "amount", "paid_on", "method", "reference", "note"},
+        "manager_payouts": {"amount", "paid_on", "method", "reference", "note"},
+    }
+
+    def update_payment(
+        self,
+        table: str,
+        company_id: UUID,
+        payment_id: UUID,
+        actor_id: UUID,
+        updates: dict[str, Any],
+    ) -> bool:
+        """Edit a recorded payment. Only whitelisted columns of the given table can change."""
+        allowed = self._EDITABLE_PAYMENT_COLUMNS.get(table)
+        if allowed is None:
+            raise ValueError("Unknown payment table.")
+        unknown = set(updates) - allowed
+        if unknown:
+            raise ValueError(f"Columns not allowed: {sorted(unknown)}")
+        if not updates:
+            return True
+        assignments = ", ".join(
+            f'{column} = %({column})s{"::\"PaymentMethod\"" if column == "method" else ""}'
+            for column in updates
+        )
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                f"UPDATE {table} SET {assignments}, updated_at = NOW() "
+                "WHERE company_id = %(company)s AND id = %(id)s RETURNING id",
+                {**updates, "company": company_id, "id": payment_id},
+            )
+            if cursor.fetchone() is None:
+                return False
+            self._audit(
+                cursor,
+                actor_id,
+                company_id,
+                f"{table.upper()}_UPDATED",
+                {
+                    "payment_id": str(payment_id),
+                    **{key: str(value) for key, value in updates.items()},
+                },
+            )
+            return True
+
     # -- salaries ------------------------------------------------------------------------
+
+    def update_salary_record(
+        self,
+        company_id: UUID,
+        record_id: UUID,
+        actor_id: UUID,
+        monthly_amount: Decimal | None,
+        note: str | None,
+    ) -> UUID | None:
+        """Correct a salary rate's amount or note. Returns the employee's user id."""
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE employee_salaries SET monthly_amount = COALESCE(%s, monthly_amount), "
+                "note = COALESCE(%s, note) WHERE company_id = %s AND id = %s RETURNING user_id",
+                (monthly_amount, note, company_id, record_id),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            self._audit(
+                cursor,
+                actor_id,
+                company_id,
+                "EMPLOYEE_SALARY_UPDATED",
+                {"record_id": str(record_id), "monthly_amount": str(monthly_amount)},
+            )
+            return UUID(str(row[0]))
+
+    def delete_salary_record(
+        self, company_id: UUID, record_id: UUID, actor_id: UUID
+    ) -> UUID | None:
+        """Remove a salary rate and close the gap: the previous rate runs until the next one."""
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT user_id FROM employee_salaries WHERE company_id = %s AND id = %s",
+                (company_id, record_id),
+            )
+            owner = cursor.fetchone()
+            if owner is None:
+                return None
+            user_id = UUID(str(owner[0]))
+            cursor.execute(
+                "SELECT id, effective_from, effective_to FROM employee_salaries "
+                "WHERE company_id = %s AND user_id = %s ORDER BY effective_from FOR UPDATE",
+                (company_id, user_id),
+            )
+            rows = cursor.fetchall()
+            index = next(i for i, row in enumerate(rows) if row[0] == record_id)
+            deleted = rows[index]
+            cursor.execute("DELETE FROM employee_salaries WHERE id = %s", (record_id,))
+            if index > 0 and rows[index - 1][2] == deleted[1]:
+                cursor.execute(
+                    "UPDATE employee_salaries SET effective_to = %s WHERE id = %s",
+                    (deleted[2], rows[index - 1][0]),
+                )
+            self._audit(
+                cursor,
+                actor_id,
+                company_id,
+                "EMPLOYEE_SALARY_DELETED",
+                {"record_id": str(record_id), "user_id": str(user_id)},
+            )
+            return user_id
 
     def list_salary_records(self, company_id: UUID, user_id: UUID | None) -> list[SalaryRecordRow]:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
