@@ -311,6 +311,23 @@ class ClientLedgerTest(unittest.TestCase):
         )
         self.assertEqual(second.lines[0].label, "Carried from sheet 1")
 
+    def test_work_without_payment_opens_a_sheet_when_asked(self) -> None:
+        work = [(date(2026, 11, 13), Decimal("500"), "Reel")]
+        self.assertEqual(budget_cycles([], work), [])
+        (only,) = budget_cycles([], work, open_without_payment=True)
+        self.assertEqual(
+            (only.start, only.amount, only.remaining),
+            (date(2026, 11, 13), Decimal("0.00"), Decimal("-500.00")),
+        )
+        self.assertEqual(only.ran_out_on, date(2026, 11, 13))
+        self.assertEqual([line.kind for line in only.lines], ["WORK"])
+
+    def test_payment_line_uses_its_label(self) -> None:
+        (only,) = budget_cycles(
+            [(date(2026, 11, 14), "TOP_UP", Decimal("10000"), "Payment received · UPI")], []
+        )
+        self.assertEqual(only.lines[0].label, "Payment received · UPI")
+
     def test_no_budget_no_cycles(self) -> None:
         self.assertEqual(budget_cycles([], [(date(2026, 1, 1), Decimal("5"))]), [])
 

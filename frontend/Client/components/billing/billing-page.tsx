@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCheck, Download, ReceiptText, Search, Wallet } from "lucide-react";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { DashLoading, Panel, PanelHead } from "@/components/dashboard/role-dashboard-ui";
-import { PaymentSheets, type SheetLine } from "@/lib/payment-sheets";
+import { PaymentSheets, type Sheet, type SheetLine } from "@/lib/payment-sheets";
 import { AmountEye, MoneyPrivacy, usePrivateMoney } from "@/lib/privacy";
 import "@/styles/client-portal.css";
 import "@/styles/billing.css";
@@ -36,6 +36,7 @@ type Billing = {
     ran_out_on: string | null;
     lines: SheetLine[];
   }[];
+  sheets: Sheet[];
   deliveries: { delivered_on: string; title: string; service_name: string; amount: string; budget_left: string }[];
   days: { day: string; items: number; amount: string; budget_left: string }[];
   payments: { amount: string; received_on: string; method: PaymentMethod; reference: string }[];
@@ -243,27 +244,16 @@ function BillingContent() {
           <Panel>
             <PanelHead
               eyebrow="PAYMENT SHEETS"
-              title={data.cycles.length ? "Each top-up is a new sheet" : "No top-ups yet"}
+              title={data.sheets.length ? "Each payment opens a new sheet" : "No payments yet"}
             />
             <div className="production-dash-panel-body">
               <PaymentSheets
-                sheets={data.cycles.map((item) => ({
-                  index: item.index,
-                  start: item.start,
-                  end: item.end,
-                  paid: item.amount,
-                  carried_in: item.carried_in,
-                  used: item.used,
-                  left: item.remaining,
-                  items: item.items,
-                  ran_out_on: item.ran_out_on,
-                  lines: item.lines,
-                }))}
+                sheets={data.sheets}
                 currency={currency}
                 money={money}
                 date={(value) => day(value, false)}
                 itemWord="video"
-                empty="Your agency will add your budget here. Each top-up opens a new sheet."
+                empty="Each payment you make to your agency opens a new sheet here."
               />
             </div>
           </Panel>

@@ -45,6 +45,7 @@ from app.services.invoice_pdf import amount_text, render_invoice_pdf
 from app.services.notification_service import notification_service
 from app.services.permission_service import validate_user_action_access
 from app.services.production_rules import (
+    PAYMENT_METHOD_TEXT,
     budget_cycles,
     budget_position,
     daily_summary,
@@ -534,33 +535,73 @@ class InvoiceService:
             sheets=sheets,
         )
 
+    def _client_sheets(self, company_id: UUID, client_id: UUID) -> list[PaymentSheet]:
+        """Client payment sheets: each payment received opens a sheet (owner decision
+        2026-11-14); delivered videos are taken from it. Work with no payment yet still shows."""
+        tz, _, _ = self._zone(company_id)
+        payments = self.finance.list_client_payments_for_client(company_id, client_id)
+        rows = list(reversed(self.finance.client_deliveries(company_id, client_id, tz)))
+        cycles = budget_cycles(
+            [
+                (
+                    payment.received_on,
+                    "TOP_UP",
+                    Decimal(payment.amount),
+                    f"Payment received · {PAYMENT_METHOD_TEXT.get(payment.method, payment.method)}"
+                    + (f" · {payment.reference}" if payment.reference else ""),
+                )
+                for payment in payments
+            ],
+            [
+                (row.delivered_on, Decimal(row.amount), f"{row.title} · {row.service_name}")
+                for row in rows
+            ],
+            open_without_payment=True,
+        )
+        return [
+            PaymentSheet(
+                index=cycle.index,
+                start=cycle.start,
+                end=cycle.end,
+                paid=cycle.amount,
+                carried_in=cycle.carried_in,
+                used=cycle.used,
+                left=cycle.remaining,
+                items=cycle.items,
+                ran_out_on=cycle.ran_out_on,
+                lines=[
+                    SheetLine(
+                        day=line.day,
+                        kind=line.kind,
+                        label=line.label,
+                        amount=line.amount,
+                        balance=line.balance,
+                    )
+                    for line in cycle.lines
+                ],
+            )
+            for cycle in cycles
+        ]
+
+    def client_sheets(self, context: AuthContext, client_id: UUID) -> list[PaymentSheet]:
+        company_id = self._admin(context, "VIEW")
+        if self.tasks.get_client(company_id, client_id) is None:
+            raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client not found.")
+        return self._client_sheets(company_id, client_id)
+
     def sheets_overview(self, context: AuthContext) -> SheetsOverviewResponse:
         """Every manager's and client's payment sheets, most urgent first (Admin only)."""
         company_id = self._admin(context, "VIEW")
         tz, _, _ = self._zone(company_id)
         clients: list[SheetOwner] = []
         for row in self.finance.client_balances(company_id, tz, None, None):
-            cycles, _ = self._cycles(company_id, row.client_id)
-            if cycles:
+            sheets = self._client_sheets(company_id, row.client_id)
+            if sheets:
                 clients.append(
                     self._owner(
                         "CLIENT",
                         NamedRef(id=row.client_id, name=row.client_name, code=row.client_code),
-                        [
-                            PaymentSheet(
-                                index=cycle.index,
-                                start=cycle.start,
-                                end=cycle.end,
-                                paid=cycle.amount,
-                                carried_in=cycle.carried_in,
-                                used=cycle.used,
-                                left=cycle.remaining,
-                                items=cycle.items,
-                                ran_out_on=cycle.ran_out_on,
-                                lines=cycle.lines,
-                            )
-                            for cycle in cycles
-                        ],
+                        sheets,
                     )
                 )
         managers: list[SheetOwner] = []
@@ -643,6 +684,7 @@ class InvoiceService:
                 )
             ),
             cycles=cycles,
+            sheets=self._client_sheets(company_id, client.id),
             deliveries=[
                 ClientDeliveryRow(
                     delivered_on=row.delivered_on,

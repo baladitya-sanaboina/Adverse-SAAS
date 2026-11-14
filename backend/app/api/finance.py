@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query, Response
 from pydantic import ValidationError
 
 from app.middleware.authentication import AuthenticatedContext
-from app.schemas.invoices import SheetsOverviewResponse
+from app.schemas.invoices import PaymentSheet, SheetsOverviewResponse
 from app.schemas.production import (
     AdminDashboardResponse,
     BudgetEntryRequest,
@@ -183,6 +183,16 @@ def add_budget_entry(
 )
 def payment_sheets(context: AuthenticatedContext) -> SheetsOverviewResponse:
     return invoice_service.sheets_overview(context)
+
+
+@router.get(
+    "/sheets/clients/{client_id}",
+    response_model=list[PaymentSheet],
+    summary="One client's payment sheets (Admin only)",
+    responses=ERRORS,
+)
+def client_payment_sheets(client_id: UUID, context: AuthenticatedContext) -> list[PaymentSheet]:
+    return invoice_service.client_sheets(context, client_id)
 
 
 # -- client payments ----------------------------------------------------------------------

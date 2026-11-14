@@ -85,6 +85,7 @@ from app.services.notification_service import notification_service
 from app.services.permission_service import validate_user_action_access
 from app.services.production_rules import (
     BILLABLE_STATUSES,
+    PAYMENT_METHOD_TEXT,
     SalaryRate,
     budget_cycles,
     budget_position,
@@ -245,11 +246,22 @@ class FinanceService:
         top_ups = [
             (payout.paid_on, payout.note or "Top-up", money(payout.amount)) for payout in payouts
         ]
+        top_up_labels = [
+            (
+                payout.paid_on,
+                "TOP_UP",
+                money(payout.amount),
+                f"Top-up · {PAYMENT_METHOD_TEXT.get(payout.method, payout.method)}"
+                + (f" · {payout.reference}" if payout.reference else ""),
+            )
+            for payout in payouts
+        ]
         topped = sum((amount for _, _, amount in top_ups), ZERO)
         earned = sum((amount for _, _, amount in commissions), ZERO)
         cycles = budget_cycles(
-            [(day, "TOP_UP", amount) for day, _, amount in top_ups],
+            top_up_labels,
             [(day, amount, title) for day, title, amount in commissions],
+            open_without_payment=True,
         )
         lines = wallet_timeline(top_ups, commissions)
         return ManagerWallet(

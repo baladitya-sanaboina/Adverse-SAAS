@@ -374,18 +374,37 @@ class BudgetCycle:
         return money(self.carried_in + self.amount - self.used)
 
 
+PAYMENT_METHOD_TEXT = {
+    "CASH": "Cash",
+    "BANK_TRANSFER": "Bank transfer",
+    "UPI": "UPI",
+    "CHEQUE": "Cheque",
+    "CARD": "Card",
+    "OTHER": "Other",
+}
+
+
 def budget_cycles(
-    entries: list[tuple[date, str, Decimal]],
+    entries: Sequence[tuple[date, str, Decimal] | tuple[date, str, Decimal, str]],
     deliveries: Sequence[tuple[date, Decimal] | tuple[date, Decimal, str]],
+    *,
+    open_without_payment: bool = False,
 ) -> list[BudgetCycle]:
     """Split the money into payment sheets, one per top-up date (several top-ups on one day
     merge). Work before the first payment counts in the first sheet; adjustments belong to the
     sheet they fall in. Each sheet starts with the previous sheet's balance carried in, records
     the day its money ran out, and lists its own lines with the running balance."""
     starts: dict[date, Decimal] = {}
-    for day, kind, amount in entries:
+    labels: dict[date, list[str]] = {}
+    for day, kind, amount, *rest in entries:
         if kind in ("INITIAL", "TOP_UP") and Decimal(amount) > 0:
             starts[day] = starts.get(day, Decimal("0")) + Decimal(amount)
+            labels.setdefault(day, []).append(str(rest[0]) if rest else "Payment")
+    if not starts and open_without_payment and deliveries:
+        # Work but no payment yet: one open sheet from the first piece of work, starting at zero.
+        first = min(delivery[0] for delivery in deliveries)
+        starts[first] = Decimal("0")
+        labels[first] = []
     if not starts:
         return []
     ordered = sorted(starts)
@@ -404,7 +423,7 @@ def budget_cycles(
     events: list[list[tuple[date, int, Literal["PAYMENT", "ADJUSTMENT", "WORK"], str, Decimal]]] = [
         [] for _ in windows
     ]
-    for day, kind, amount in entries:
+    for day, kind, amount, *_ in entries:
         if kind == "ADJUSTMENT":
             events[window_of(day)].append((day, 0, "ADJUSTMENT", "Adjustment", Decimal(amount)))
     for delivery in deliveries:
@@ -430,7 +449,13 @@ def budget_cycles(
         items = 0
         ran_out_on: date | None = start if index > 0 and carried < 0 else None
         # The payment is a dated line too, so work done before the first payment shows first.
-        dated = [(start, 0, "PAYMENT", "Payment", starts[start]), *events[index]]
+        names = labels[start]
+        payment = names[0] if len(names) == 1 else f"{len(names)} payments"
+        # The payment goes first so that, on the same day, it counts before that day's work.
+        dated: list[tuple[date, int, Literal["PAYMENT", "ADJUSTMENT", "WORK"], str, Decimal]] = (
+            [(start, 0, "PAYMENT", payment, starts[start])] if starts[start] > 0 else []
+        )
+        dated += events[index]
         for day, _, kind, label, signed in sorted(dated, key=lambda item: item[:2]):
             balance += signed
             if kind == "WORK":

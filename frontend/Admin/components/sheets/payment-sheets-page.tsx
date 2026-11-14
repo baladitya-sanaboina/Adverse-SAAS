@@ -56,7 +56,7 @@ export function PaymentSheetsPage() {
       <DashboardHero
         title=""
         highlight="Payment Sheets"
-        description="Every top-up opens a new sheet. See what each manager and client has left, and who needs a top-up."
+        description="Every payment opens a new sheet: a top-up you send a manager, or a payment a client sends you. See who has money left and who needs a top-up."
         compact
       />
       <div className="dash-content">
@@ -105,7 +105,7 @@ export function PaymentSheetsPage() {
               <Wallet />
               {tab === "MANAGER"
                 ? "No manager top-ups yet. Send one in Payments → Manager top-ups; it opens the first sheet."
-                : "No client budgets yet. Add one in Payments → Client budgets; it opens the first sheet."}
+                : "No client payments or delivered work yet. Each payment you record in Payments → Client payments opens a sheet."}
             </div>
           ) : (
             <div className="sheets-page-grid">
