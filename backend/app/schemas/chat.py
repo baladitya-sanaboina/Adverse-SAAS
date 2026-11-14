@@ -194,6 +194,7 @@ class CallResponse(BaseModel):
     started_at: datetime
     ended_at: datetime | None
     participants: list[CallParticipantResponse]
+    code: str | None = None
 
 
 class ActiveCallResponse(BaseModel):
@@ -258,7 +259,53 @@ class MeetingResponse(BaseModel):
     kind: CallKind
     created_by_id: UUID
     created_by_name: str
+    code: str | None = None
 
 
 class MeetingListResponse(BaseModel):
     items: list[MeetingResponse]
+
+
+# -- meet links and the lobby (owner request 2026-11-14) ---------------------------------------
+
+AdmissionStatus = Literal["WAITING", "ADMITTED", "DENIED"]
+
+
+class MeetLinkResponse(BaseModel):
+    code: str
+
+
+class WaitingPersonResponse(BaseModel):
+    id: UUID
+    name: str
+    role: ChatRole
+    image: str | None
+    requested_at: datetime
+
+
+class LobbyResponse(BaseModel):
+    items: list[WaitingPersonResponse]
+
+
+class MeetInfoResponse(BaseModel):
+    """What a meet link page needs. People outside the chat only see the chat's name, who is in
+    the call, and their own place in the lobby."""
+
+    code: str
+    title: str
+    type: ConversationType
+    member: bool
+    conversation_id: UUID | None
+    kind: CallKind
+    live: bool
+    in_call: list[str]
+    host_name: str | None
+    call: CallResponse | None
+    admission: AdmissionStatus | None
+    can_admit: bool
+
+
+class AdmissionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    admit: bool

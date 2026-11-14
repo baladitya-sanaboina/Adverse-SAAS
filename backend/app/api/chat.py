@@ -6,14 +6,18 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, Query, Response, UploadFile
+from fastapi import Path, APIRouter, File, Form, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from app.middleware.authentication import AuthenticatedContext
 from app.schemas.chat import (
     ActiveCallResponse,
+    AdmissionRequest,
     CallResponse,
     CallStartRequest,
+    LobbyResponse,
+    MeetInfoResponse,
+    MeetLinkResponse,
     ChatMessageResponse,
     ChatMessagesResponse,
     ConversationListResponse,
@@ -295,6 +299,72 @@ def decline_call(call_id: UUID, context: AuthenticatedContext) -> Response:
 )
 def signal_call(call_id: UUID, request: SignalRequest, context: AuthenticatedContext) -> Response:
     call_service.signal(context, call_id, request)
+    return Response(status_code=204)
+
+
+# -- meet links and the lobby (owner request 2026-11-14) ---------------------------------------
+
+MEET_CODE = Path(min_length=3, max_length=16, pattern=r"^[A-Za-z-]+$")
+
+
+@router.get(
+    "/conversations/{conversation_id}/link",
+    response_model=MeetLinkResponse,
+    summary="The chat's meet link code",
+    responses=ERRORS,
+)
+def meet_link(conversation_id: UUID, context: AuthenticatedContext) -> MeetLinkResponse:
+    return call_service.link(context, conversation_id)
+
+
+@router.get(
+    "/meet/{code}",
+    response_model=MeetInfoResponse,
+    summary="Open a meet link: join, ask to join, or wait",
+    responses=ERRORS,
+)
+def meet(context: AuthenticatedContext, code: str = MEET_CODE) -> MeetInfoResponse:
+    return call_service.meet(context, code)
+
+
+@router.post(
+    "/meet/{code}/knock",
+    response_model=MeetInfoResponse,
+    summary="Ask to join the call (repeat every few seconds while waiting)",
+    responses=ERRORS,
+)
+def knock(context: AuthenticatedContext, code: str = MEET_CODE) -> MeetInfoResponse:
+    return call_service.knock(context, code)
+
+
+@router.delete(
+    "/meet/{code}/knock", status_code=204, summary="Stop waiting to join", responses=ERRORS
+)
+def withdraw(context: AuthenticatedContext, code: str = MEET_CODE) -> Response:
+    call_service.withdraw(context, code)
+    return Response(status_code=204)
+
+
+@router.get(
+    "/calls/{call_id}/lobby",
+    response_model=LobbyResponse,
+    summary="People waiting to join (host and admins in the call)",
+    responses=ERRORS,
+)
+def lobby(call_id: UUID, context: AuthenticatedContext) -> LobbyResponse:
+    return call_service.lobby(context, call_id)
+
+
+@router.post(
+    "/calls/{call_id}/lobby/{user_id}",
+    status_code=204,
+    summary="Admit or deny someone waiting",
+    responses=ERRORS,
+)
+def decide(
+    call_id: UUID, user_id: UUID, request: AdmissionRequest, context: AuthenticatedContext
+) -> Response:
+    call_service.decide(context, call_id, user_id, request.admit)
     return Response(status_code=204)
 
 

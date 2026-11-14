@@ -4,6 +4,10 @@ Audio and video go straight between browsers (WebRTC, one connection per pair of
 suits the small calls an agency has). The server decides who may call, keeps who is in the call,
 relays the WebRTC offers, answers and network candidates, and writes the call into the chat.
 Who may call, join or schedule follows the chat's own rules (chat_service._visible).
+
+Meet links (owner decisions 2026-11-14): every chat has one link, /call/<code>. Chat members who
+open it join straight away. Anyone else in the same company waits in a lobby until the call's
+host or an admin who is in the call admits them; that admission is for that one call only.
 """
 
 from __future__ import annotations
@@ -22,10 +26,14 @@ from app.schemas.chat import (
     CallParticipantResponse,
     CallResponse,
     CallStartRequest,
+    LobbyResponse,
+    MeetInfoResponse,
     MeetingListResponse,
     MeetingRequest,
     MeetingResponse,
+    MeetLinkResponse,
     SignalRequest,
+    WaitingPersonResponse,
 )
 from app.services import realtime
 from app.services.authentication_service import AuthenticationError
@@ -88,6 +96,7 @@ class CallService:
                 )
                 for seat in self.repository.seats(call.id)
             ],
+            code=call.meet_code,
         )
 
     def _post(self, company_id: UUID, row: ConversationRow, sender_id: UUID, body: str) -> None:
@@ -109,23 +118,55 @@ class CallService:
             },
         )
 
+    def _call_audience(self, company_id: UUID, row: ConversationRow, call: CallRow) -> list[UUID]:
+        """The chat's audience plus people admitted to this call from the lobby."""
+        people = self.chat._audience(company_id, row) + self.repository.admitted(call.id)
+        return list(dict.fromkeys(people))
+
     def _update(self, company_id: UUID, row: ConversationRow, call: CallRow) -> CallResponse:
         shaped = self._call(call)
         realtime.publish(
-            self.chat._audience(company_id, row),
+            self._call_audience(company_id, row, call),
             "call.update",
             {"conversation_id": str(row.id), "call": shaped.model_dump(mode="json")},
         )
         return shaped
 
+    def _member(self, company_id: UUID, role: str, user_id: UUID, row: ConversationRow) -> bool:
+        return self.chat.repository.is_member(row.id, user_id) or (
+            row.type == "CLIENT" and role == "ADMIN"
+        )
+
     def _live(
         self, call_id: UUID, context: AuthContext
     ) -> tuple[UUID, str, ConversationRow, CallRow]:
+        """The call, if this person is in its chat or was admitted to it from the lobby."""
         call = self.repository.get(call_id)
         if call is None:
             raise AuthenticationError(404, "CALL_NOT_FOUND", "Call not found.")
-        company_id, role, row = self._access(context, call.conversation_id)
+        company_id, role = self.chat._me(context)
+        row = self.chat.repository.get_conversation(
+            company_id, call.conversation_id, context.user_id
+        )
+        if row is None or not (
+            self._member(company_id, role, context.user_id, row)
+            or self.repository.admission(call.id, context.user_id) == "ADMITTED"
+        ):
+            raise AuthenticationError(404, "CALL_NOT_FOUND", "Call not found.")
         return company_id, role, row, call
+
+    def _can_admit(self, role: str, user_id: UUID, call: CallRow) -> bool:
+        """Host or an admin, and in the call right now."""
+        seated = any(seat.user_id == user_id for seat in self.repository.seats(call.id))
+        return seated and (user_id == call.started_by_id or role == "ADMIN")
+
+    def _admitters(self, company_id: UUID, call: CallRow) -> list[UUID]:
+        admins = set(self.chat.repository.admin_ids(company_id))
+        return [
+            seat.user_id
+            for seat in self.repository.seats(call.id)
+            if seat.user_id == call.started_by_id or seat.user_id in admins
+        ]
 
     def _finish(self, company_id: UUID, row: ConversationRow, call: CallRow) -> None:
         """End the call once: write its length into the chat and tell people who missed it."""
@@ -161,6 +202,7 @@ class CallService:
     ) -> CallResponse:
         """Start a call in the chat, or join the one already running there."""
         company_id, _, row = self._access(context, conversation_id)
+        code = self.repository.meet_code(conversation_id)
         call_id, created = self.repository.start(
             company_id, conversation_id, context.user_id, request.kind
         )
@@ -184,6 +226,7 @@ class CallService:
                         else (row.title or row.client_name or "Chat")
                     ),
                     "from": {"id": str(context.user_id), "name": me.name if me else ""},
+                    "code": code,
                 },
             )
         return self._update(company_id, row, call)
@@ -263,6 +306,141 @@ class CallService:
             },
         )
 
+    # -- meet links and the lobby -------------------------------------------------------------
+
+    def link(self, context: AuthContext, conversation_id: UUID) -> MeetLinkResponse:
+        """The chat's meet link code (members only)."""
+        self._access(context, conversation_id)
+        return MeetLinkResponse(code=self.repository.meet_code(conversation_id))
+
+    def _title(self, company_id: UUID, row: ConversationRow, user_id: UUID) -> str:
+        if row.type != "DIRECT":
+            return row.title or row.client_name or "Chat"
+        others = [
+            member.name
+            for member in self.chat.repository.members([row.id])
+            if member.user_id != user_id
+        ]
+        return " & ".join(others) or "Call"
+
+    def meet(self, context: AuthContext, code: str) -> MeetInfoResponse:
+        """What the meet link page shows: join straight away, ask to join, or wait."""
+        company_id, role = self.chat._me(context)
+        conversation_id = self.repository.by_code(company_id, code.strip().lower())
+        row = (
+            self.chat.repository.get_conversation(company_id, conversation_id, context.user_id)
+            if conversation_id
+            else None
+        )
+        if row is None:
+            raise AuthenticationError(404, "MEET_NOT_FOUND", "This meeting link does not exist.")
+        member = self._member(company_id, role, context.user_id, row)
+        call = self.repository.active(row.id)
+        if call is not None:
+            self.repository.prune(call.id)
+            if not self.repository.seats(call.id):
+                self._finish(company_id, row, call)
+                call = None
+        admission = (
+            self.repository.admission(call.id, context.user_id)
+            if call is not None and not member
+            else None
+        )
+        seats = self.repository.seats(call.id) if call else []
+        host = (
+            self.chat.repository.person(company_id, call.started_by_id) if call else None
+        )
+        allowed = member or admission == "ADMITTED"
+        return MeetInfoResponse(
+            code=code.strip().lower(),
+            title=self._title(company_id, row, context.user_id),
+            type=row.type,
+            member=member,
+            conversation_id=row.id if member else None,
+            kind=call.kind if call else "VIDEO",
+            live=call is not None,
+            in_call=[seat.name for seat in seats],
+            host_name=host.name if host else None,
+            call=self._call(call) if call and allowed else None,
+            admission=admission,
+            can_admit=bool(call and self._can_admit(role, context.user_id, call)),
+        )
+
+    def knock(self, context: AuthContext, code: str) -> MeetInfoResponse:
+        """Ask to join the running call (or say "still here" while waiting)."""
+        info = self.meet(context, code)
+        if info.member:
+            return info
+        company_id, _ = self.chat._me(context)
+        conversation_id = self.repository.by_code(company_id, info.code)
+        call = self.repository.active(conversation_id) if conversation_id else None
+        if call is None:
+            raise AuthenticationError(
+                409, "CALL_NOT_STARTED", "The call has not started yet. Wait for the host."
+            )
+        status, new = self.repository.knock(call.id, context.user_id)
+        if new:
+            me = self.chat.repository.person(company_id, context.user_id)
+            realtime.publish(
+                self._admitters(company_id, call),
+                "call.knock",
+                {
+                    "call_id": str(call.id),
+                    "user_id": str(context.user_id),
+                    "name": me.name if me else "",
+                    "role": ROLES.get(me.role, "EMPLOYEE") if me else "EMPLOYEE",
+                },
+            )
+        return self.meet(context, code)
+
+    def withdraw(self, context: AuthContext, code: str) -> None:
+        company_id, _ = self.chat._me(context)
+        conversation_id = self.repository.by_code(company_id, code.strip().lower())
+        call = self.repository.active(conversation_id) if conversation_id else None
+        if call is None:
+            return
+        self.repository.withdraw(call.id, context.user_id)
+        realtime.publish(
+            self._admitters(company_id, call), "call.lobby", {"call_id": str(call.id)}
+        )
+
+    def lobby(self, context: AuthContext, call_id: UUID) -> LobbyResponse:
+        _, role, _, call = self._live(call_id, context)
+        if not self._can_admit(role, context.user_id, call):
+            return LobbyResponse(items=[])
+        return LobbyResponse(
+            items=[
+                WaitingPersonResponse(
+                    id=person.user_id,
+                    name=person.name,
+                    role=ROLES.get(person.role, "EMPLOYEE"),
+                    image=person.image,
+                    requested_at=_utc(person.requested_at),
+                )
+                for person in self.repository.waiting(call.id)
+            ]
+        )
+
+    def decide(self, context: AuthContext, call_id: UUID, user_id: UUID, admit: bool) -> None:
+        company_id, role, _, call = self._live(call_id, context)
+        if call.ended_at is not None:
+            raise AuthenticationError(409, "CALL_ENDED", "This call has ended.")
+        if not self._can_admit(role, context.user_id, call):
+            raise AuthenticationError(
+                403, "HOST_ONLY", "Only the host or an admin in the call can let people in."
+            )
+        status = "ADMITTED" if admit else "DENIED"
+        if not self.repository.decide(call.id, user_id, status, context.user_id):
+            raise AuthenticationError(404, "NOT_WAITING", "That person is no longer waiting.")
+        realtime.publish(
+            [user_id],
+            "call.admission",
+            {"call_id": str(call.id), "code": call.meet_code, "status": status},
+        )
+        realtime.publish(
+            self._admitters(company_id, call), "call.lobby", {"call_id": str(call.id)}
+        )
+
     # -- meetings ------------------------------------------------------------------------------
 
     def _meeting(self, row: MeetingRow) -> MeetingResponse:
@@ -280,6 +458,7 @@ class CallService:
             kind=row.kind,
             created_by_id=row.created_by_id,
             created_by_name=row.created_by_name,
+            code=row.meet_code or self.repository.meet_code(row.conversation_id),
         )
 
     def schedule(

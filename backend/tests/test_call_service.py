@@ -6,7 +6,7 @@ from typing import Any
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
-from app.repositories.call_repository import CallRow, MeetingRow, SeatRow
+from app.repositories.call_repository import CallRow, MeetingRow, SeatRow, WaitingRow
 from app.schemas.chat import (
     CallStartRequest,
     DirectRequest,
@@ -27,6 +27,7 @@ from tests.test_chat_service import (
     FakeRepository,
     context,
 )
+from tests.test_chat_service import COMPANY
 
 NOW = datetime(2026, 11, 14, 10, 0)
 
@@ -36,6 +37,8 @@ class FakeCalls:
         self.calls: dict[UUID, CallRow] = {}
         self.seats_: dict[UUID, dict[UUID, bool]] = {}  # call -> user -> in call now
         self.meetings_: dict[UUID, MeetingRow] = {}
+        self.codes: dict[UUID, str] = {}  # conversation -> meet code
+        self.admissions: dict[tuple[UUID, UUID], str] = {}  # (call, user) -> status
 
     def get(self, call_id: UUID) -> CallRow | None:
         return self.calls.get(call_id)
@@ -54,7 +57,9 @@ class FakeCalls:
         running = self.active(conversation_id)
         if running:
             return running.id, False
-        call = CallRow(uuid4(), conversation_id, kind, user_id, NOW, None)
+        call = CallRow(
+            uuid4(), conversation_id, kind, user_id, NOW, None, self.codes.get(conversation_id)
+        )
         self.calls[call.id] = call
         self.seats_[call.id] = {}
         return call.id, True
@@ -92,6 +97,7 @@ class FakeCalls:
             call.started_by_id,
             call.started_at,
             NOW + timedelta(minutes=12),
+            call.meet_code,
         )
         self.seats_[call_id] = {u: False for u in self.seats_[call_id]}
         return True
@@ -111,6 +117,7 @@ class FakeCalls:
             user_id,
             PEOPLE[user_id].name,
             None,
+            None,
         )
         self.meetings_[meeting.id] = meeting
         return meeting.id
@@ -120,6 +127,44 @@ class FakeCalls:
 
     def cancel_meeting(self, meeting_id: UUID) -> None:
         self.meetings_.pop(meeting_id, None)
+
+    # meet links and the lobby
+    def meet_code(self, conversation_id: UUID) -> str:
+        return self.codes.setdefault(conversation_id, f"abc-defg-{len(self.codes):03d}")
+
+    def by_code(self, company_id: UUID, code: str) -> UUID | None:
+        if company_id != COMPANY:
+            return None
+        return next((c for c, value in self.codes.items() if value == code), None)
+
+    def admission(self, call_id: UUID, user_id: UUID) -> str | None:
+        return self.admissions.get((call_id, user_id))
+
+    def knock(self, call_id: UUID, user_id: UUID) -> tuple[str, bool]:
+        if (call_id, user_id) in self.admissions:
+            return self.admissions[(call_id, user_id)], False
+        self.admissions[(call_id, user_id)] = "WAITING"
+        return "WAITING", True
+
+    def withdraw(self, call_id: UUID, user_id: UUID) -> None:
+        if self.admissions.get((call_id, user_id)) == "WAITING":
+            del self.admissions[(call_id, user_id)]
+
+    def waiting(self, call_id: UUID) -> list[WaitingRow]:
+        return [
+            WaitingRow(u, PEOPLE[u].name, PEOPLE[u].role, None, NOW)
+            for (c, u), status in self.admissions.items()
+            if c == call_id and status == "WAITING"
+        ]
+
+    def decide(self, call_id: UUID, user_id: UUID, status: str, decided_by: UUID) -> bool:
+        if self.admissions.get((call_id, user_id)) != "WAITING":
+            return False
+        self.admissions[(call_id, user_id)] = status
+        return True
+
+    def admitted(self, call_id: UUID) -> list[UUID]:
+        return [u for (c, u), s in self.admissions.items() if c == call_id and s == "ADMITTED"]
 
 
 class FakeFinance:
@@ -220,6 +265,97 @@ class CallRulesTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             MeetingRequest(title="No zone", starts_at=datetime(2026, 12, 1, 10, 0))
 
+
+    # -- meet links and the lobby (owner decisions 2026-11-14) ---------------------------------
+
+    def test_member_opening_the_link_joins_straight_away(
+        self, chat_rt: Any, _: Any, call_rt: Any, __: Any
+    ) -> None:
+        room = self.room(chat_rt)
+        code = self.service.link(context(EMPLOYEE), room.id).code
+        with self.assertRaises(AuthenticationError):
+            self.service.link(context(MANAGER), room.id)  # outsiders cannot fetch the link
+        info = self.service.meet(context(CLIENT), code)
+        self.assertTrue(info.member)
+        self.assertFalse(info.live)
+        self.assertEqual(info.conversation_id, room.id)
+        call = self.service.start(context(EMPLOYEE), room.id, CallStartRequest())
+        self.assertEqual(call.code, code)
+        ring = next(c for c in call_rt.publish.call_args_list if c.args[1] == "call.ring")
+        self.assertEqual(ring.args[2]["code"], code)
+
+    def test_outsider_waits_until_the_host_admits_them(
+        self, chat_rt: Any, _: Any, call_rt: Any, __: Any
+    ) -> None:
+        room = self.room(chat_rt)
+        code = self.service.link(context(EMPLOYEE), room.id).code
+        with self.assertRaises(AuthenticationError) as early:
+            self.service.knock(context(MANAGER), code)
+        self.assertEqual(early.exception.code, "CALL_NOT_STARTED")
+        call = self.service.start(context(EMPLOYEE), room.id, CallStartRequest())
+        self.service.join(context(CLIENT), call.id)
+
+        info = self.service.meet(context(MANAGER), code)
+        self.assertFalse(info.member)
+        self.assertIsNone(info.conversation_id)
+        self.assertIsNone(info.call)  # no call details before being let in
+        self.assertEqual(set(info.in_call), {"Employee", "Client"})
+        with self.assertRaises(AuthenticationError):
+            self.service.join(context(MANAGER), call.id)
+
+        waiting = self.service.knock(context(MANAGER), code)
+        self.assertEqual(waiting.admission, "WAITING")
+        knock = next(c for c in call_rt.publish.call_args_list if c.args[1] == "call.knock")
+        self.assertEqual(knock.args[0], [EMPLOYEE.id])  # host only: the client is not an admitter
+        self.assertEqual([p.id for p in self.service.lobby(context(EMPLOYEE), call.id).items], [MANAGER.id])
+        self.assertEqual(self.service.lobby(context(CLIENT), call.id).items, [])
+        with self.assertRaises(AuthenticationError) as client_try:
+            self.service.decide(context(CLIENT), call.id, MANAGER.id, True)
+        self.assertEqual(client_try.exception.status_code, 403)
+
+        self.service.decide(context(EMPLOYEE), call.id, MANAGER.id, True)
+        told = next(c for c in call_rt.publish.call_args_list if c.args[1] == "call.admission")
+        self.assertEqual((told.args[0], told.args[2]["status"]), ([MANAGER.id], "ADMITTED"))
+        joined = self.service.join(context(MANAGER), call.id)
+        self.assertIn(MANAGER.id, {p.id for p in joined.participants})
+        self.service.ping(context(MANAGER), call.id)
+        offer = SignalRequest(to_user_id=EMPLOYEE.id, kind="offer", data={"sdp": "x"})
+        self.service.signal(context(MANAGER), call.id, offer)
+        self.assertIsNotNone(self.service.meet(context(MANAGER), code).call)
+
+    def test_admin_in_the_call_can_admit_and_denied_stays_out(
+        self, chat_rt: Any, _: Any, __: Any, ___: Any
+    ) -> None:
+        room = self.room(chat_rt)
+        code = self.service.link(context(ADMIN), room.id).code
+        call = self.service.start(context(EMPLOYEE), room.id, CallStartRequest())
+        self.service.knock(context(MANAGER), code)
+        with self.assertRaises(AuthenticationError):
+            self.service.decide(context(ADMIN), call.id, MANAGER.id, False)  # not in the call yet
+        self.service.join(context(ADMIN), call.id)
+        self.service.decide(context(ADMIN), call.id, MANAGER.id, False)
+        self.assertEqual(self.service.knock(context(MANAGER), code).admission, "DENIED")
+        with self.assertRaises(AuthenticationError):
+            self.service.join(context(MANAGER), call.id)
+
+    def test_admission_is_for_one_call_and_one_company(
+        self, chat_rt: Any, _: Any, __: Any, ___: Any
+    ) -> None:
+        room = self.room(chat_rt)
+        code = self.service.link(context(EMPLOYEE), room.id).code
+        first = self.service.start(context(EMPLOYEE), room.id, CallStartRequest())
+        self.service.knock(context(MANAGER), code)
+        self.service.decide(context(EMPLOYEE), first.id, MANAGER.id, True)
+        self.service.leave(context(EMPLOYEE), first.id)  # call ends
+        second = self.service.start(context(EMPLOYEE), room.id, CallStartRequest())
+        self.assertNotEqual(first.id, second.id)
+        with self.assertRaises(AuthenticationError):
+            self.service.join(context(MANAGER), second.id)
+        self.assertIsNone(self.service.meet(context(MANAGER), code).admission)
+        outsider = context(MANAGER).model_copy(update={"company_id": uuid4()})
+        with self.assertRaises(AuthenticationError) as other:
+            self.service.meet(outsider, code)
+        self.assertEqual(other.exception.code, "MEET_NOT_FOUND")
 
 if __name__ == "__main__":
     unittest.main()
