@@ -78,3 +78,86 @@ class NotifyRulesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeliveredNotificationTest(unittest.TestCase):
+    """Phase 15: when the admin approves a video the client is told it is ready (no price)."""
+
+    def _row(self, status: str):  # type: ignore[no-untyped-def]
+        from datetime import datetime, timezone
+
+        from app.repositories.task_repository import TaskRow
+
+        now = datetime(2026, 11, 14, tzinfo=timezone.utc)
+        return TaskRow(
+            id=uuid4(),
+            number=9,
+            title="Diwali reel",
+            description="",
+            priority="HIGH",
+            status=status,
+            client_id=uuid4(),
+            client_name="Client",
+            client_code="C",
+            service_id=uuid4(),
+            service_name="Reel",
+            service_code="REEL",
+            assignee_user_id=uuid4(),
+            assignee_name="E",
+            assignee_type="EMPLOYEE",
+            monitor_user_id=None,
+            monitor_name=None,
+            due_date=None,
+            currency="INR",
+            client_pricing_model="PER_VIDEO",
+            client_price_default=Decimal("800"),
+            client_price_final=Decimal("800"),
+            client_price_reason="",
+            commission_default=None,
+            commission_final=None,
+            commission_reason="",
+            created_by_name="Admin",
+            created_at=now,
+            updated_at=now,
+            assigned_at=now,
+            started_at=now,
+            submitted_at=now,
+            approved_at=now,
+            completed_at=None,
+            cancelled_at=None,
+        )
+
+    def test_client_hears_about_an_approved_video(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from app.services.task_events import TaskEvents
+
+        client_login = uuid4()
+        repository = MagicMock()
+        repository.get_task.return_value = self._row("APPROVED")
+        repository.budget_totals.return_value = SimpleNamespace(
+            total=Decimal("0"), used=Decimal("800"), committed=Decimal("0")
+        )
+        notifier = MagicMock()
+        notifier.client_user.return_value = client_login
+        TaskEvents(repository, notifier).status_changed(
+            uuid4(), uuid4(), uuid4(), "SUBMITTED", by_admin=True
+        )
+        delivered = [c for c in notifier.notify.call_args_list if c.args[2] == "task.delivered"]
+        self.assertEqual(len(delivered), 1)
+        self.assertEqual(delivered[0].args[1], [client_login])
+        self.assertNotIn("800", delivered[0].args[3] + delivered[0].args[4])
+
+    def test_no_client_alert_for_work_in_progress(self) -> None:
+        from unittest.mock import MagicMock
+
+        from app.services.task_events import TaskEvents
+
+        repository = MagicMock()
+        repository.get_task.return_value = self._row("SUBMITTED")
+        notifier = MagicMock()
+        TaskEvents(repository, notifier).status_changed(
+            uuid4(), uuid4(), uuid4(), "IN_PROGRESS", by_admin=False
+        )
+        self.assertFalse(any(c.args[2] == "task.delivered" for c in notifier.notify.call_args_list))

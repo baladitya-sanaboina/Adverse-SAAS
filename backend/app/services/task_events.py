@@ -138,6 +138,17 @@ class TaskEvents:
                 exclude=actor_id,
             )
             if by_admin and row.status in BILLABLE and previous_status not in BILLABLE:
+                # Phase 15: the client hears that their video is ready (no price in the alert).
+                self.notifier.notify(
+                    company_id,
+                    [self.notifier.client_user(company_id, row.client_id)],
+                    "task.delivered",
+                    f"Your video is ready: {row.title}",
+                    f"{row.service_name} · it is now on your billing page.",
+                    "/billing",
+                    {"task_id": str(row.id)},
+                    exclude=actor_id,
+                )
                 self._budget_check(company_id, row, actor_id)
                 self._advance_check(company_id, row)
         except Exception:  # noqa: BLE001
