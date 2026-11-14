@@ -117,6 +117,65 @@ class NotificationRepository:
             )
             return int(cursor.rowcount or 0)
 
+    def upsert_chat(
+        self,
+        company_id: UUID,
+        user_id: UUID,
+        conversation_id: str,
+        title: str,
+        preview: str,
+        link: str,
+    ) -> tuple[NotificationRow, bool] | None:
+        """One unread notification per chat (Phase 14): a new message updates it ("3 new
+        messages") instead of adding another. Returns the row and whether it replaced one."""
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, COALESCE((data->>'count')::int, 1) FROM notifications
+                WHERE company_id=%s AND user_id=%s AND type='chat.message' AND read_at IS NULL
+                  AND data->>'conversation_id' = %s
+                ORDER BY created_at DESC LIMIT 1 FOR UPDATE
+                """,
+                (company_id, user_id, conversation_id),
+            )
+            found = cursor.fetchone()
+            count = int(found[1]) + 1 if found else 1
+            body = (f"{count} new messages · {preview}" if count > 1 else preview)[:500]
+            data = json.dumps({"conversation_id": conversation_id, "count": count})
+            if found:
+                cursor.execute(
+                    f"""
+                    UPDATE notifications SET title=%s, body=%s, link=%s, data=%s::jsonb,
+                      created_at = NOW() AT TIME ZONE 'UTC'
+                    WHERE id=%s RETURNING {_COLUMNS}
+                    """,
+                    (title[:200], body, link[:300], data, found[0]),
+                )
+            else:
+                cursor.execute(
+                    f"""
+                    INSERT INTO notifications (id, company_id, user_id, type, title, body, link, data)
+                    SELECT %s, %s, u.id, 'chat.message', %s, %s, %s, %s::jsonb
+                    FROM users u WHERE u.id = %s AND u.company_id = %s
+                    RETURNING {_COLUMNS}
+                    """,
+                    (uuid4(), company_id, title[:200], body, link[:300], data, user_id, company_id),
+                )
+            row = cursor.fetchone()
+            return (NotificationRow(*row), found is not None) if row else None
+
+    def mark_chat_read(self, company_id: UUID, user_id: UUID, conversation_id: str) -> int:
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE notifications SET read_at = NOW() AT TIME ZONE 'UTC'
+                WHERE company_id=%s AND user_id=%s AND read_at IS NULL
+                  AND type IN ('chat.message', 'chat.added') AND data->>'conversation_id' = %s
+                """,
+                (company_id, user_id, conversation_id),
+            )
+            return int(cursor.rowcount or 0)
+
     def company_admin_ids(self, company_id: UUID) -> list[UUID]:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(

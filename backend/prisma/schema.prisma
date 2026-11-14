@@ -516,6 +516,7 @@ model User {
   chatMemberships         ChatMember[]
   chatMessagesSent        ChatMessage[]            @relation("ChatMessageSender")
   chatStatus              ChatStatus?
+  chatReactions           ChatReaction[]
   taskFilesUploaded       TaskFile[]               @relation("TaskFileUploader")
   clientBudgetEntries     ClientBudgetEntry[]      @relation("ClientBudgetActor")
   clientPaymentsRecorded  ClientPayment[]          @relation("ClientPaymentActor")
@@ -1595,6 +1596,7 @@ model ChatMessage {
   replyTo        ChatMessage?     @relation("ChatReply", fields: [replyToId], references: [id], onDelete: SetNull)
   replies        ChatMessage[]    @relation("ChatReply")
   attachments    ChatAttachment[]
+  reactions      ChatReaction[]
 
   @@index([conversationId, createdAt])
   @@map("chat_messages")
@@ -1629,4 +1631,19 @@ model ChatStatus {
   user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("chat_statuses")
+}
+
+/// Emoji reactions on chat messages (owner request 2026-11-14: a more advanced chat).
+model ChatReaction {
+  id        String      @id @default(uuid()) @db.Uuid
+  messageId String      @map("message_id") @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  emoji     String      @db.VarChar(16)
+  createdAt DateTime    @default(now()) @map("created_at")
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@map("chat_reactions")
 }

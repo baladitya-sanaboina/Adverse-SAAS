@@ -20,6 +20,7 @@ from app.schemas.chat import (
     GroupUpdateRequest,
     MessageEditRequest,
     PeopleResponse,
+    ReactionRequest,
     ReadResponse,
     RoomRequest,
     StatusRequest,
@@ -162,6 +163,18 @@ def edit(
 )
 def delete(message_id: UUID, context: AuthenticatedContext) -> ChatMessageResponse:
     return chat_service.delete(context, message_id)
+
+
+@router.post(
+    "/messages/{message_id}/reactions",
+    response_model=ChatMessageResponse,
+    summary="Add or remove my reaction",
+    responses=ERRORS,
+)
+def react(
+    message_id: UUID, request: ReactionRequest, context: AuthenticatedContext
+) -> ChatMessageResponse:
+    return chat_service.react(context, message_id, request.emoji)
 
 
 @router.post(

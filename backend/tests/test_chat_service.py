@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 from app.repositories.chat_repository import ConversationRow, MemberRow, MessageRow, PersonRef
 from app.schemas.authentication import AuthContext
-from app.schemas.chat import DirectRequest, GroupRequest, RoomRequest
+from app.schemas.chat import DirectRequest, GroupRequest, ReactionRequest, RoomRequest
 from app.services.authentication_service import AuthenticationError
 from app.services.chat_service import ChatService
 
@@ -39,6 +39,7 @@ class FakeRepository:
         self.chats: dict[UUID, dict[str, Any]] = {}
         self.messages_: dict[UUID, MessageRow] = {}
         self.status: dict[UUID, str] = {}
+        self.reacted: list[tuple[UUID, UUID, str]] = []
 
     # people
     def person(self, company_id: UUID, user_id: UUID) -> PersonRef | None:
@@ -174,6 +175,16 @@ class FakeRepository:
     def attachments(self, message_ids: list[UUID]) -> list[Any]:
         return []
 
+    def reactions(self, message_ids: list[UUID]) -> list[tuple[UUID, UUID, str]]:
+        return [r for r in self.reacted if r[0] in message_ids]
+
+    def toggle_reaction(self, message_id: UUID, user_id: UUID, emoji: str) -> None:
+        key = (message_id, user_id, emoji)
+        if key in self.reacted:
+            self.reacted.remove(key)
+        else:
+            self.reacted.append(key)
+
     def edit_message(self, message_id: UUID, body: str) -> None:
         pass
 
@@ -181,13 +192,14 @@ class FakeRepository:
         return []
 
 
+@patch("app.services.chat_service.notification_service")
 @patch("app.services.chat_service.realtime")
 class ChatRulesTest(unittest.TestCase):
     def setUp(self) -> None:
         self.repo = FakeRepository()
         self.service = ChatService(self.repo, storage=object())  # type: ignore[arg-type]
 
-    def test_direct_chat_rules(self, realtime: Any) -> None:
+    def test_direct_chat_rules(self, realtime: Any, notifications: Any) -> None:
         realtime.online.return_value = set()
         self.service.direct(context(MANAGER), DirectRequest(user_id=EMPLOYEE.id))
         self.service.direct(context(ADMIN), DirectRequest(user_id=EMPLOYEE.id))
@@ -201,13 +213,15 @@ class ChatRulesTest(unittest.TestCase):
         with self.assertRaises(AuthenticationError):
             self.service.direct(context(CLIENT), DirectRequest(user_id=MANAGER.id))
 
-    def test_same_pair_reuses_one_direct_chat(self, realtime: Any) -> None:
+    def test_same_pair_reuses_one_direct_chat(self, realtime: Any, notifications: Any) -> None:
         realtime.online.return_value = set()
         first = self.service.direct(context(ADMIN), DirectRequest(user_id=CLIENT.id))
         second = self.service.direct(context(CLIENT), DirectRequest(user_id=ADMIN.id))
         self.assertEqual(first.id, second.id)
 
-    def test_only_admin_creates_client_rooms_and_client_is_in_them(self, realtime: Any) -> None:
+    def test_only_admin_creates_client_rooms_and_client_is_in_them(
+        self, realtime: Any, notifications: Any
+    ) -> None:
         realtime.online.return_value = set()
         with self.assertRaises(AuthenticationError) as error:
             self.service.room(
@@ -221,7 +235,9 @@ class ChatRulesTest(unittest.TestCase):
         self.assertEqual({m.id for m in room.members}, {ADMIN.id, EMPLOYEE.id, CLIENT.id})
         self.assertEqual(room.type, "CLIENT")
 
-    def test_people_outside_a_room_cannot_read_it_but_admins_can(self, realtime: Any) -> None:
+    def test_people_outside_a_room_cannot_read_it_but_admins_can(
+        self, realtime: Any, notifications: Any
+    ) -> None:
         realtime.online.return_value = set()
         room = self.service.room(
             context(ADMIN),
@@ -235,7 +251,7 @@ class ChatRulesTest(unittest.TestCase):
         self.assertNotIn(room.id, {c.id for c in self.service.list_chats(context(MANAGER)).items})
 
     def test_admin_and_managers_make_groups_employees_and_clients_do_not(
-        self, realtime: Any
+        self, realtime: Any, notifications: Any
     ) -> None:
         realtime.online.return_value = set()
         group = self.service.group(
@@ -252,7 +268,7 @@ class ChatRulesTest(unittest.TestCase):
             self.service.group(context(ADMIN), GroupRequest(title="Team", member_ids=[CLIENT.id]))
         self.assertEqual(error.exception.status_code, 422)
 
-    def test_edit_and_delete_rules(self, realtime: Any) -> None:
+    def test_edit_and_delete_rules(self, realtime: Any, notifications: Any) -> None:
         realtime.online.return_value = set()
         room = self.service.room(
             context(ADMIN),
@@ -268,14 +284,16 @@ class ChatRulesTest(unittest.TestCase):
         self.service.delete(context(ADMIN), message.id)  # the admin may remove any message
         self.assertEqual(realtime.publish.call_args.args[1], "chat.message.updated")
 
-    def test_empty_message_is_refused(self, realtime: Any) -> None:
+    def test_empty_message_is_refused(self, realtime: Any, notifications: Any) -> None:
         realtime.online.return_value = set()
         chat = self.service.direct(context(MANAGER), DirectRequest(user_id=EMPLOYEE.id))
         with self.assertRaises(AuthenticationError) as error:
             self.service.send(context(MANAGER), chat.id, "   ", None, [])
         self.assertEqual(error.exception.status_code, 422)
 
-    def test_status_shows_offline_unless_app_is_open(self, realtime: Any) -> None:
+    def test_status_shows_offline_unless_app_is_open(
+        self, realtime: Any, notifications: Any
+    ) -> None:
         realtime.online.return_value = {MANAGER.id}
         self.repo.status[MANAGER.id] = "BUSY"
         self.repo.status[EMPLOYEE.id] = "AVAILABLE"
@@ -283,10 +301,46 @@ class ChatRulesTest(unittest.TestCase):
         self.assertEqual(people[MANAGER.id], "BUSY")
         self.assertEqual(people[EMPLOYEE.id], "OFFLINE")
 
-    def test_client_sees_only_admins_to_message(self, realtime: Any) -> None:
+    def test_client_sees_only_admins_to_message(self, realtime: Any, notifications: Any) -> None:
         realtime.online.return_value = set()
         people = self.service.people(context(CLIENT)).people
         self.assertEqual({p.role for p in people}, {"ADMIN"})
+
+    def test_reactions_toggle_and_show_who(self, realtime: Any, notifications: Any) -> None:
+        realtime.online.return_value = set()
+        chat = self.service.direct(context(MANAGER), DirectRequest(user_id=EMPLOYEE.id))
+        message = self.service.send(context(MANAGER), chat.id, "Cut is ready", None, [])
+        reacted = self.service.react(context(EMPLOYEE), message.id, "👍")
+        self.assertEqual(
+            [(r.emoji, r.user_ids) for r in reacted.reactions], [("👍", [EMPLOYEE.id])]
+        )
+        self.assertEqual(self.service.react(context(EMPLOYEE), message.id, "👍").reactions, [])
+        with self.assertRaises(ValueError):
+            ReactionRequest(emoji="💩")
+        with self.assertRaises(AuthenticationError):
+            self.service.react(context(CLIENT), message.id, "👍")  # not in that chat
+
+    def test_new_message_notifies_the_others_only(self, realtime: Any, notifications: Any) -> None:
+        realtime.online.return_value = set()
+        room = self.service.room(
+            context(ADMIN),
+            RoomRequest(client_id=CLIENT_ID, title="Reels", member_ids=[EMPLOYEE.id]),
+        )
+        added = notifications.notify.call_args
+        self.assertEqual(added.args[2], "chat.added")
+        self.service.send(context(EMPLOYEE), room.id, "Draft ready", None, [])
+        call = notifications.notify_chat.call_args
+        self.assertEqual(set(call.args[1]), {ADMIN.id, CLIENT.id})
+        self.assertEqual(call.args[3], "Reels")
+        self.assertEqual(call.args[4], "Employee: Draft ready")
+
+    def test_reading_a_chat_clears_its_notifications(
+        self, realtime: Any, notifications: Any
+    ) -> None:
+        realtime.online.return_value = set()
+        chat = self.service.direct(context(ADMIN), DirectRequest(user_id=CLIENT.id))
+        self.service.read(context(CLIENT), chat.id)
+        notifications.read_chat.assert_called_once_with(COMPANY, CLIENT.id, chat.id)
 
 
 if __name__ == "__main__":

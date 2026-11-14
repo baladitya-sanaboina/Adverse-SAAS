@@ -34,6 +34,7 @@ from app.schemas.chat import (
     ChatMessageResponse,
     ChatMessagesResponse,
     ChatPerson,
+    ChatReactionResponse,
     ChatReplyRef,
     ConversationListResponse,
     ConversationResponse,
@@ -47,6 +48,7 @@ from app.schemas.chat import (
 )
 from app.services import realtime
 from app.services.authentication_service import AuthenticationError
+from app.services.notification_service import notification_service
 from app.services.task_file_storage import TaskFileStorage
 
 logger = logging.getLogger(__name__)
@@ -192,6 +194,9 @@ class ChatService:
         files: dict[UUID, list[AttachmentRow]] = {}
         for attachment in self.repository.attachments([row.id for row in rows]):
             files.setdefault(attachment.message_id, []).append(attachment)
+        reacted: dict[UUID, dict[str, list[UUID]]] = {}
+        for message_id, user_id, emoji in self.repository.reactions([row.id for row in rows]):
+            reacted.setdefault(message_id, {}).setdefault(emoji, []).append(user_id)
         senders = {
             person.id: person
             for person in self._people(
@@ -229,6 +234,14 @@ class ChatService:
                     )
                     for item in files.get(row.id, [])
                 ],
+                reactions=(
+                    []
+                    if row.deleted_at
+                    else [
+                        ChatReactionResponse(emoji=emoji, user_ids=users)
+                        for emoji, users in reacted.get(row.id, {}).items()
+                    ]
+                ),
                 edited=row.edited_at is not None and row.deleted_at is None,
                 deleted=row.deleted_at is not None,
                 created_at=_utc(row.created_at),
@@ -325,6 +338,31 @@ class ChatService:
             )
         return list(dict.fromkeys(ids))
 
+    def _added(
+        self,
+        company_id: UUID,
+        user_ids: list[UUID],
+        actor_id: UUID,
+        conversation_id: UUID,
+        title: str,
+    ) -> None:
+        actor = self.repository.person(company_id, actor_id)
+        notification_service.notify(
+            company_id,
+            user_ids,
+            "chat.added",
+            f"You were added to {title}",
+            f"{actor.name if actor else 'Someone'} added you to this chat.",
+            f"/chat?c={conversation_id}",
+            {"conversation_id": str(conversation_id)},
+            exclude=actor_id,
+        )
+
+    def react(self, context: AuthContext, message_id: UUID, emoji: str) -> ChatMessageResponse:
+        company_id, _, _, row = self._own_message(context, message_id)
+        self.repository.toggle_reaction(message_id, context.user_id, emoji)
+        return self._changed(company_id, row, message_id)
+
     def group(self, context: AuthContext, request: GroupRequest) -> ConversationResponse:
         company_id, role = self._me(context)
         if role not in ("ADMIN", "MANAGER"):
@@ -337,6 +375,7 @@ class ChatService:
         )
         created = self.get(context, conversation_id)
         realtime.publish(members, "chat.conversation", {"conversation_id": str(conversation_id)})
+        self._added(company_id, members, context.user_id, conversation_id, request.title)
         return created
 
     def room(self, context: AuthContext, request: RoomRequest) -> ConversationResponse:
@@ -359,6 +398,7 @@ class ChatService:
             "chat.conversation",
             {"conversation_id": str(conversation_id)},
         )
+        self._added(company_id, members, context.user_id, conversation_id, request.title)
         return created
 
     def update(
@@ -390,7 +430,16 @@ class ChatService:
             )
             members = list(dict.fromkeys([*staff, *keep]))
         title = request.title.strip() if request.title else None
+        already = {member.user_id for member in self.repository.members([conversation_id])}
         self.repository.update_group(conversation_id, title, members)
+        if members:
+            self._added(
+                company_id,
+                [user_id for user_id in members if user_id not in already],
+                context.user_id,
+                conversation_id,
+                title or row.title,
+            )
         updated = self.get(context, conversation_id)
         realtime.publish(
             [*before, *self._audience(company_id, row)],
@@ -460,6 +509,15 @@ class ChatService:
         }
         others = [u for u in self._audience(company_id, row) if u != context.user_id]
         realtime.publish(others, "chat.message", event)
+        sender = message.sender.name
+        preview = text[:120] or ("Sent a file" if len(stored) == 1 else f"Sent {len(stored)} files")
+        notification_service.notify_chat(
+            company_id,
+            others,
+            conversation_id,
+            sender if row.type == "DIRECT" else (row.title or row.client_name or "Chat"),
+            preview if row.type == "DIRECT" else f"{sender}: {preview}",
+        )
         # The sender's other tabs update too, but must not chime.
         realtime.publish([context.user_id], "chat.message", {**event, "own": True})
         return message
@@ -517,6 +575,7 @@ class ChatService:
         member = self.repository.is_member(conversation_id, context.user_id)
         stamp = _utc(self.repository.mark_read(conversation_id, context.user_id, member))
         assert stamp is not None
+        notification_service.read_chat(company_id, context.user_id, conversation_id)
         realtime.publish(
             [user_id for user_id in self._audience(company_id, row) if user_id != context.user_id],
             "chat.read",

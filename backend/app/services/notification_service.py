@@ -58,6 +58,43 @@ class NotificationService:
         for user_id, row in stored.items():
             realtime.publish([user_id], "notification", self._response(row).model_dump(mode="json"))
 
+    def notify_chat(
+        self,
+        company_id: UUID,
+        recipients: Iterable[UUID],
+        conversation_id: UUID,
+        title: str,
+        preview: str,
+    ) -> None:
+        """Chat messages in the bell (owner request 2026-11-14): one notification per chat that
+        counts up, so a busy room does not flood it. Read when the chat is opened."""
+        for user_id in dict.fromkeys(recipients):
+            try:
+                result = self.repository.upsert_chat(
+                    company_id,
+                    user_id,
+                    str(conversation_id),
+                    title,
+                    preview,
+                    f"/chat?c={conversation_id}",
+                )
+            except Exception:  # noqa: BLE001 - never fail sending the message
+                logger.warning("Could not store the chat notification", exc_info=True)
+                continue
+            if result is None:
+                continue
+            row, replaced = result
+            payload = self._response(row).model_dump(mode="json")
+            realtime.publish([user_id], "notification", {**payload, "replaced": replaced})
+
+    def read_chat(self, company_id: UUID, user_id: UUID, conversation_id: UUID) -> None:
+        try:
+            if self.repository.mark_chat_read(company_id, user_id, str(conversation_id)):
+                unread = self.repository.unread_count(company_id, user_id)
+                realtime.publish([user_id], "notification.read", {"unread_count": unread})
+        except Exception:  # noqa: BLE001
+            logger.warning("Could not mark chat notifications read", exc_info=True)
+
     def admins(self, company_id: UUID) -> list[UUID]:
         try:
             return self.repository.company_admin_ids(company_id)

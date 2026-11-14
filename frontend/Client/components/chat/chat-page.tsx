@@ -13,12 +13,16 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
+  ArrowDown,
   ArrowLeft,
   Check,
   CheckCheck,
+  ChevronUp,
   Contact,
   Download,
   FileText,
+  ImagePlus,
+  Info,
   Inbox,
   MessageCirclePlus,
   MessageSquare,
@@ -29,6 +33,7 @@ import {
   Search,
   Send,
   Settings2,
+  SmilePlus,
   Trash2,
   UsersRound,
   X,
@@ -37,6 +42,7 @@ import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog"
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { subscribeRealtime } from "@/lib/realtime";
 import {
+  REACTIONS,
   ROLE_LABELS,
   STATUS_LABELS,
   chatApi,
@@ -100,6 +106,7 @@ export function ChatPage({ role }: { role: ChatRole }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [notice, setNotice] = useState("");
+  const [focus, setFocus] = useState<{ chat: string; message: string } | null>(null);
 
   const loadChats = useCallback(async () => {
     try {
@@ -121,12 +128,19 @@ export function ChatPage({ role }: { role: ChatRole }) {
     }
   }, []);
 
+  // ?c=<chat> (from a notification) is read before the URL sync below can clear it.
+  const wantedChat = useRef<string | null | undefined>(undefined);
   useEffect(() => {
+    if (wantedChat.current === undefined) {
+      wantedChat.current = new URLSearchParams(window.location.search).get("c");
+    }
     const timer = window.setTimeout(() => {
       void loadChats();
       void loadPeople();
-      const wanted = new URLSearchParams(window.location.search).get("c");
-      if (wanted) setActiveId(wanted);
+      if (wantedChat.current) {
+        setActiveId(wantedChat.current);
+        wantedChat.current = null;
+      }
     }, 0);
     // Statuses and online dots change without events; refresh them now and then.
     const poll = window.setInterval(() => {
@@ -141,6 +155,7 @@ export function ChatPage({ role }: { role: ChatRole }) {
 
   useEffect(() => {
     window.__adverseActiveChat = activeId ?? undefined;
+    if (!activeId && wantedChat.current) return; // the chat from the link is about to open
     const url = new URL(window.location.href);
     if (activeId) url.searchParams.set("c", activeId);
     else url.searchParams.delete("c");
@@ -280,15 +295,7 @@ export function ChatPage({ role }: { role: ChatRole }) {
                   <Avatar person={{ ...me, status: me.status }} size={34} />
                   <div>
                     <strong>{me.name}</strong>
-                    <LooplessSelect
-                      value={me.status === "OFFLINE" ? "AVAILABLE" : me.status}
-                      onValueChange={(value) => void changeStatus(value)}
-                      ariaLabel="My status"
-                      options={(["AVAILABLE", "BUSY", "AWAY"] as const).map((value) => ({
-                        value,
-                        label: STATUS_LABELS[value],
-                      }))}
-                    />
+                    <StatusMenu status={me.status} onChange={(value) => void changeStatus(value)} />
                   </div>
                 </div>
               )}
@@ -394,7 +401,10 @@ export function ChatPage({ role }: { role: ChatRole }) {
                             <button
                               type="button"
                               className="chat-item found"
-                              onClick={() => setActiveId(message.conversation_id)}
+                              onClick={() => {
+                                setFocus({ chat: message.conversation_id, message: message.id });
+                                setActiveId(message.conversation_id);
+                              }}
                             >
                               <Avatar person={message.sender} size={30} />
                               <span className="chat-item-text">
@@ -433,6 +443,8 @@ export function ChatPage({ role }: { role: ChatRole }) {
                   )
                 }
                 onEditPeople={() => setDialog({ kind: "people", chat: active })}
+                focusId={focus?.chat === active.id ? focus.message : null}
+                onFocused={() => setFocus(null)}
                 onError={setNotice}
               />
             ) : (
@@ -472,6 +484,72 @@ export function ChatPage({ role }: { role: ChatRole }) {
         />
       )}
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ status */
+
+const STATUS_HINTS: Record<Exclude<ChatStatus, "OFFLINE">, string> = {
+  AVAILABLE: "People can reach you",
+  BUSY: "Focused, reply later",
+  AWAY: "Not at the desk",
+};
+
+/** My status: opens upwards from the bottom of the folder pane (the select opened off-screen). */
+function StatusMenu({ status, onChange }: { status: ChatStatus; onChange: (status: ChatStatus) => void }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement | null>(null);
+  const current = status === "OFFLINE" ? "AVAILABLE" : status;
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => !root.current?.contains(event.target as Node) && setOpen(false);
+    const key = (event: globalThis.KeyboardEvent) => event.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+  return (
+    <div className="chat-status" ref={root}>
+      <button
+        type="button"
+        className="chat-status-button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <i className={`chat-status-dot ${current.toLowerCase()}`} aria-hidden="true" />
+        <span>{STATUS_LABELS[current]}</span>
+        <ChevronUp aria-hidden="true" />
+      </button>
+      {open && (
+        <ul className="chat-status-menu" role="menu" aria-label="Set your status">
+          {(["AVAILABLE", "BUSY", "AWAY"] as const).map((value) => (
+            <li key={value}>
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={current === value}
+                className={current === value ? "on" : undefined}
+                onClick={() => {
+                  setOpen(false);
+                  if (value !== current) onChange(value);
+                }}
+              >
+                <i className={`chat-status-dot ${value.toLowerCase()}`} aria-hidden="true" />
+                <span>
+                  <strong>{STATUS_LABELS[value]}</strong>
+                  <small>{STATUS_HINTS[value]}</small>
+                </span>
+                {current === value && <Check aria-hidden="true" />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -530,8 +608,25 @@ function PeoplePicker({
 }) {
   const [term, setTerm] = useState("");
   const shown = people.filter((person) => person.name.toLowerCase().includes(term.trim().toLowerCase()));
+  const chosen = people.filter((person) => selected.includes(person.id));
   return (
     <div className="chat-picker">
+      {multiple && chosen.length > 0 && (
+        <div className="chat-chips" aria-label="Selected">
+          {chosen.map((person) => (
+            <button
+              key={person.id}
+              type="button"
+              onClick={() => onToggle(person.id)}
+              aria-label={`Remove ${person.name}`}
+            >
+              <Avatar person={person} size={20} />
+              {person.name.split(" ")[0]}
+              <X />
+            </button>
+          ))}
+        </div>
+      )}
       <label className="chat-search small">
         <Search aria-hidden="true" />
         <input
@@ -553,7 +648,7 @@ function PeoplePicker({
                 onClick={() => onToggle(person.id)}
               >
                 <Avatar person={person} size={30} />
-                <span>
+                <span className="chat-picker-name">
                   <strong>{person.name}</strong>
                   <small>
                     {ROLE_LABELS[person.role]} · {STATUS_LABELS[person.status]}
@@ -846,6 +941,8 @@ function Thread({
   onRead,
   onEditPeople,
   onError,
+  focusId,
+  onFocused,
 }: {
   chat: Conversation;
   me: ChatPerson;
@@ -854,6 +951,8 @@ function Thread({
   onRead: () => void;
   onEditPeople: () => void;
   onError: (message: string) => void;
+  focusId: string | null;
+  onFocused: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -864,9 +963,23 @@ function Thread({
   const [reply, setReply] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   const [removing, setRemoving] = useState<ChatMessage | null>(null);
+  const [reacting, setReacting] = useState<string | null>(null);
+  const [info, setInfo] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [atBottom, setAtBottom] = useState(true);
+  const [unseen, setUnseen] = useState(0);
+  const [divider, setDivider] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState<string | null>(null);
+  // Where my reading stopped when the chat was opened: the "New messages" line goes there.
+  const [readMark] = useState(() => {
+    const mine = chat.members.find((member) => member.id === me.id);
+    return mine ? (mine.last_read_at ?? "1970-01-01T00:00:00Z") : null;
+  });
   const bottom = useRef<HTMLDivElement | null>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
   const stick = useRef(true);
+  const focusTries = useRef(0);
 
   const markRead = useCallback(async () => {
     if (document.hidden) return;
@@ -885,13 +998,19 @@ function Thread({
         if (cancelled) return;
         setMessages(result.items);
         setHasMore(result.has_more);
+        if (readMark) {
+          const first = result.items.find(
+            (message) => message.sender.id !== me.id && new Date(message.created_at) > new Date(readMark),
+          );
+          setDivider(first?.id ?? null);
+        }
         void markRead();
       })
       .catch((reason) => onError(reason instanceof Error ? reason.message : "Could not load messages."));
     return () => {
       cancelled = true;
     };
-  }, [chat.id, markRead, onError]);
+  }, [chat.id, markRead, onError, readMark, me.id]);
 
   useEffect(
     () =>
@@ -912,7 +1031,10 @@ function Thread({
               delete next[message.sender.id];
               return next;
             });
-            if (message.sender.id !== me.id) void markRead();
+            if (message.sender.id !== me.id) {
+              if (!stick.current) setUnseen((count) => count + 1);
+              void markRead();
+            }
           }
         } else if (event.type === "chat.read") {
           const read = event.data as { user_id: string; last_read_at: string };
@@ -925,7 +1047,6 @@ function Thread({
     [chat.id, me.id, markRead],
   );
 
-  // Clear typing labels that have run out.
   useEffect(() => {
     const timer = window.setInterval(() => {
       setTyping((current) => {
@@ -937,7 +1058,6 @@ function Thread({
     return () => window.clearInterval(timer);
   }, []);
 
-  // Back on the tab: mark what arrived meanwhile as read.
   useEffect(() => {
     const onVisible = () => !document.hidden && void markRead();
     document.addEventListener("visibilitychange", onVisible);
@@ -945,10 +1065,10 @@ function Thread({
   }, [markRead]);
 
   useEffect(() => {
-    if (stick.current) bottom.current?.scrollIntoView({ block: "end" });
-  }, [messages, typing]);
+    if (stick.current && !focusId) bottom.current?.scrollIntoView({ block: "end" });
+  }, [messages, typing, focusId]);
 
-  async function older() {
+  const older = useCallback(async () => {
     const first = messages?.[0];
     if (!first) return;
     const box = scroller.current;
@@ -964,6 +1084,42 @@ function Thread({
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "Could not load older messages.");
     }
+  }, [messages, chat.id, onError]);
+
+  // From a search result: bring that message into view (loading older pages if needed).
+  useEffect(() => {
+    if (!focusId || !messages) return;
+    const timer = window.setTimeout(() => {
+      const element = document.getElementById(`chat-msg-${focusId}`);
+      if (element) {
+        stick.current = false;
+        element.scrollIntoView({ block: "center", behavior: "smooth" });
+        setHighlight(focusId);
+        window.setTimeout(() => setHighlight(null), 2500);
+        onFocused();
+      } else if (hasMore && focusTries.current < 6) {
+        focusTries.current += 1;
+        void older();
+      } else {
+        onFocused();
+      }
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [focusId, messages, hasMore, older, onFocused]);
+
+  async function react(message: ChatMessage, emoji: string) {
+    setReacting(null);
+    try {
+      const updated = await chatApi<ChatMessage>(`/messages/${message.id}/reactions`, jsonBody("POST", { emoji }));
+      setMessages((current) => (current ?? []).map((item) => (item.id === updated.id ? updated : item)));
+    } catch (reason) {
+      onError(reason instanceof Error ? reason.message : "Could not react.");
+    }
+  }
+
+  function addFiles(list: FileList | File[]) {
+    const picked = Array.from(list);
+    if (picked.length) setFiles((current) => [...current, ...picked].slice(0, 10));
   }
 
   const others = chat.members.filter((member) => member.id !== me.id);
@@ -973,8 +1129,10 @@ function Thread({
   const typingNames = Object.entries(typing)
     .filter(([id]) => id !== me.id)
     .map(([, value]) => value.name.split(" ")[0]);
+  const names = Object.fromEntries(chat.members.map((member) => [member.id, member.name]));
+  const shared = (messages ?? []).filter((message) => !message.deleted).flatMap((message) => message.attachments);
+  const onlineCount = chat.members.filter((member) => member.online).length;
 
-  // "Seen" on my latest message once everyone else has read up to it.
   const lastMine = [...(messages ?? [])].reverse().find((message) => message.sender.id === me.id && !message.deleted);
   const seenBy = lastMine
     ? others.filter((member) => {
@@ -985,208 +1143,402 @@ function Thread({
 
   let lastDay = "";
   return (
-    <div className="chat-thread-inner">
-      <header className="chat-thread-head">
-        <button type="button" className="chat-icon-button back" aria-label="Back to chats" onClick={onBack}>
-          <ArrowLeft />
-        </button>
-        {direct ? (
-          <Avatar person={direct} size={38} />
-        ) : (
-          <span className={`chat-avatar group ${chat.type.toLowerCase()}`} style={{ width: 38, height: 38 }}>
-            {chat.type === "CLIENT" ? <Contact /> : <UsersRound />}
-          </span>
-        )}
-        <div className="chat-thread-title">
-          <strong>{chat.title}</strong>
-          <small>
-            {direct
-              ? `${ROLE_LABELS[direct.role]} · ${STATUS_LABELS[direct.status]}`
-              : `${chat.type === "CLIENT" ? `Client room${chat.client_name ? ` · ${chat.client_name}` : ""} · ` : ""}${chat.members.length} people`}
-          </small>
-        </div>
-        {!direct && (
-          <div className="chat-faces" aria-label="People in this chat">
-            {chat.members.slice(0, 5).map((member) => (
-              <span
-                key={member.id}
-                title={`${member.name} · ${ROLE_LABELS[member.role]} · ${STATUS_LABELS[member.status]}`}
-              >
-                <Avatar person={member} size={28} />
-              </span>
-            ))}
-            {chat.members.length > 5 && <em>+{chat.members.length - 5}</em>}
+    <div
+      className={`chat-thread-inner${info ? " with-info" : ""}`}
+      onDragOver={(event) => {
+        if (Array.from(event.dataTransfer.types).includes("Files")) {
+          event.preventDefault();
+          setDragging(true);
+        }
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragging(false);
+        addFiles(event.dataTransfer.files);
+      }}
+    >
+      <div className="chat-thread-main">
+        <header className="chat-thread-head">
+          <button type="button" className="chat-icon-button back" aria-label="Back to chats" onClick={onBack}>
+            <ArrowLeft />
+          </button>
+          {direct ? (
+            <Avatar person={direct} size={38} />
+          ) : (
+            <span className={`chat-avatar group ${chat.type.toLowerCase()}`} style={{ width: 38, height: 38 }}>
+              {chat.type === "CLIENT" ? <Contact /> : <UsersRound />}
+            </span>
+          )}
+          <div className="chat-thread-title">
+            <strong>{chat.title}</strong>
+            <small>
+              {direct
+                ? `${ROLE_LABELS[direct.role]} · ${STATUS_LABELS[direct.status]}`
+                : `${chat.type === "CLIENT" ? `Client room${chat.client_name ? ` · ${chat.client_name}` : ""} · ` : ""}${chat.members.length} people${onlineCount ? ` · ${onlineCount} online` : ""}`}
+            </small>
           </div>
-        )}
-        {canManage && (
+          {!direct && (
+            <div className="chat-faces" aria-label="People in this chat">
+              {chat.members.slice(0, 5).map((member) => (
+                <span
+                  key={member.id}
+                  title={`${member.name} · ${ROLE_LABELS[member.role]} · ${STATUS_LABELS[member.status]}`}
+                >
+                  <Avatar person={member} size={28} />
+                </span>
+              ))}
+              {chat.members.length > 5 && <em>+{chat.members.length - 5}</em>}
+            </div>
+          )}
           <button
             type="button"
-            className="chat-icon-button"
-            aria-label="Room settings"
-            title="Name and people"
-            onClick={onEditPeople}
+            className={`chat-icon-button${info ? " active" : ""}`}
+            aria-label="Chat details"
+            aria-pressed={info}
+            title="People and shared files"
+            onClick={() => setInfo((value) => !value)}
           >
-            <Settings2 />
+            <Info />
           </button>
-        )}
-      </header>
+        </header>
 
-      <div
-        className="chat-messages"
-        ref={scroller}
-        onScroll={(event) => {
-          const box = event.currentTarget;
-          stick.current = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-        }}
-      >
-        {hasMore && (
-          <button type="button" className="chat-older" onClick={() => void older()}>
-            Load earlier messages
-          </button>
-        )}
-        {messages === null ? (
-          <div className="chat-empty">
-            <RefreshCw className="spin" /> Loading messages…
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="chat-empty">No messages yet. Say hello 👋</div>
-        ) : (
-          messages.map((message, index) => {
-            const day = dayLabel(message.created_at);
-            const showDay = day !== lastDay;
-            lastDay = day;
-            const mine = message.sender.id === me.id;
-            const previous = messages[index - 1];
-            const grouped =
-              !showDay &&
-              previous &&
-              previous.sender.id === message.sender.id &&
-              new Date(message.created_at).getTime() - new Date(previous.created_at).getTime() < 5 * 60_000;
-            return (
-              <div key={message.id}>
-                {showDay && (
-                  <div className="chat-day">
-                    <span>{day}</span>
-                  </div>
-                )}
-                <div className={`chat-message${mine ? " mine" : ""}${grouped ? " grouped" : ""}`}>
-                  {!mine && !grouped && <Avatar person={message.sender} size={30} />}
-                  <div className="chat-bubble-wrap">
-                    {!mine && !grouped && chat.type !== "DIRECT" && (
-                      <span className="chat-sender">
-                        {message.sender.name} <small>{ROLE_LABELS[message.sender.role]}</small>
-                      </span>
-                    )}
-                    <div className={`chat-bubble${message.deleted ? " deleted" : ""}`}>
-                      {message.reply_to && !message.deleted && (
-                        <div className="chat-quote">
-                          <strong>{message.reply_to.sender_name}</strong>
-                          <span>{message.reply_to.preview}</span>
+        <div
+          className="chat-messages"
+          ref={scroller}
+          onScroll={(event) => {
+            const box = event.currentTarget;
+            const near = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+            stick.current = near;
+            if (near !== atBottom) setAtBottom(near);
+            if (near && unseen) setUnseen(0);
+          }}
+        >
+          {hasMore && (
+            <button type="button" className="chat-older" onClick={() => void older()}>
+              Load earlier messages
+            </button>
+          )}
+          {messages === null ? (
+            <div className="chat-empty">
+              <RefreshCw className="spin" /> Loading messages…
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="chat-empty">No messages yet. Say hello 👋</div>
+          ) : (
+            messages.map((message, index) => {
+              const day = dayLabel(message.created_at);
+              const showDay = day !== lastDay;
+              lastDay = day;
+              const mine = message.sender.id === me.id;
+              const previous = messages[index - 1];
+              const grouped =
+                !showDay &&
+                message.id !== divider &&
+                previous &&
+                previous.sender.id === message.sender.id &&
+                new Date(message.created_at).getTime() - new Date(previous.created_at).getTime() < 5 * 60_000;
+              return (
+                <div key={message.id} id={`chat-msg-${message.id}`}>
+                  {showDay && (
+                    <div className="chat-day">
+                      <span>{day}</span>
+                    </div>
+                  )}
+                  {message.id === divider && (
+                    <div className="chat-new-line">
+                      <span>New messages</span>
+                    </div>
+                  )}
+                  <div
+                    className={`chat-message${mine ? " mine" : ""}${grouped ? " grouped" : ""}${highlight === message.id ? " highlight" : ""}`}
+                  >
+                    {!mine && !grouped && <Avatar person={message.sender} size={30} />}
+                    <div className="chat-bubble-wrap">
+                      {!mine && !grouped && chat.type !== "DIRECT" && (
+                        <span className="chat-sender">
+                          {message.sender.name} <small>{ROLE_LABELS[message.sender.role]}</small>
+                        </span>
+                      )}
+                      <div className={`chat-bubble${message.deleted ? " deleted" : ""}`}>
+                        {message.reply_to && !message.deleted && (
+                          <button
+                            type="button"
+                            className="chat-quote"
+                            onClick={() => {
+                              const element = document.getElementById(`chat-msg-${message.reply_to?.id}`);
+                              element?.scrollIntoView({ block: "center", behavior: "smooth" });
+                              if (message.reply_to) setHighlight(message.reply_to.id);
+                              window.setTimeout(() => setHighlight(null), 2000);
+                            }}
+                          >
+                            <strong>{message.reply_to.sender_name}</strong>
+                            <span>{message.reply_to.preview}</span>
+                          </button>
+                        )}
+                        {message.deleted ? (
+                          <em>This message was deleted</em>
+                        ) : (
+                          <>
+                            {message.body && <p>{message.body}</p>}
+                            {message.attachments.map((file) =>
+                              file.mime_type.startsWith("image/") ? (
+                                <a
+                                  key={file.id}
+                                  className="chat-image"
+                                  href={`/api/chat/attachments/${file.id}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={`/api/chat/attachments/${file.id}`} alt={file.file_name} loading="lazy" />
+                                </a>
+                              ) : (
+                                <a
+                                  key={file.id}
+                                  className="chat-file"
+                                  href={`/api/chat/attachments/${file.id}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <FileText />
+                                  <span>
+                                    <strong>{file.file_name}</strong>
+                                    <small>{fileSize(file.size_bytes)}</small>
+                                  </span>
+                                  <Download />
+                                </a>
+                              ),
+                            )}
+                          </>
+                        )}
+                        <span className="chat-meta">
+                          {message.edited && "edited · "}
+                          {clock(message.created_at)}
+                          {mine && message.id === lastMine?.id && (
+                            <span
+                              className={`chat-seen${seenBy.length === others.length && others.length > 0 ? " all" : ""}`}
+                              title={seenBy.length ? `Seen by ${seenBy.map((m) => m.name).join(", ")}` : "Sent"}
+                            >
+                              {seenBy.length ? <CheckCheck /> : <Check />}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      {message.reactions.length > 0 && (
+                        <div className="chat-reactions">
+                          {message.reactions.map((reaction) => {
+                            const minePick = reaction.user_ids.includes(me.id);
+                            return (
+                              <button
+                                key={reaction.emoji}
+                                type="button"
+                                className={minePick ? "mine" : undefined}
+                                aria-pressed={minePick}
+                                title={reaction.user_ids
+                                  .map((id) => (id === me.id ? "You" : (names[id] ?? "Someone")))
+                                  .join(", ")}
+                                onClick={() => void react(message, reaction.emoji)}
+                              >
+                                {reaction.emoji} <b>{reaction.user_ids.length}</b>
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
-                      {message.deleted ? (
-                        <em>This message was deleted</em>
-                      ) : (
-                        <>
-                          {message.body && <p>{message.body}</p>}
-                          {message.attachments.map((file) =>
-                            file.mime_type.startsWith("image/") ? (
-                              <a
-                                key={file.id}
-                                className="chat-image"
-                                href={`/api/chat/attachments/${file.id}`}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={`/api/chat/attachments/${file.id}`} alt={file.file_name} loading="lazy" />
-                              </a>
-                            ) : (
-                              <a
-                                key={file.id}
-                                className="chat-file"
-                                href={`/api/chat/attachments/${file.id}`}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <FileText />
-                                <span>
-                                  <strong>{file.file_name}</strong>
-                                  <small>{fileSize(file.size_bytes)}</small>
-                                </span>
-                                <Download />
-                              </a>
-                            ),
-                          )}
-                        </>
-                      )}
-                      <span className="chat-meta">
-                        {message.edited && "edited · "}
-                        {clock(message.created_at)}
-                        {mine && message.id === lastMine?.id && (
-                          <span
-                            className={`chat-seen${seenBy.length === others.length && others.length > 0 ? " all" : ""}`}
-                            title={seenBy.length ? `Seen by ${seenBy.map((m) => m.name).join(", ")}` : "Sent"}
+                      {!message.deleted && (
+                        <div className={`chat-actions${reacting === message.id ? " open" : ""}`}>
+                          <button
+                            type="button"
+                            aria-label="React"
+                            title="React"
+                            onClick={() => setReacting((current) => (current === message.id ? null : message.id))}
                           >
-                            {seenBy.length ? <CheckCheck /> : <Check />}
-                          </span>
-                        )}
-                      </span>
+                            <SmilePlus />
+                          </button>
+                          <button type="button" aria-label="Reply" title="Reply" onClick={() => setReply(message)}>
+                            <Reply />
+                          </button>
+                          {mine && (
+                            <button type="button" aria-label="Edit" title="Edit" onClick={() => setEditing(message)}>
+                              <Pencil />
+                            </button>
+                          )}
+                          {(mine || role === "ADMIN") && (
+                            <button
+                              type="button"
+                              aria-label="Delete"
+                              title="Delete"
+                              onClick={() => setRemoving(message)}
+                            >
+                              <Trash2 />
+                            </button>
+                          )}
+                          {reacting === message.id && (
+                            <div className="chat-react-picker" role="menu" aria-label="Reactions">
+                              {REACTIONS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => void react(message, emoji)}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {!message.deleted && (
-                      <div className="chat-actions">
-                        <button type="button" aria-label="Reply" title="Reply" onClick={() => setReply(message)}>
-                          <Reply />
-                        </button>
-                        {mine && (
-                          <button type="button" aria-label="Edit" title="Edit" onClick={() => setEditing(message)}>
-                            <Pencil />
-                          </button>
-                        )}
-                        {(mine || role === "ADMIN") && (
-                          <button type="button" aria-label="Delete" title="Delete" onClick={() => setRemoving(message)}>
-                            <Trash2 />
-                          </button>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })
+          )}
+          {lastMine && seenBy.length > 0 && chat.type !== "DIRECT" && (
+            <div className="chat-seen-line">Seen by {seenBy.map((member) => member.name.split(" ")[0]).join(", ")}</div>
+          )}
+          <div ref={bottom} />
+        </div>
+
+        {!atBottom && (
+          <button
+            type="button"
+            className="chat-jump"
+            onClick={() => {
+              stick.current = true;
+              setUnseen(0);
+              bottom.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+            }}
+          >
+            <ArrowDown /> {unseen ? `${unseen} new` : "Latest"}
+          </button>
         )}
-        {lastMine && seenBy.length > 0 && chat.type !== "DIRECT" && (
-          <div className="chat-seen-line">Seen by {seenBy.map((member) => member.name.split(" ")[0]).join(", ")}</div>
+
+        <div className="chat-typing" aria-live="polite">
+          {typingNames.length > 0 && (
+            <>
+              <span className="chat-typing-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+              {typingNames.join(", ")} {typingNames.length === 1 ? "is" : "are"} typing…
+            </>
+          )}
+        </div>
+
+        <Composer
+          chatId={chat.id}
+          reply={reply}
+          editing={editing}
+          files={files}
+          onFiles={addFiles}
+          onRemoveFile={(index) => setFiles((current) => current.filter((_, i) => i !== index))}
+          onCancel={() => {
+            setReply(null);
+            setEditing(null);
+          }}
+          onSent={(message) => {
+            stick.current = true;
+            setReply(null);
+            setEditing(null);
+            setFiles([]);
+            setMessages((current) => {
+              const list = current ?? [];
+              return list.some((item) => item.id === message.id)
+                ? list.map((item) => (item.id === message.id ? message : item))
+                : [...list, message];
+            });
+          }}
+          onError={onError}
+        />
+
+        {dragging && (
+          <div className="chat-drop" aria-hidden="true">
+            <ImagePlus />
+            Drop files to send
+          </div>
         )}
-        <div ref={bottom} />
       </div>
 
-      <div className="chat-typing" aria-live="polite">
-        {typingNames.length > 0 && `${typingNames.join(", ")} ${typingNames.length === 1 ? "is" : "are"} typing…`}
-      </div>
-
-      <Composer
-        chatId={chat.id}
-        reply={reply}
-        editing={editing}
-        onCancel={() => {
-          setReply(null);
-          setEditing(null);
-        }}
-        onSent={(message) => {
-          stick.current = true;
-          setReply(null);
-          setEditing(null);
-          setMessages((current) => {
-            const list = current ?? [];
-            return list.some((item) => item.id === message.id)
-              ? list.map((item) => (item.id === message.id ? message : item))
-              : [...list, message];
-          });
-        }}
-        onError={onError}
-      />
+      {info && (
+        <aside className="chat-info" aria-label="Chat details">
+          <header>
+            <strong>Details</strong>
+            <button
+              type="button"
+              className="chat-icon-button"
+              aria-label="Close details"
+              onClick={() => setInfo(false)}
+            >
+              <X />
+            </button>
+          </header>
+          <section>
+            <h3>People · {chat.members.length}</h3>
+            <ul className="chat-info-people">
+              {chat.members.map((member) => (
+                <li key={member.id}>
+                  <Avatar person={member} size={30} />
+                  <span>
+                    <strong>
+                      {member.name}
+                      {member.id === me.id ? " (you)" : ""}
+                    </strong>
+                    <small>
+                      {ROLE_LABELS[member.role]} · {STATUS_LABELS[member.status]}
+                    </small>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {canManage && (
+              <button type="button" className="chat-btn" onClick={onEditPeople}>
+                <Settings2 /> {chat.type === "CLIENT" ? "Room name and people" : "Group name and people"}
+              </button>
+            )}
+          </section>
+          <section>
+            <h3>Shared files · {shared.length}</h3>
+            {shared.length === 0 ? (
+              <p className="chat-info-empty">Photos and files sent here show up in this list.</p>
+            ) : (
+              <>
+                <div className="chat-info-images">
+                  {shared
+                    .filter((file) => file.mime_type.startsWith("image/"))
+                    .slice(-9)
+                    .map((file) => (
+                      <a key={file.id} href={`/api/chat/attachments/${file.id}`} target="_blank" rel="noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`/api/chat/attachments/${file.id}`} alt={file.file_name} loading="lazy" />
+                      </a>
+                    ))}
+                </div>
+                <ul className="chat-info-files">
+                  {shared
+                    .filter((file) => !file.mime_type.startsWith("image/"))
+                    .map((file) => (
+                      <li key={file.id}>
+                        <a href={`/api/chat/attachments/${file.id}`} target="_blank" rel="noreferrer">
+                          <FileText />
+                          <span>
+                            <strong>{file.file_name}</strong>
+                            <small>{fileSize(file.size_bytes)}</small>
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                </ul>
+              </>
+            )}
+          </section>
+        </aside>
+      )}
 
       <ConfirmationDialog
         open={removing !== null}
@@ -1211,10 +1563,32 @@ function Thread({
   );
 }
 
+function PendingFile({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const image = file.type.startsWith("image/");
+  const [url] = useState(() => (image ? URL.createObjectURL(file) : ""));
+  useEffect(() => () => (url ? URL.revokeObjectURL(url) : undefined), [url]);
+  return (
+    <li className={image ? "image" : undefined}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {image ? <img src={url} alt="" /> : <Paperclip />}
+      <span>
+        {file.name}
+        <small>{fileSize(file.size)}</small>
+      </span>
+      <button type="button" aria-label={`Remove ${file.name}`} onClick={onRemove}>
+        <X />
+      </button>
+    </li>
+  );
+}
+
 function Composer({
   chatId,
   reply,
   editing,
+  files,
+  onFiles,
+  onRemoveFile,
   onCancel,
   onSent,
   onError,
@@ -1222,12 +1596,14 @@ function Composer({
   chatId: string;
   reply: ChatMessage | null;
   editing: ChatMessage | null;
+  files: File[];
+  onFiles: (files: FileList | File[]) => void;
+  onRemoveFile: (index: number) => void;
   onCancel: () => void;
   onSent: (message: ChatMessage) => void;
   onError: (message: string) => void;
 }) {
   const [text, setText] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const lastTyping = useRef(0);
   const box = useRef<HTMLTextAreaElement | null>(null);
@@ -1267,7 +1643,6 @@ function Composer({
         onSent(await chatApi<ChatMessage>(`/conversations/${chatId}/messages`, { method: "POST", body: form }));
       }
       setText("");
-      setFiles([]);
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "Could not send the message.");
     } finally {
@@ -1301,30 +1676,20 @@ function Composer({
       {files.length > 0 && (
         <ul className="chat-pending-files">
           {files.map((file, index) => (
-            <li key={`${file.name}-${index}`}>
-              <Paperclip /> {file.name} <small>{fileSize(file.size)}</small>
-              <button
-                type="button"
-                aria-label={`Remove ${file.name}`}
-                onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}
-              >
-                <X />
-              </button>
-            </li>
+            <PendingFile key={`${file.name}-${file.size}-${index}`} file={file} onRemove={() => onRemoveFile(index)} />
           ))}
         </ul>
       )}
       <div className="chat-composer-row">
         {!editing && (
-          <label className="chat-icon-button" title="Attach files (up to 25 MB each)">
+          <label className="chat-icon-button" title="Attach files (up to 25 MB each); you can also drop or paste them">
             <Paperclip />
             <input
               type="file"
               multiple
               aria-label="Attach files"
               onChange={(event) => {
-                const picked = Array.from(event.target.files ?? []);
-                setFiles((current) => [...current, ...picked].slice(0, 10));
+                if (event.target.files) onFiles(event.target.files);
                 event.target.value = "";
               }}
             />
@@ -1338,6 +1703,12 @@ function Composer({
           placeholder="Write a message… (Enter to send, Shift+Enter for a new line)"
           aria-label="Message"
           onChange={(event) => typed(event.target.value)}
+          onPaste={(event) => {
+            if (!editing && event.clipboardData.files.length) {
+              event.preventDefault();
+              onFiles(event.clipboardData.files);
+            }
+          }}
           onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();

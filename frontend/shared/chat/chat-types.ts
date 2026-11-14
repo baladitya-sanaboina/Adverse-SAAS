@@ -36,6 +36,7 @@ export type ChatMessage = {
   body: string;
   reply_to: { id: string; sender_name: string; preview: string } | null;
   attachments: ChatAttachment[];
+  reactions: { emoji: string; user_ids: string[] }[];
   edited: boolean;
   deleted: boolean;
   created_at: string;
@@ -109,3 +110,5 @@ export async function chatApi<T>(path: string, init?: RequestInit): Promise<T> {
 export function jsonBody(method: string, body: unknown): RequestInit {
   return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
 }
+
+export const REACTIONS = ["👍", "❤️", "😂", "🎉", "✅", "👀", "🙏", "🔥"] as const;

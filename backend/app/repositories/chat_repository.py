@@ -450,6 +450,32 @@ class ChatRepository:
             connection.commit()
         return paths
 
+    def reactions(self, message_ids: list[UUID]) -> list[tuple[UUID, UUID, str]]:
+        """(message, user, emoji) for these messages, oldest first."""
+        if not message_ids:
+            return []
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT message_id, user_id, emoji FROM chat_reactions "
+                "WHERE message_id = ANY(%s) ORDER BY created_at",
+                (message_ids,),
+            )
+            return [(row[0], row[1], row[2]) for row in cursor.fetchall()]
+
+    def toggle_reaction(self, message_id: UUID, user_id: UUID, emoji: str) -> None:
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM chat_reactions WHERE message_id = %s AND user_id = %s AND emoji = %s",
+                (message_id, user_id, emoji),
+            )
+            if not cursor.rowcount:
+                cursor.execute(
+                    "INSERT INTO chat_reactions (id, message_id, user_id, emoji) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (uuid4(), message_id, user_id, emoji),
+                )
+            connection.commit()
+
     def search(
         self, company_id: UUID, user_id: UUID, admin: bool, text: str, limit: int
     ) -> list[MessageRow]:

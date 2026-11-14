@@ -299,47 +299,21 @@ export function NotificationBell() {
     unlockAudioOnce();
     const unsubscribe = subscribeRealtime((event) => {
       if (event.type === "notification") {
-        const item = event.data as unknown as AppNotification;
+        const item = event.data as unknown as AppNotification & { replaced?: boolean };
         setItems((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 8));
-        setUnread((count) => count + 1);
-        if (readPref(SOUND_KEY)) playChime();
+        // A chat notification that counts up ("3 new messages") is already in the unread count.
+        if (!item.replaced) setUnread((count) => count + 1);
         const away = document.hidden || !document.hasFocus();
+        // No alert for a chat that is open on screen; reading it clears the notification.
+        const openChat = (window as { __adverseActiveChat?: string }).__adverseActiveChat;
+        if (item.type === "chat.message" && !away && openChat && openChat === item.data?.conversation_id) return;
+        if (readPref(SOUND_KEY)) playChime();
         const onDesktop = away && readPref(DESKTOP_KEY) && showDesktop(item, () => go(item));
         if (!onDesktop) {
           setToasts((current) => [...current.slice(-2), item]);
           window.setTimeout(() => setToasts((current) => current.filter((entry) => entry.id !== item.id)), 6000);
         }
         window.dispatchEvent(new CustomEvent("adverse-notification", { detail: item }));
-      } else if (event.type === "chat.message") {
-        // Chat (Phase 14): chime and a toast or desktop alert, unless that chat is open on screen.
-        const data = event.data as {
-          own?: boolean;
-          conversation_id: string;
-          title?: string;
-          type?: string;
-          message: { id: string; body: string; sender: { name: string }; attachments: unknown[]; created_at: string };
-        };
-        if (data.own) return;
-        const open = (window as { __adverseActiveChat?: string }).__adverseActiveChat;
-        const away = document.hidden || !document.hasFocus();
-        if (open === data.conversation_id && !away) return;
-        const where = data.type === "DIRECT" ? "" : ` · ${data.title ?? ""}`;
-        const item = {
-          id: data.message.id,
-          type: "chat.message",
-          title: `${data.message.sender.name}${where}`,
-          body: data.message.body || (data.message.attachments.length ? "Sent a file" : ""),
-          link: `/chat?c=${data.conversation_id}`,
-          data: {},
-          read: false,
-          created_at: data.message.created_at,
-        } as unknown as AppNotification;
-        if (readPref(SOUND_KEY)) playChime();
-        const onDesktop = away && readPref(DESKTOP_KEY) && showDesktop(item, () => go(item));
-        if (!onDesktop) {
-          setToasts((current) => [...current.slice(-2), item]);
-          window.setTimeout(() => setToasts((current) => current.filter((entry) => entry.id !== item.id)), 6000);
-        }
       } else if (event.type === "notification.read") {
         const count = Number((event.data as { unread_count?: number }).unread_count ?? 0);
         setUnread(count);

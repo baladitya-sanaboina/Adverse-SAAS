@@ -65,6 +65,11 @@ class ChatReplyRef(BaseModel):
     preview: str
 
 
+class ChatReactionResponse(BaseModel):
+    emoji: str
+    user_ids: list[UUID]
+
+
 class ChatMessageResponse(BaseModel):
     id: UUID
     conversation_id: UUID
@@ -72,6 +77,7 @@ class ChatMessageResponse(BaseModel):
     body: str
     reply_to: ChatReplyRef | None
     attachments: list[ChatAttachmentResponse]
+    reactions: list[ChatReactionResponse] = []
     edited: bool
     deleted: bool
     created_at: datetime
@@ -148,3 +154,19 @@ class StatusRequest(BaseModel):
 class PeopleResponse(BaseModel):
     me: ChatPerson
     people: list[ChatPerson]
+
+
+REACTIONS = ("👍", "❤️", "😂", "🎉", "✅", "👀", "🙏", "🔥")
+
+
+class ReactionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    emoji: str
+
+    @field_validator("emoji")
+    @classmethod
+    def known(cls, value: str) -> str:
+        if value not in REACTIONS:
+            raise ValueError("Pick one of the offered reactions.")
+        return value
