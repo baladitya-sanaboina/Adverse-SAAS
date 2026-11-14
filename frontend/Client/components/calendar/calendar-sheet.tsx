@@ -1,0 +1,383 @@
+// Copy of frontend/shared/calendar/calendar-sheet.tsx (the Client app has no shared alias). Keep in sync.
+"use client";
+
+/*
+ * Content calendar as a sheet (owner request 2026-11-14): the same rows and columns as the
+ * owner's "Path Of Aditya Content Calendar" Google Sheet. Cells edit in place. Progress columns
+ * are plain tick boxes (the sheet's colours only marked status, so they are not copied); a no-post
+ * day is one "No Reel" row; Script and PDF's LINKS hold links the client types in.
+ * Columns: Date | Week | Day | Video Topic | Reference Video | Recorded | Script | Edited |
+ * Insta-Posted | Youtube-Post | Script | PDF's LINKS (+ Client and Ticket for the Admin).
+ */
+import Link from "next/link";
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { MoreHorizontal } from "lucide-react";
+import type { CalendarEntry } from "./content-calendar";
+
+type Role = "ADMIN" | "CLIENT";
+type Tick = "recorded" | "script_ready" | "edited" | "posted_instagram" | "posted_youtube";
+type TextField = "title" | "reference_url" | "script_url" | "pdf_url" | "notes" | "entry_date";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MERGED = 9; // Video Topic … PDF's LINKS, one cell on a "No Reel" row
+
+function parse(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function sheetDate(value: string): string {
+  const [year, month, day] = value.split("-");
+  return `${day}-${month}-${year}`;
+}
+
+/** Sunday that starts the week of a date (the sheet counts weeks Sunday to Saturday). */
+function weekStart(value: string): number {
+  const day = parse(value);
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate() - day.getDay()).getTime();
+}
+
+function EditCell({
+  value,
+  display,
+  type = "text",
+  placeholder,
+  disabled,
+  className,
+  onSave,
+}: {
+  value: string;
+  display?: ReactNode;
+  type?: "text" | "date" | "url";
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
+  onSave: (value: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  function finish(save: boolean) {
+    setEditing(false);
+    if (save && draft.trim() !== value.trim()) onSave(draft.trim());
+    else setDraft(value);
+  }
+
+  if (editing) {
+    return (
+      <td className={`sheet-cell editing ${className ?? ""}`}>
+        <input
+          autoFocus
+          type={type}
+          value={draft}
+          placeholder={placeholder}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => finish(true)}
+          onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+            if (event.key === "Enter") finish(true);
+            if (event.key === "Escape") finish(false);
+          }}
+        />
+      </td>
+    );
+  }
+  return (
+    <td className={`sheet-cell ${className ?? ""}`}>
+      <button
+        type="button"
+        className="sheet-cell-button"
+        disabled={disabled}
+        title={disabled ? "Your agency is working on this video" : "Click to edit"}
+        onClick={() => {
+          setDraft(value);
+          setEditing(true);
+        }}
+      >
+        {display ?? (value || <span className="sheet-placeholder">{placeholder}</span>)}
+      </button>
+    </td>
+  );
+}
+
+function LinkCell({ value, label, onSave }: { value: string; label: string; onSave: (value: string) => void }) {
+  return (
+    <EditCell
+      value={value}
+      type="url"
+      placeholder="Add link"
+      className="link"
+      display={
+        value ? (
+          <a
+            href={value}
+            target="_blank"
+            rel="noreferrer noopener"
+            aria-label={label}
+            onClick={(event) => event.stopPropagation()}
+          >
+            Link
+          </a>
+        ) : undefined
+      }
+      onSave={onSave}
+    />
+  );
+}
+
+function TickCell({
+  on,
+  label,
+  title,
+  disabled,
+  onToggle,
+}: {
+  on: boolean;
+  label: string;
+  title?: string;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <td className="sheet-check">
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={on}
+        aria-label={label}
+        title={title ?? label}
+        disabled={disabled}
+        className={on ? "on" : undefined}
+        onClick={onToggle}
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M3.5 8.5l3 3 6-7" />
+        </svg>
+      </button>
+    </td>
+  );
+}
+
+export function CalendarSheet({
+  role,
+  title,
+  entries,
+  showClient,
+  canAdd,
+  onToggle,
+  onEdit,
+  onAdd,
+  onOpen,
+}: {
+  role: Role;
+  title: string;
+  entries: CalendarEntry[];
+  showClient: boolean;
+  canAdd: boolean;
+  onToggle: (entry: CalendarEntry, key: Tick) => void;
+  onEdit: (entry: CalendarEntry, field: TextField, value: string) => void;
+  onAdd: (values: { entry_date: string; title: string; no_post: boolean }) => Promise<boolean>;
+  onOpen: (entry: CalendarEntry) => void;
+}) {
+  const rows = useMemo(
+    () =>
+      [...entries].sort((a, b) => a.entry_date.localeCompare(b.entry_date) || a.created_at.localeCompare(b.created_at)),
+    [entries],
+  );
+  // Week-1 is the week of each client's first entry.
+  const firstWeek = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of rows) if (!map.has(entry.client.id)) map.set(entry.client.id, weekStart(entry.entry_date));
+    return map;
+  }, [rows]);
+  const lastDate = rows[rows.length - 1]?.entry_date;
+  const nextDate = (() => {
+    const start = lastDate ? parse(lastDate) : new Date();
+    const next = lastDate ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1) : start;
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+  })();
+  const [draft, setDraft] = useState({ entry_date: "", title: "", no_post: false });
+  const [adding, setAdding] = useState(false);
+  const columns = 12 + (showClient ? 1 : 0) + (role === "ADMIN" ? 1 : 0) + 1;
+
+  async function add() {
+    const values = { ...draft, entry_date: draft.entry_date || nextDate, title: draft.title.trim() };
+    if (!values.no_post && !values.title) return;
+    setAdding(true);
+    if (await onAdd({ ...values, title: values.title || "No post" }))
+      setDraft({ entry_date: "", title: "", no_post: false });
+    setAdding(false);
+  }
+
+  return (
+    <div className="sheet-wrap">
+      <table className="sheet">
+        <thead>
+          <tr>
+            <th className="sheet-title" colSpan={columns}>
+              <span className="sheet-title-text">{title}</span>
+            </th>
+          </tr>
+          <tr className="sheet-head">
+            <th>Date</th>
+            <th>Week</th>
+            <th>Day</th>
+            {showClient && <th>Client</th>}
+            <th className="topic">Video Topic</th>
+            <th>Reference Video</th>
+            <th>Recorded</th>
+            <th>Script</th>
+            <th>Edited</th>
+            <th>Insta-Posted</th>
+            <th>Youtube-Post</th>
+            <th>Script</th>
+            <th>PDF&apos;s LINKS</th>
+            {role === "ADMIN" && <th>Ticket</th>}
+            <th aria-label="Open" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((entry) => {
+            const week =
+              Math.floor((weekStart(entry.entry_date) - (firstWeek.get(entry.client.id) ?? 0)) / (7 * DAY_MS)) + 1;
+            const day = parse(entry.entry_date).toLocaleDateString("en-IN", { weekday: "long" });
+            const started = entry.task != null && !["PENDING", "ASSIGNED", "CANCELLED"].includes(entry.task.status);
+            const locked = role === "CLIENT" && started;
+            return (
+              <tr key={entry.id} className={entry.no_post ? "no-reel" : undefined}>
+                <EditCell
+                  value={entry.entry_date}
+                  display={sheetDate(entry.entry_date)}
+                  type="date"
+                  disabled={locked}
+                  className="date"
+                  onSave={(value) => value && onEdit(entry, "entry_date", value)}
+                />
+                <td className="sheet-cell muted">Week-{week}</td>
+                <td className="sheet-cell muted">{day}</td>
+                {showClient && <td className="sheet-cell muted">{entry.client.name}</td>}
+                {entry.no_post ? (
+                  <td className="sheet-no-reel" colSpan={MERGED}>
+                    No Reel
+                  </td>
+                ) : (
+                  <>
+                    <EditCell
+                      value={entry.title}
+                      disabled={locked}
+                      className="topic"
+                      onSave={(value) => value && onEdit(entry, "title", value)}
+                    />
+                    <LinkCell
+                      value={entry.reference_url}
+                      label={`Reference video: ${entry.title}`}
+                      onSave={(value) => onEdit(entry, "reference_url", value)}
+                    />
+                    <TickCell
+                      on={entry.recorded}
+                      label={`Recorded: ${entry.title}`}
+                      onToggle={() => onToggle(entry, "recorded")}
+                    />
+                    <TickCell
+                      on={entry.script_ready}
+                      label={`Script ready: ${entry.title}`}
+                      onToggle={() => onToggle(entry, "script_ready")}
+                    />
+                    <TickCell
+                      on={entry.edited}
+                      label={`Edited: ${entry.title}`}
+                      title={role === "CLIENT" ? "Ticks itself when your video is approved" : "Edited"}
+                      disabled={role === "CLIENT"}
+                      onToggle={() => onToggle(entry, "edited")}
+                    />
+                    <TickCell
+                      on={entry.posted_instagram}
+                      label={`Posted on Instagram: ${entry.title}`}
+                      onToggle={() => onToggle(entry, "posted_instagram")}
+                    />
+                    <TickCell
+                      on={entry.posted_youtube}
+                      label={`Posted on YouTube: ${entry.title}`}
+                      onToggle={() => onToggle(entry, "posted_youtube")}
+                    />
+                    <LinkCell
+                      value={entry.script_url}
+                      label={`Script: ${entry.title}`}
+                      onSave={(value) => onEdit(entry, "script_url", value)}
+                    />
+                    <LinkCell
+                      value={entry.pdf_url}
+                      label={`PDF: ${entry.title}`}
+                      onSave={(value) => onEdit(entry, "pdf_url", value)}
+                    />
+                  </>
+                )}
+                {role === "ADMIN" && (
+                  <td className="sheet-cell ticket">
+                    {entry.task ? (
+                      <Link
+                        href={`/tasks?task=${entry.task.id}`}
+                        className={`sheet-ticket ${entry.task.status.toLowerCase()}`}
+                      >
+                        {entry.task.code}
+                      </Link>
+                    ) : entry.no_post ? null : (
+                      <span className="sheet-placeholder">No ticket</span>
+                    )}
+                  </td>
+                )}
+                <td className="sheet-cell more">
+                  <button type="button" aria-label={`Open ${entry.title}`} onClick={() => onOpen(entry)}>
+                    <MoreHorizontal />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+          {canAdd && (
+            <tr className="sheet-new">
+              <td className="sheet-cell date">
+                <input
+                  type="date"
+                  aria-label="New row date"
+                  value={draft.entry_date || nextDate}
+                  onChange={(event) => setDraft((current) => ({ ...current, entry_date: event.target.value }))}
+                />
+              </td>
+              <td className="sheet-cell muted" colSpan={2 + (showClient ? 1 : 0)}>
+                <label className="sheet-no-reel-toggle">
+                  <input
+                    type="checkbox"
+                    checked={draft.no_post}
+                    onChange={(event) => setDraft((current) => ({ ...current, no_post: event.target.checked }))}
+                  />
+                  No Reel
+                </label>
+              </td>
+              <td className="sheet-cell topic" colSpan={MERGED}>
+                <input
+                  aria-label="New video topic"
+                  placeholder={
+                    draft.no_post
+                      ? "No reel on this day: press Enter"
+                      : "Type a video topic and press Enter (add links with the … button)"
+                  }
+                  value={draft.title}
+                  disabled={adding}
+                  onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                  onKeyDown={(event) => event.key === "Enter" && void add()}
+                />
+              </td>
+              {role === "ADMIN" && <td className="sheet-cell" />}
+              <td className="sheet-cell more">
+                <button type="button" aria-label="Add row" disabled={adding} onClick={() => void add()}>
+                  +
+                </button>
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      {rows.length === 0 && <p className="sheet-empty">No rows yet. Type the first video topic in the row above.</p>}
+    </div>
+  );
+}

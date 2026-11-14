@@ -324,6 +324,23 @@ class TaskRepository:
             row = cursor.fetchone()
             return Decimal(row[0]) if row else None
 
+    def calendar_service_choices(self, company_id: UUID, client_id: UUID) -> list[UUID]:
+        """Active services, the ones this client has used most first (Phase 13 tickets)."""
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT s.id FROM company_services s
+                WHERE s.company_id = %(company)s AND s.status::text = 'ACTIVE'
+                ORDER BY (
+                  SELECT COUNT(*) FROM tasks t
+                  WHERE t.company_id = %(company)s AND t.client_id = %(client)s
+                    AND t.service_id = s.id
+                ) DESC, s.name
+                """,
+                {"company": company_id, "client": client_id},
+            )
+            return [row[0] for row in cursor.fetchall()]
+
     def budget_totals(
         self, company_id: UUID, client_id: UUID, exclude_task_id: UUID | None = None
     ) -> BudgetTotals:

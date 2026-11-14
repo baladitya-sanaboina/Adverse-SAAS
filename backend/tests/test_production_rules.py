@@ -7,6 +7,7 @@ from app.services.production_rules import (
     allowed_transitions,
     budget_cycles,
     budget_position,
+    calendar_priority,
     can_transition,
     daily_summary,
     is_overdue,
@@ -359,3 +360,14 @@ class ManagerWalletTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CalendarPriorityTest(unittest.TestCase):
+    def test_sooner_dates_rank_higher(self) -> None:
+        today = date(2026, 11, 14)
+        self.assertEqual(calendar_priority(date(2026, 11, 14), today), "URGENT")
+        self.assertEqual(calendar_priority(date(2026, 11, 16), today), "URGENT")
+        self.assertEqual(calendar_priority(date(2026, 11, 19), today), "HIGH")
+        self.assertEqual(calendar_priority(date(2026, 11, 28), today), "MEDIUM")
+        self.assertEqual(calendar_priority(date(2026, 12, 20), today), "LOW")
+        self.assertEqual(calendar_priority(date(2026, 11, 1), today), "URGENT")  # past due

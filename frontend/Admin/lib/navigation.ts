@@ -1,4 +1,5 @@
 import {
+  CalendarDays,
   ChartColumn,
   ChartNoAxesCombined,
   ClipboardList,
@@ -23,6 +24,7 @@ export const navigationItems = [
   },
   { href: "/clients", label: "Clients", icon: Contact, module: "CLIENTS", feature: "CLIENT_MANAGEMENT" },
   { href: "/tasks", label: "Tasks", icon: ClipboardList, module: "TASKS", feature: "TASKS" },
+  { href: "/calendar", label: "Content Calendar", icon: CalendarDays, module: "TASKS", feature: "TASKS" },
   // Admin-only money pages: gated by role permission, not by the subscription plan.
   { href: "/payments", label: "Payments", icon: Wallet, module: "FINANCE" },
   { href: "/sheets", label: "Payment Sheets", icon: NotebookTabs, module: "FINANCE" },

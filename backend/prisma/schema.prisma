@@ -110,6 +110,7 @@ model Company {
   taskComments        TaskComment[]
   notifications       Notification[]
   invoices            Invoice[]
+  calendarEntries     ContentCalendarEntry[]
   taskFiles           TaskFile[]
   clientBudgetEntries ClientBudgetEntry[]
   clientPayments      ClientPayment[]
@@ -508,6 +509,7 @@ model User {
   taskComments            TaskComment[]            @relation("TaskCommentAuthor")
   notifications           Notification[]           @relation("NotificationRecipient")
   invoicesCreated         Invoice[]                @relation("InvoiceCreator")
+  calendarEntriesCreated  ContentCalendarEntry[]   @relation("CalendarEntryCreator")
   taskFilesUploaded       TaskFile[]               @relation("TaskFileUploader")
   clientBudgetEntries     ClientBudgetEntry[]      @relation("ClientBudgetActor")
   clientPaymentsRecorded  ClientPayment[]          @relation("ClientPaymentActor")
@@ -573,23 +575,23 @@ model EmployeeAudit {
 }
 
 model Client {
-  id                    String              @id @default(uuid()) @db.Uuid
-  companyId             String              @map("company_id") @db.Uuid
-  userId                String?             @unique @map("user_id") @db.Uuid
+  id                    String                 @id @default(uuid()) @db.Uuid
+  companyId             String                 @map("company_id") @db.Uuid
+  userId                String?                @unique @map("user_id") @db.Uuid
   name                  String
   code                  String
   email                 String?
   phone                 String?
   website               String?
-  address               String              @default("")
-  city                  String              @default("")
-  state                 String              @default("")
-  country               String              @default("")
-  status                OrganizationStatus  @default(ACTIVE)
-  createdAt             DateTime            @default(now()) @map("created_at")
-  updatedAt             DateTime            @updatedAt @map("updated_at")
-  company               Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  accountUser           User?               @relation("ClientAccountUser", fields: [userId], references: [id], onDelete: SetNull)
+  address               String                 @default("")
+  city                  String                 @default("")
+  state                 String                 @default("")
+  country               String                 @default("")
+  status                OrganizationStatus     @default(ACTIVE)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accountUser           User?                  @relation("ClientAccountUser", fields: [userId], references: [id], onDelete: SetNull)
   contacts              ClientContact[]
   notes                 ClientNote[]
   feedback              ClientFeedback[]
@@ -599,6 +601,7 @@ model Client {
   budgetEntries         ClientBudgetEntry[]
   payments              ClientPayment[]
   invoices              Invoice[]
+  calendarEntries       ContentCalendarEntry[]
   leads                 Lead[]
   opportunities         Opportunity[]
 
@@ -1177,47 +1180,48 @@ model InvitationAudit {
 // ---------------------------------------------------------------------------
 
 model Task {
-  id                 String              @id @default(uuid()) @db.Uuid
-  companyId          String              @map("company_id") @db.Uuid
+  id                 String                 @id @default(uuid()) @db.Uuid
+  companyId          String                 @map("company_id") @db.Uuid
   number             Int
-  clientId           String              @map("client_id") @db.Uuid
-  serviceId          String              @map("service_id") @db.Uuid
+  clientId           String                 @map("client_id") @db.Uuid
+  serviceId          String                 @map("service_id") @db.Uuid
   title              String
-  description        String              @default("")
-  priority           TaskPriority        @default(MEDIUM)
-  status             TaskStatus          @default(PENDING)
-  assigneeUserId     String?             @map("assignee_user_id") @db.Uuid
-  assigneeType       TaskAssigneeType?   @map("assignee_type")
-  monitorUserId      String?             @map("monitor_user_id") @db.Uuid
-  dueDate            DateTime?           @map("due_date") @db.Date
-  currency           String              @default("INR") @db.VarChar(3)
-  clientPricingModel ServicePricingModel @map("client_pricing_model")
-  clientPriceDefault Decimal?            @map("client_price_default") @db.Decimal(12, 2)
-  clientPriceFinal   Decimal             @map("client_price_final") @db.Decimal(12, 2)
-  clientPriceReason  String              @default("") @map("client_price_reason")
-  commissionDefault  Decimal?            @map("commission_default") @db.Decimal(12, 2)
-  commissionFinal    Decimal?            @map("commission_final") @db.Decimal(12, 2)
-  commissionReason   String              @default("") @map("commission_reason")
-  createdById        String              @map("created_by_id") @db.Uuid
-  assignedAt         DateTime?           @map("assigned_at")
-  startedAt          DateTime?           @map("started_at")
-  submittedAt        DateTime?           @map("submitted_at")
-  approvedAt         DateTime?           @map("approved_at")
-  completedAt        DateTime?           @map("completed_at")
-  cancelledAt        DateTime?           @map("cancelled_at")
-  createdAt          DateTime            @default(now()) @map("created_at")
-  updatedAt          DateTime            @updatedAt @map("updated_at")
-  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  client             Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  service            CompanyService      @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  assignee           User?               @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
-  monitor            User?               @relation("TaskMonitor", fields: [monitorUserId], references: [id], onDelete: SetNull)
-  createdBy          User                @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  description        String                 @default("")
+  priority           TaskPriority           @default(MEDIUM)
+  status             TaskStatus             @default(PENDING)
+  assigneeUserId     String?                @map("assignee_user_id") @db.Uuid
+  assigneeType       TaskAssigneeType?      @map("assignee_type")
+  monitorUserId      String?                @map("monitor_user_id") @db.Uuid
+  dueDate            DateTime?              @map("due_date") @db.Date
+  currency           String                 @default("INR") @db.VarChar(3)
+  clientPricingModel ServicePricingModel    @map("client_pricing_model")
+  clientPriceDefault Decimal?               @map("client_price_default") @db.Decimal(12, 2)
+  clientPriceFinal   Decimal                @map("client_price_final") @db.Decimal(12, 2)
+  clientPriceReason  String                 @default("") @map("client_price_reason")
+  commissionDefault  Decimal?               @map("commission_default") @db.Decimal(12, 2)
+  commissionFinal    Decimal?               @map("commission_final") @db.Decimal(12, 2)
+  commissionReason   String                 @default("") @map("commission_reason")
+  createdById        String                 @map("created_by_id") @db.Uuid
+  assignedAt         DateTime?              @map("assigned_at")
+  startedAt          DateTime?              @map("started_at")
+  submittedAt        DateTime?              @map("submitted_at")
+  approvedAt         DateTime?              @map("approved_at")
+  completedAt        DateTime?              @map("completed_at")
+  cancelledAt        DateTime?              @map("cancelled_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+  company            Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client             Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  service            CompanyService         @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  assignee           User?                  @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  monitor            User?                  @relation("TaskMonitor", fields: [monitorUserId], references: [id], onDelete: SetNull)
+  createdBy          User                   @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
   statusHistory      TaskStatusHistory[]
   priceChanges       TaskPriceChange[]
   comments           TaskComment[]
   files              TaskFile[]
   invoiceLines       InvoiceLine[]
+  calendarEntries    ContentCalendarEntry[]
 
   @@unique([companyId, number])
   @@index([companyId, status, dueDate])
@@ -1480,4 +1484,42 @@ model InvoiceLine {
 
   @@index([invoiceId, position])
   @@map("invoice_lines")
+}
+
+/// Content calendar (Phase 13, owner decision 2026-11-14): the client plans what to shoot and
+/// post on which day. The client ticks Recorded, Script, Instagram and YouTube; "Edited" is true
+/// when the linked task is approved (or the admin ticks it by hand). The admin can change anything.
+model ContentCalendarEntry {
+  id                String   @id @default(uuid()) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  clientId          String   @map("client_id") @db.Uuid
+  entryDate         DateTime @map("entry_date") @db.Date
+  title             String   @db.VarChar(200)
+  referenceUrl      String   @default("") @map("reference_url") @db.VarChar(1000)
+  scriptUrl         String   @default("") @map("script_url") @db.VarChar(1000)
+  pdfUrl            String   @default("") @map("pdf_url") @db.VarChar(1000)
+  notes             String   @default("") @db.VarChar(2000)
+  noPost            Boolean  @default(false) @map("no_post")
+  recorded          Boolean  @default(false)
+  scriptReady       Boolean  @default(false) @map("script_ready")
+  postedInstagram   Boolean  @default(false) @map("posted_instagram")
+  postedYoutube     Boolean  @default(false) @map("posted_youtube")
+  editedManual      Boolean  @default(false) @map("edited_manual")
+  scriptFileName    String?  @map("script_file_name") @db.VarChar(200)
+  scriptStoragePath String?  @map("script_storage_path") @db.VarChar(500)
+  scriptMimeType    String?  @map("script_mime_type") @db.VarChar(200)
+  scriptSizeBytes   BigInt?  @map("script_size_bytes")
+  taskId            String?  @map("task_id") @db.Uuid
+  createdById       String   @map("created_by_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  task              Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdBy         User     @relation("CalendarEntryCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, entryDate])
+  @@index([companyId, clientId, entryDate])
+  @@index([taskId])
+  @@map("content_calendar_entries")
 }

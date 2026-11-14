@@ -521,3 +521,19 @@ def wallet_timeline(
             )
         )
     return result
+
+
+# -- content calendar (Phase 13) -------------------------------------------------------------
+
+
+def calendar_priority(due: date, today: date) -> Literal["LOW", "MEDIUM", "HIGH", "URGENT"]:
+    """Priority of a ticket made from a calendar entry, from how soon the post date is
+    (owner request 2026-11-14: tickets ranked by date)."""
+    days = (due - today).days
+    if days <= 2:
+        return "URGENT"
+    if days <= 5:
+        return "HIGH"
+    if days <= 14:
+        return "MEDIUM"
+    return "LOW"

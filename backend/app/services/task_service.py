@@ -61,6 +61,7 @@ from app.services.production_rules import (
     TaskActorRole,
     allowed_transitions,
     budget_position,
+    calendar_priority,
     can_transition,
     is_billable,
     is_overdue,
@@ -779,6 +780,104 @@ class TaskService:
             self.repository.mutate_task(company_id, task_id, actor_id, plan)  # type: ignore[arg-type]
         except TaskNotFound as error:
             raise _not_found() from error
+
+    # -- content calendar tickets (Phase 13, owner request 2026-11-14) ----------------------
+
+    def create_calendar_ticket(
+        self,
+        company_id: UUID,
+        client_id: UUID,
+        actor_id: UUID,
+        title: str,
+        description: str,
+        due_date: date,
+    ) -> UUID | None:
+        """Turn a calendar entry into a Pending, unassigned task. The service is the one the
+        client uses most that has a client rate; priority comes from how soon the date is.
+        Returns None when no service has a rate for this client (the admin creates it by hand)."""
+        client = self.repository.get_client(company_id, client_id)
+        if client is None or client.status != "ACTIVE":
+            return None
+        for service_id in self.repository.calendar_service_choices(company_id, client_id):
+            service = self.repository.get_service(company_id, service_id)
+            rate = self.repository.current_rate(company_id, "CLIENT", client_id, service_id)
+            if service is None or rate is None:
+                continue
+            task_id = self.repository.create_task(
+                company_id,
+                actor_id,
+                {
+                    "client_id": client_id,
+                    "service_id": service_id,
+                    "title": title[:200],
+                    "description": description[:5000],
+                    "priority": calendar_priority(due_date, self._today(company_id)),
+                    "status": "PENDING",
+                    "assignee_user_id": None,
+                    "assignee_type": None,
+                    "monitor_user_id": None,
+                    "due_date": due_date,
+                    "client_pricing_model": service.client_pricing_model,
+                    "client_price_default": rate,
+                    "client_price_final": money(rate),
+                    "client_price_reason": "",
+                    "commission_default": None,
+                    "commission_final": None,
+                    "commission_reason": "",
+                    "assigned_at": None,
+                },
+                [],
+            )
+            return task_id
+        return None
+
+    def sync_calendar_ticket(
+        self, company_id: UUID, task_id: UUID, actor_id: UUID, title: str, due_date: date
+    ) -> None:
+        """Keep the ticket's title, date and priority in step with the entry until work starts."""
+        today = self._today(company_id)
+
+        def plan(row: TaskRow) -> TaskMutation:
+            if row.status not in ("PENDING", "ASSIGNED"):
+                return TaskMutation()
+            return TaskMutation(
+                updates={
+                    "title": title[:200],
+                    "due_date": due_date,
+                    "priority": calendar_priority(due_date, today),
+                }
+            )
+
+        self._mutate(company_id, task_id, actor_id, plan)
+
+    def cancel_calendar_ticket(self, company_id: UUID, task_id: UUID, actor_id: UUID) -> None:
+        """Cancel the ticket of a removed entry. Only while nobody has it yet."""
+
+        def plan(row: TaskRow) -> TaskMutation:
+            if row.status == "CANCELLED":
+                return TaskMutation()
+            if row.status != "PENDING":
+                raise AuthenticationError(
+                    409,
+                    "ENTRY_IN_PRODUCTION",
+                    "Your agency has started this video, so it cannot be removed.",
+                )
+            updates: dict[str, object] = {"status": "CANCELLED"}
+            updates.update(
+                status_timestamp_updates(
+                    "CANCELLED",
+                    datetime.now(timezone.utc),
+                    assigned_at=row.assigned_at,
+                    started_at=row.started_at,
+                    approved_at=row.approved_at,
+                )
+            )
+            return TaskMutation(
+                updates=updates,
+                status_change=(row.status, "CANCELLED", "Removed from the client's calendar."),
+            )
+
+        self._mutate(company_id, task_id, actor_id, plan)
 
     # -- worker workspace ------------------------------------------------------------------
 

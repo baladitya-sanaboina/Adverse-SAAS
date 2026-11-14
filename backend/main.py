@@ -12,6 +12,8 @@ from starlette.responses import JSONResponse
 
 from app.api.audit_logs import router as audit_logs_router
 from app.api.authentication import router as authentication_router
+from app.api.calendar import client_router as client_calendar_router
+from app.api.calendar import router as calendar_router
 from app.api.clients import router as clients_router
 from app.api.company_dashboard import router as company_dashboard_router
 from app.api.company_integrations import router as company_integrations_router
@@ -285,6 +287,8 @@ app.include_router(realtime_router, prefix=settings.api_prefix)
 app.include_router(invoices_router, prefix=settings.api_prefix)
 app.include_router(client_billing_router, prefix=settings.api_prefix)
 app.include_router(finance_router, prefix=settings.api_prefix)
+app.include_router(calendar_router, prefix=settings.api_prefix)
+app.include_router(client_calendar_router, prefix=settings.api_prefix)
 app.include_router(crm_router, prefix=settings.api_prefix)
 app.include_router(audit_logs_router, prefix=settings.api_prefix)
 app.mount("/storage", StaticFiles(directory="storage", check_dir=False), name="storage")

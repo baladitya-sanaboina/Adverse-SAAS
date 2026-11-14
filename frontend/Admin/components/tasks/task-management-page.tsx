@@ -66,7 +66,13 @@ import "@/styles/production.css";
 
 type ChoiceItem = { id: string; name: string; code?: string; status?: string };
 /** What the slide-in panel shows; null when it is closed and only the board is visible. */
-type Sheet = { mode: "create" } | { mode: "edit"; task: AdminTaskDetail } | { mode: "detail"; id: string } | null;
+/** Values passed in from a content calendar entry ("Create task", Phase 13). */
+type Prefill = { client_id: string; title: string; description: string; due_date: string; calendar_entry_id: string };
+type Sheet =
+  | { mode: "create"; prefill?: Prefill }
+  | { mode: "edit"; task: AdminTaskDetail }
+  | { mode: "detail"; id: string }
+  | null;
 
 const BILLING_STATUSES: TaskStatus[] = ["APPROVED", "COMPLETED", "CANCELLED"];
 const CLOSED_STATUSES: TaskStatus[] = ["APPROVED", "COMPLETED", "CANCELLED"];
@@ -104,8 +110,7 @@ function peopleOptions(people: AssigneeOption[], empty: string, filter?: (person
 /** Keep ?task=<id> / ?mode=create in the address bar so an open task can be shared or reloaded. */
 function syncUrl(sheet: Sheet) {
   const url = new URL(window.location.href);
-  url.searchParams.delete("task");
-  url.searchParams.delete("mode");
+  for (const key of ["task", "mode", "title", "description", "due", "calendar"]) url.searchParams.delete(key);
   if (sheet?.mode === "detail") url.searchParams.set("task", sheet.id);
   else if (sheet?.mode === "create") url.searchParams.set("mode", "create");
   window.history.replaceState(null, "", `${url.pathname}${url.search}`);
@@ -135,7 +140,21 @@ export function TaskManagementPage() {
       const params = new URLSearchParams(window.location.search);
       const taskId = params.get("task");
       const statusFilter = params.get("status");
-      if (params.get("mode") === "create") setSheet({ mode: "create" });
+      const calendar = params.get("calendar");
+      if (params.get("mode") === "create")
+        setSheet({
+          mode: "create",
+          prefill:
+            calendar && TASK_ID.test(calendar)
+              ? {
+                  client_id: params.get("client") ?? "",
+                  title: (params.get("title") ?? "").slice(0, 200),
+                  description: (params.get("description") ?? "").slice(0, 5000),
+                  due_date: /^\d{4}-\d{2}-\d{2}$/.test(params.get("due") ?? "") ? (params.get("due") ?? "") : "",
+                  calendar_entry_id: calendar,
+                }
+              : undefined,
+        });
       else if (taskId && TASK_ID.test(taskId)) setSheet({ mode: "detail", id: taskId });
       if (statusFilter && statusFilter in STATUS_LABELS) setStatus(statusFilter);
       // ?client=<id>: from the client details page, show only that client's tasks.
@@ -345,6 +364,7 @@ export function TaskManagementPage() {
               <TaskForm
                 key={sheet.mode === "edit" ? sheet.task.id : "new"}
                 task={sheet.mode === "edit" ? sheet.task : null}
+                prefill={sheet.mode === "create" ? sheet.prefill : undefined}
                 clients={clients}
                 services={services}
                 people={people}
@@ -574,6 +594,7 @@ type FormValues = {
 
 function TaskForm({
   task,
+  prefill,
   clients,
   services,
   people,
@@ -582,6 +603,7 @@ function TaskForm({
   onSaved,
 }: {
   task: AdminTaskDetail | null;
+  prefill?: Prefill;
   clients: ChoiceItem[];
   services: ChoiceItem[];
   people: AssigneeOption[];
@@ -591,12 +613,12 @@ function TaskForm({
 }) {
   const editing = Boolean(task);
   const [values, setValues] = useState<FormValues>({
-    client_id: task?.client.id ?? "",
+    client_id: task?.client.id ?? prefill?.client_id ?? "",
     service_id: task?.service.id ?? "",
-    title: task?.title ?? "",
-    description: task?.description ?? "",
+    title: task?.title ?? prefill?.title ?? "",
+    description: task?.description ?? prefill?.description ?? "",
     priority: task?.priority ?? "MEDIUM",
-    due_date: task?.due_date ?? "",
+    due_date: task?.due_date ?? prefill?.due_date ?? "",
     assignee_user_id: "",
     monitor_user_id: "",
     client_price: "",
@@ -724,7 +746,20 @@ function TaskForm({
         },
       });
       const warning = result.budget.exceeds_with_new_task ? ` ${result.budget.message}` : "";
-      onSaved(result.task.id, `Task ${result.task.code} created.${warning}`);
+      let linked = "";
+      if (prefill?.calendar_entry_id) {
+        // Link the new task to the calendar entry it came from, so Edited ticks on approval.
+        try {
+          await api(`/api/company/calendar/${prefill.calendar_entry_id}/task`, {
+            method: "PUT",
+            json: { task_id: result.task.id },
+          });
+          linked = " Linked to the calendar entry.";
+        } catch {
+          linked = " It could not be linked to the calendar entry; link it from the calendar.";
+        }
+      }
+      onSaved(result.task.id, `Task ${result.task.code} created.${linked}${warning}`);
     } catch (requestError) {
       setError(errorText(requestError, "Unable to save the task."));
     } finally {
