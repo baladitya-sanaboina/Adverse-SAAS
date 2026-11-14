@@ -74,6 +74,16 @@ type AdminDashboard = {
     percent_used: number;
     over: boolean;
   }[];
+  client_payments: {
+    client: { id: string; name: string; code: string };
+    billed: string;
+    received: string;
+    due: string;
+    percent_paid: number;
+    last_payment_on: string | null;
+    unpaid_invoices: number;
+    overdue_invoices: number;
+  }[];
 };
 
 const PERIODS: { value: ReportPeriod; label: string }[] = [
@@ -287,6 +297,7 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
       </section>
 
       <BudgetPanel data={data} />
+      <ClientPaymentsPanel data={data} />
     </div>
   );
 }
@@ -653,6 +664,71 @@ function BudgetPanel({ data }: { data: AdminDashboard }) {
                   <small>
                     {money(row.used, data.currency)} of {money(row.total, data.currency)}
                     {Number(row.committed) > 0 ? ` · ${money(row.committed, data.currency)} in progress` : ""}
+                  </small>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/* ------------------------------------------------------------------ client payments */
+
+function ClientPaymentsPanel({ data }: { data: AdminDashboard }) {
+  const money = usePrivateMoney(formatMoney);
+  const rows = data.client_payments;
+  const totalDue = rows.reduce((sum, row) => sum + Number(row.due), 0);
+  return (
+    <article className="company-dashboard-panel production-dash-panel production-dash-budgets">
+      <PanelHead
+        eyebrow="CLIENT PAYMENTS"
+        title={totalDue > 0 ? `${money(totalDue, data.currency)} to collect` : "All clients paid up"}
+        aside={
+          <Link href="/payments" className="production-dash-link">
+            Record payment
+          </Link>
+        }
+      />
+      <div className="production-dash-panel-body">
+        {rows.length === 0 ? (
+          <p className="production-dash-empty">
+            <Wallet aria-hidden="true" />
+            Nothing billed yet. Approved work shows up here.
+          </p>
+        ) : (
+          <ul className="production-dash-meters">
+            {rows.map((row) => {
+              const due = Number(row.due) > 0;
+              const late = row.overdue_invoices > 0;
+              return (
+                <li key={row.client.id}>
+                  <div>
+                    <strong>{row.client.name}</strong>
+                    <span className={late ? "over" : due ? undefined : "paid"}>
+                      {due ? `${money(row.due, data.currency)} due` : "Paid up"}
+                    </span>
+                  </div>
+                  <span
+                    className={`meter${due ? (late ? " over" : "") : " paid"}`}
+                    role="meter"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(row.percent_paid)}
+                    aria-label={`${row.client.name} paid`}
+                  >
+                    <i style={{ width: `${Math.min(row.percent_paid, 100)}%` }} />
+                  </span>
+                  <small>
+                    Paid {money(row.received, data.currency)} of {money(row.billed, data.currency)}
+                    {row.last_payment_on ? ` · last on ${formatDate(row.last_payment_on)}` : " · no payment yet"}
+                    {late
+                      ? ` · ${row.overdue_invoices} ${row.overdue_invoices === 1 ? "invoice" : "invoices"} overdue`
+                      : row.unpaid_invoices > 0
+                        ? ` · ${row.unpaid_invoices} ${row.unpaid_invoices === 1 ? "invoice" : "invoices"} sent`
+                        : ""}
                   </small>
                 </li>
               );

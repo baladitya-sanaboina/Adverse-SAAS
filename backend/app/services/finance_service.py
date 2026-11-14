@@ -43,6 +43,7 @@ from app.schemas.production import (
     CommissionTaskLine,
     DashboardAttentionTask,
     DashboardBudgetWatch,
+    DashboardClientPayment,
     DashboardMoney,
     DashboardTeamLoad,
     DashboardTrendPoint,
@@ -1036,7 +1037,27 @@ class FinanceService:
         )
 
         budgets = []
+        client_payments = []
         for row in self.repository.client_balances(company_id, tz, None, None):
+            billed = money(row.billed_all_time)
+            received = money(row.received_all_time)
+            if billed > 0 or received > 0:
+                client_payments.append(
+                    DashboardClientPayment(
+                        client=NamedRef(
+                            id=row.client_id, name=row.client_name, code=row.client_code
+                        ),
+                        billed=billed,
+                        received=received,
+                        due=max(billed - received, ZERO),
+                        percent_paid=(
+                            min(float(received / billed * 100), 100.0) if billed > 0 else 100.0
+                        ),
+                        last_payment_on=row.last_payment_on,
+                        unpaid_invoices=row.unpaid_invoices,
+                        overdue_invoices=row.overdue_invoices,
+                    )
+                )
             total = money(row.budget_total)
             if total <= 0:
                 continue
@@ -1092,6 +1113,10 @@ class FinanceService:
             ],
             team=team[:8],
             budgets=budgets[:6],
+            # Most money owed first; clients who are paid up go last.
+            client_payments=sorted(
+                client_payments, key=lambda item: (-item.due, -item.overdue_invoices)
+            )[:6],
         )
 
 

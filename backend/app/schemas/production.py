@@ -869,6 +869,19 @@ class DashboardBudgetWatch(BaseModel):
     over: bool
 
 
+class DashboardClientPayment(BaseModel):
+    """How much a client has paid against the work billed to them (all time)."""
+
+    client: NamedRef
+    billed: Money
+    received: Money
+    due: Money
+    percent_paid: float
+    last_payment_on: date | None
+    unpaid_invoices: int
+    overdue_invoices: int
+
+
 class AdminDashboardResponse(BaseModel):
     """Admin home: money, trend, work, team and budgets in one call (Admin only)."""
 
@@ -884,6 +897,7 @@ class AdminDashboardResponse(BaseModel):
     attention: list[DashboardAttentionTask]
     team: list[DashboardTeamLoad]
     budgets: list[DashboardBudgetWatch]
+    client_payments: list[DashboardClientPayment]
 
 
 ManagerEarningsResponse.model_rebuild()

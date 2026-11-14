@@ -1344,6 +1344,24 @@
   background: #e0707e;
 }
 
+/* Client payments: fully paid clients in the app's success green. */
+.production-dash-meters li > div > span.paid {
+  color: #287150;
+  font-weight: 700;
+}
+
+.production-dash-meters .meter.paid i {
+  background: #287150;
+}
+
+.dark .production-dash-meters li > div > span.paid {
+  color: #86d3a9;
+}
+
+.dark .production-dash-meters .meter.paid i {
+  background: #86d3a9;
+}
+
 .production-dash-meters small {
   color: var(--muted);
   font-size: 0.6rem;

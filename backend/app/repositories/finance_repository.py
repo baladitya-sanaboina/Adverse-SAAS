@@ -158,6 +158,9 @@ class ClientBalanceRow:
     billed_all_time: Decimal
     received_all_time: Decimal
     budget_total: Decimal
+    last_payment_on: date | None = None
+    unpaid_invoices: int = 0
+    overdue_invoices: int = 0
 
 
 @dataclass(frozen=True)
@@ -849,7 +852,8 @@ class FinanceRepository:
                   COALESCE(work.total, 0), COALESCE(work.completed, 0), COALESCE(work.open, 0),
                   COALESCE(work.billed_range, 0), COALESCE(paid.received_range, 0),
                   COALESCE(work.billed_all, 0), COALESCE(paid.received_all, 0),
-                  COALESCE(budget.total, 0)
+                  COALESCE(budget.total, 0),
+                  paid.last_on, COALESCE(bills.unpaid, 0), COALESCE(bills.overdue, 0)
                 FROM clients c
                 LEFT JOIN LATERAL (
                   SELECT
@@ -864,9 +868,15 @@ class FinanceRepository:
                 ) work ON TRUE
                 LEFT JOIN LATERAL (
                   SELECT SUM(p.amount) FILTER (WHERE {received_in_range}) AS received_range,
-                    SUM(p.amount) AS received_all
+                    SUM(p.amount) AS received_all, MAX(p.received_on) AS last_on
                   FROM client_payments p WHERE p.client_id = c.id
                 ) paid ON TRUE
+                LEFT JOIN LATERAL (
+                  SELECT COUNT(*) AS unpaid,
+                    COUNT(*) FILTER (
+                      WHERE i.due_date < (now() AT TIME ZONE %(tz)s)::date) AS overdue
+                  FROM invoices i WHERE i.client_id = c.id AND i.status = 'SENT'
+                ) bills ON TRUE
                 LEFT JOIN LATERAL (
                   SELECT SUM(b.amount) AS total FROM client_budget_entries b
                   WHERE b.client_id = c.id
@@ -889,6 +899,9 @@ class FinanceRepository:
                     Decimal(row[8]),
                     Decimal(row[9]),
                     Decimal(row[10]),
+                    row[11],
+                    int(row[12]),
+                    int(row[13]),
                 )
                 for row in cursor.fetchall()
             ]
