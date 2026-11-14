@@ -263,14 +263,14 @@
   box-shadow: 0 12px 28px #18a87930 !important;
 }
 .interactive-auth.dark .remember-row {
-  color: #91a0b4 !important;
+  color: #9F9FA1 !important;
 }
 .interactive-auth.dark .remember-row > i {
-  border-color: #42516a;
+  border-color: #424244;
 }
 .interactive-auth.dark .auth-cursor path {
   fill: #f3f6fb;
-  stroke: #09101e;
+  stroke: #09090B;
 }
 @keyframes authBlueDrop {
   from {
@@ -414,20 +414,20 @@
   width: 17px;
 }
 .interactive-auth.dark .account-disabled-card {
-  border-color: #344054;
-  background: #151c29;
+  border-color: #303032;
+  background: #111113;
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
 }
 .interactive-auth.dark .account-disabled-icon {
   color: #f08ab4;
   border-color: #65344c;
-  background: #2c1924;
+  background: #131315;
 }
 .interactive-auth.dark .account-disabled-card h1 {
   color: #f3f5f8;
 }
 .interactive-auth.dark .account-disabled-card p {
-  color: #aeb7c5;
+  color: #B6B6B8;
 }
 @media (max-width: 560px) {
   .account-disabled-page {
@@ -536,7 +536,7 @@
   width: 17px;
 }
 .interactive-auth.dark.account-disabled-page {
-  background: #0d1320;
+  background: #0B0B0D;
 }
 .interactive-auth.dark .account-restricted-label {
   color: #A9D8FF;
@@ -549,7 +549,7 @@
   color: #A9D8FF;
 }
 .interactive-auth.dark .account-restricted-content > p {
-  color: #94A3B8;
+  color: #A2A2A4;
 }
 .interactive-auth.dark .account-restricted-animation {
   background-color: transparent;
@@ -680,36 +680,36 @@
   background: #0876ED;
 }
 .interactive-auth.dark.account-disabled-page {
-  background: #0d1320;
+  background: #0B0B0D;
 }
 .interactive-auth.dark.account-disabled-page::before {
   border-color: rgba(164, 132, 201, 0.15);
 }
 .interactive-auth.dark .account-disabled-card {
-  border-color: #343044;
-  background: #171d29;
+  border-color: #242426;
+  background: #121214;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
 }
 .interactive-auth.dark .account-disabled-icon {
   color: #AAD9FF;
-  border-color: #59466e;
-  background: #251d30;
+  border-color: #3F3F41;
+  background: #151517;
 }
 .interactive-auth.dark .account-disabled-card h1 {
   color: #F2F8FF;
 }
 .interactive-auth.dark .account-disabled-card > p {
-  color: #aaa3b1;
+  color: #A6A6A8;
 }
 .interactive-auth.dark .account-disabled-guidance {
-  border-color: #373142;
-  background: #1d222f;
+  border-color: #252527;
+  background: #161618;
 }
 .interactive-auth.dark .account-disabled-guidance strong {
   color: #eee9f3;
 }
 .interactive-auth.dark .account-disabled-guidance span {
-  color: #aaa3b1;
+  color: #A6A6A8;
 }
 @media (max-width: 560px) {
   .account-disabled-page {
@@ -752,7 +752,7 @@
   display: none;
 }
 .interactive-auth.dark.account-disabled-page {
-  background: #0d1320;
+  background: #0B0B0D;
 }
 @media (max-width: 560px) {
   .interactive-auth.account-disabled-page {

@@ -17,7 +17,8 @@ import {
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { loadCompanyDashboard } from "@/lib/company-dashboard/client";
 import type { CompanyDashboard } from "@/lib/company-dashboard/types";
-import { STATUS_LABELS, api, errorText, formatDate, money, query } from "@/lib/production/client";
+import { MoneyPrivacy, PrivacyToggle, useMoneyPrivacy, usePrivateMoney } from "@loopless-shared/production/privacy";
+import { STATUS_LABELS, api, errorText, formatDate, money as formatMoney, query } from "@/lib/production/client";
 import type { ReportPeriod, TaskStatus } from "@/lib/production/types";
 import "@/styles/production.css";
 
@@ -176,61 +177,66 @@ export function DashboardPage() {
   );
 
   return (
-    <div className="dash-content production-dashboard">
-      <header className="production-dash-header">
-        <div>
-          <h1>
-            {greeting()}
-            {firstName ? `, ${firstName}` : ""}
-          </h1>
-          <p>
-            {todayText}
-            {company ? ` · ${company.company.name}` : ""}
-          </p>
-        </div>
-        <div className="production-dash-actions">
-          <LooplessSelect
-            value={period}
-            onValueChange={(value) => setPeriod(value as ReportPeriod)}
-            ariaLabel="Dashboard period"
-            options={PERIODS}
-          />
-          <Link href="/payments" className="management-secondary-action">
-            <Wallet /> Record payment
-          </Link>
-          <Link href="/tasks?mode=create" className="management-primary-action">
-            <Plus /> Create task
-          </Link>
-        </div>
-      </header>
+    <MoneyPrivacy>
+      <div className="dash-content production-dashboard">
+        <header className="production-dash-header">
+          <div>
+            <h1>
+              {greeting()}
+              {firstName ? `, ${firstName}` : ""}
+            </h1>
+            <p>
+              {todayText}
+              {company ? ` · ${company.company.name}` : ""}
+            </p>
+          </div>
+          <div className="production-dash-actions">
+            <PrivacyToggle />
+            <LooplessSelect
+              value={period}
+              onValueChange={(value) => setPeriod(value as ReportPeriod)}
+              ariaLabel="Dashboard period"
+              options={PERIODS}
+            />
+            <Link href="/payments" className="management-secondary-action">
+              <Wallet /> Record payment
+            </Link>
+            <Link href="/tasks?mode=create" className="management-primary-action">
+              <Plus /> Create task
+            </Link>
+          </div>
+        </header>
 
-      {error ? (
-        <div className="organization-state">
-          <h3>{error}</h3>
-          <button type="button" onClick={() => void load()}>
-            Retry
-          </button>
-        </div>
-      ) : !data ? (
-        <div className="company-dashboard-loading" aria-busy="true" aria-label="Loading dashboard">
-          <div className="company-dashboard-loading__cards">
-            {[1, 2, 3, 4].map((item) => (
-              <i key={item} />
-            ))}
+        {error ? (
+          <div className="organization-state">
+            <h3>{error}</h3>
+            <button type="button" onClick={() => void load()}>
+              Retry
+            </button>
           </div>
-          <div className="company-dashboard-loading__panels">
-            <i />
-            <i />
+        ) : !data ? (
+          <div className="company-dashboard-loading" aria-busy="true" aria-label="Loading dashboard">
+            <div className="company-dashboard-loading__cards">
+              {[1, 2, 3, 4].map((item) => (
+                <i key={item} />
+              ))}
+            </div>
+            <div className="company-dashboard-loading__panels">
+              <i />
+              <i />
+            </div>
           </div>
-        </div>
-      ) : (
-        <DashboardBody data={data} refreshing={loading} />
-      )}
-    </div>
+        ) : (
+          <DashboardBody data={data} refreshing={loading} />
+        )}
+      </div>
+    </MoneyPrivacy>
   );
 }
 
 function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing: boolean }) {
+  const money = usePrivateMoney(formatMoney);
+  const { hidden } = useMoneyPrivacy();
   const { currency, money: m } = data;
   const change = m.revenue_change_pct;
   const marginNegative = Number(m.gross_margin) < 0;
@@ -244,7 +250,7 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
           ) : (
             <span className={`production-dash-delta ${change >= 0 ? "up" : "down"}`}>
               {change >= 0 ? <TrendingUp aria-hidden="true" /> : <TrendingDown aria-hidden="true" />}
-              {change >= 0 ? "Up" : "Down"} {Math.abs(change).toFixed(0)}% vs previous period
+              {change >= 0 ? "Up" : "Down"} {hidden ? "••" : Math.abs(change).toFixed(0)}% vs previous period
             </span>
           )}
         </Tile>
@@ -257,7 +263,9 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
           icon={<TrendingUp />}
           tone={marginNegative ? "negative" : undefined}
         >
-          {m.margin_pct === null ? "No revenue in this period" : `${m.margin_pct.toFixed(0)}% of revenue`}
+          {m.margin_pct === null
+            ? "No revenue in this period"
+            : `${hidden ? "••" : m.margin_pct.toFixed(0)}% of revenue`}
         </Tile>
         <Tile title="Pending from clients" value={money(m.pending_client_payments, currency)} icon={<Wallet />}>
           To your team: {money(m.pending_team_payments, currency)}
@@ -282,6 +290,8 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
 /* ------------------------------------------------------------------ revenue vs cost */
 
 function TrendPanel({ trend, currency }: { trend: Trend[]; currency: string }) {
+  const money = usePrivateMoney(formatMoney);
+  const axisMoney = usePrivateMoney(compact);
   const [hover, setHover] = useState<number | null>(null);
   const [asTable, setAsTable] = useState(false);
   // Draw at the real pixel width so axis text stays 10px on phones instead of being scaled down.
@@ -391,7 +401,7 @@ function TrendPanel({ trend, currency }: { trend: Trend[]; currency: string }) {
                 <g key={tick}>
                   <line className="grid" x1={pad.left} x2={width - pad.right} y1={y(tick)} y2={y(tick)} />
                   <text className="axis" x={pad.left - 8} y={y(tick) + 3} textAnchor="end">
-                    {compact(tick, currency)}
+                    {axisMoney(tick, currency)}
                   </text>
                 </g>
               ))}
@@ -542,6 +552,7 @@ function AttentionPanel({ data }: { data: AdminDashboard }) {
 /* ------------------------------------------------------------------ team workload */
 
 function TeamPanel({ data }: { data: AdminDashboard }) {
+  const money = usePrivateMoney(formatMoney);
   const max = Math.max(...data.team.map((row) => row.open_tasks), 1);
   return (
     <article className="company-dashboard-panel production-dash-panel">
@@ -594,6 +605,7 @@ function TeamPanel({ data }: { data: AdminDashboard }) {
 /* ------------------------------------------------------------------ budgets */
 
 function BudgetPanel({ data }: { data: AdminDashboard }) {
+  const money = usePrivateMoney(formatMoney);
   return (
     <article className="company-dashboard-panel production-dash-panel production-dash-budgets">
       <PanelHead

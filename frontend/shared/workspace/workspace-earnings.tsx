@@ -7,7 +7,16 @@ import { CalendarDays, ClipboardList, History } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Panel, TableSkeleton } from "../production/production-ui";
-import { STATUS_LABELS, api, errorText, formatDate, formatMonth, methodLabel, money } from "../production/client";
+import {
+  STATUS_LABELS,
+  api,
+  errorText,
+  formatDate,
+  formatMonth,
+  methodLabel,
+  money as formatMoneyText,
+} from "../production/client";
+import { MoneyPrivacy, PrivacyToggle, usePrivateMoney } from "../production/privacy";
 import type { EmployeeSalary, ManagerEarnings } from "../production/types";
 import type { WorkspaceDashboard } from "./types";
 import "../styles/organization.css";
@@ -45,6 +54,15 @@ function Failed({ error, onRetry }: { error: string; onRetry: () => void }) {
 
 /** Manager's own commission: earned on approval, minus payouts received. */
 export function ManagerEarningsPage() {
+  return (
+    <MoneyPrivacy>
+      <ManagerEarningsPageContent />
+    </MoneyPrivacy>
+  );
+}
+
+function ManagerEarningsPageContent() {
+  const money = usePrivateMoney(formatMoneyText);
   const { data, error, load } = useLoad<ManagerEarnings>("/api/workspace/earnings/commission");
   const currency = data?.currency ?? "INR";
   return (
@@ -52,6 +70,7 @@ export function ManagerEarningsPage() {
       <DashboardHero
         title=""
         highlight="My Earnings"
+        action={<PrivacyToggle className="" />}
         description="Your commission from approved tasks and the payouts you have received."
         compact
       />
@@ -147,6 +166,15 @@ export function ManagerEarningsPage() {
 
 /** Employee's own salary: due by month, paid and pending. */
 export function EmployeeSalaryPage() {
+  return (
+    <MoneyPrivacy>
+      <EmployeeSalaryPageContent />
+    </MoneyPrivacy>
+  );
+}
+
+function EmployeeSalaryPageContent() {
+  const money = usePrivateMoney(formatMoneyText);
   const { data, error, load } = useLoad<EmployeeSalary>("/api/workspace/earnings/salary");
   const currency = data?.currency ?? "INR";
   return (
@@ -154,6 +182,7 @@ export function EmployeeSalaryPage() {
       <DashboardHero
         title=""
         highlight="My Salary"
+        action={<PrivacyToggle className="" />}
         description="Your monthly salary, what has been paid and what is still pending."
         compact
       />
@@ -250,6 +279,7 @@ export function EmployeeSalaryPage() {
  * stat cards and panels; only the values and lists are live.
  */
 export function WorkspaceDashboardBody() {
+  const money = formatMoneyText;
   const router = useRouter();
   const { data, error, load } = useLoad<WorkspaceDashboard>("/api/workspace/dashboard");
   if (error) {

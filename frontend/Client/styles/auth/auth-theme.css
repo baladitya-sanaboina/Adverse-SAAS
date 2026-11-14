@@ -20,40 +20,40 @@
 .interactive-auth.dark {
   background:
     radial-gradient(circle at 14% 18%, #16275b 0, transparent 28%),
-    radial-gradient(circle at 90% 82%, #321451 0, transparent 25%),
-    #050a18;
+    radial-gradient(circle at 90% 82%, #171719 0, transparent 25%),
+    #060608;
 }
 
 .interactive-auth.dark .interactive-card {
-  background: #0d1628;
-  border-color: #26344c;
+  background: #0D0D0F;
+  border-color: #242426;
   box-shadow: 0 38px 100px #0009;
 }
 
 .interactive-auth.dark .character-pane {
-  background: linear-gradient(150deg, #17213a, #0b1325);
+  background: linear-gradient(150deg, #151517, #0B0B0D);
   color: #f6f8fc;
 }
 
 .interactive-auth.dark .interactive-form { color: #f6f8fc; }
 .interactive-auth.dark .interactive-form > p,
-.interactive-auth.dark .guest-copy { color: #8f9db3; }
+.interactive-auth.dark .guest-copy { color: #9C9C9E; }
 .interactive-auth.dark .auth-switch,
 .interactive-auth.dark .interactive-form input {
-  background: #121d31;
-  border-color: #2b3951;
+  background: #121214;
+  border-color: #29292B;
   color: #eef3fb;
 }
-.interactive-auth.dark .auth-switch button { color: #8e9db3; }
+.interactive-auth.dark .auth-switch button { color: #9C9C9E; }
 .interactive-auth.dark .auth-switch button.active {
-  background: #21304a;
+  background: #212123;
   color: #fff;
   box-shadow: 0 5px 20px #0004;
 }
 .interactive-auth.dark .auth-exit,
 .interactive-auth.dark .auth-theme {
-  background: #101a2d;
-  border-color: #293650;
+  background: #101012;
+  border-color: #272729;
   color: #dfe7f4;
 }
 

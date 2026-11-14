@@ -87,9 +87,9 @@
 .dark .management-toolbar .management-back:focus-visible,
 .dark .management-secondary-action:hover,
 .dark .management-secondary-action:focus-visible {
-  border-color: #42516A;
+  border-color: #424244;
   color: #A7D7FF;
-  background: #17213A;
+  background: #151517;
 }
 .management-editor {
   overflow: hidden;

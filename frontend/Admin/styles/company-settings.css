@@ -64,7 +64,7 @@
 }
 .dark .company-settings-tabs button.active {
   color: #A1D3FF;
-  background: #17213A;
+  background: #151517;
 }
 .company-settings-tabs button > i {
   width: 32px;
@@ -85,7 +85,7 @@
   box-shadow: 0 5px 14px rgba(73, 51, 96, 0.09);
 }
 .dark .company-settings-tabs button.active > i {
-  background: #1b1622;
+  background: #0E0E10;
 }
 .company-settings-tabs button > span {
   min-width: 0;
@@ -254,8 +254,8 @@
   background: #F7FBFF;
 }
 .dark .settings-asset > div {
-  border-color: #4b3d59;
-  background: #211a28;
+  border-color: #333335;
+  background: #121214;
 }
 .settings-asset > div img {
   max-width: 76px;
@@ -391,7 +391,7 @@
   color: #0876ED;
 }
 .dark .working-days button.active {
-  background: #17213A;
+  background: #151517;
   color: #A1D3FF;
 }
 .company-settings-panel footer {
@@ -607,9 +607,9 @@
   line-height: 1.55;
 }
 .dark .branding-coming-soon > span {
-  border-color: #59466e;
+  border-color: #3F3F41;
   color: #c7b0de;
-  background: #2a2135;
+  background: #18181A;
 }
 .branding-reset-row button {
   min-height: 32px;
@@ -1102,10 +1102,10 @@
   color: #A1D3FF;
 }
 .dark .workflow-icon {
-  background: #17213A;
+  background: #151517;
 }
 .dark .day38-toggle input:checked + i {
-  background: #a986c8;
+  background: #949496;
 }
 .spin {
   animation: day38-spin 0.8s linear infinite;

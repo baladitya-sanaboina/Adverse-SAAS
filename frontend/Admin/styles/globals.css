@@ -30,15 +30,15 @@
 }
 
 :root.dark {
-  --background: #0A1423;
-  --surface: #121D31;
-  --surface-muted: #16202E;
-  --foreground: #F6FAFF;
-  --muted: #94A3B8;
-  --border: #26344C;
-  --primary: #7CC3FF;
-  --primary-hover: #3D9BF5;
-  --primary-foreground: #160d29;
+  --background: #0A0A0B;
+  --surface: #121214;
+  --surface-muted: #17171A;
+  --foreground: #F5F5F7;
+  --muted: #8E8E93;
+  --border: #232327;
+  --primary: #4DA3FF;
+  --primary-hover: #0876ED;
+  --primary-foreground: #FFFFFF;
   --danger: #f87171;
 }
 

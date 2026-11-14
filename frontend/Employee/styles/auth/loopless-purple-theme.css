@@ -55,37 +55,37 @@
 
 :is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) {
   background:
-    radial-gradient(circle at 14% 18%, #10213D 0, transparent 29%),
+    radial-gradient(circle at 14% 18%, #151517 0, transparent 29%),
     radial-gradient(circle at 90% 82%, #16275B 0, transparent 27%),
-    #07111F;
+    #09090B;
 }
 
 :is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .interactive-card {
-  background: #101827;
-  border: 1px solid #26344C;
+  background: #0E0E10;
+  border: 1px solid #242426;
   box-shadow: 0 38px 100px rgba(0, 0, 0, 0.62);
 }
 
 :is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .character-pane {
-  background: linear-gradient(150deg, #17213A, #100c17);
+  background: linear-gradient(150deg, #151517, #08080A);
 }
 
 :is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-switch,
 :is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .interactive-form input {
-  background: #17213A;
-  border-color: #344054;
+  background: #151517;
+  border-color: #303032;
   color: #F6FAFF;
 }
 
 :is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-switch button.active {
-  background: #21304A;
+  background: #212123;
   color: #A7D7FF;
 }
 
 :is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-theme,
 :is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-exit {
-  background: #121D31;
-  border-color: #344054;
+  background: #121214;
+  border-color: #303032;
   color: #EDF6FF;
 }
 
@@ -137,14 +137,14 @@
 :is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .auth-switch button.active{background:#fff;color:#0876ED}
 :is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-form input{background:#fff;border-color:#DCEEFF;color:#151C29}
 :is(.interactive-auth.light, html[data-loopless-theme="light"] .interactive-auth) .interactive-form input:focus{border-color:#0876ED;box-shadow:0 0 0 3px rgba(8, 118, 237,.16)}
-:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth){background:radial-gradient(circle at 14% 18%,#0D1320 0,transparent 29%),radial-gradient(circle at 90% 82%,#17213A 0,transparent 27%),#0A1423}
-:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .interactive-card{background:#121D31;border-color:#26344C}
-:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .character-pane{background:linear-gradient(150deg,#16202E,#0E1A2D)}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth){background:radial-gradient(circle at 14% 18%,#0B0B0D 0,transparent 29%),radial-gradient(circle at 90% 82%,#151517 0,transparent 27%),#0B0B0D}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .interactive-card{background:#121214;border-color:#242426}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .character-pane{background:linear-gradient(150deg,#141416,#101012)}
 :is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-switch,
-:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .interactive-form input{background:#16202E;border-color:#42516A;color:#F6FAFF}
-:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-switch button.active{background:#21304A;color:#8CC8FF}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .interactive-form input{background:#141416;border-color:#424244;color:#F6FAFF}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-switch button.active{background:#212123;color:#8CC8FF}
 :is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-theme,
-:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-exit{background:#121D31;border-color:#42516A;color:#F1F8FF}
+:is(.interactive-auth.dark, html[data-loopless-theme="dark"] .interactive-auth) .auth-exit{background:#121214;border-color:#424244;color:#F1F8FF}
 .interactive-auth .interactive-submit,.interactive-auth .remember-row input:checked+i{background:#0876ED;border-color:#0876ED}
 .interactive-auth .interactive-submit:hover{background:#065EC1;box-shadow:0 10px 28px rgba(8, 118, 237,.28)}
 .interactive-auth .guest-copy button,.interactive-auth .auth-password button{color:#58AEFF}

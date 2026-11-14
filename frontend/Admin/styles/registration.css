@@ -81,7 +81,7 @@
 }
 .dark .registration-status {
   color: #C4E6FF;
-  background: #0D1320;
+  background: #0B0B0D;
 }
 @media (max-width: 680px) {
   .registration-card {
@@ -253,7 +253,7 @@
 }
 .dark .registration-row-meta > span {
   color: #C4E6FF;
-  background: #0D1320;
+  background: #0B0B0D;
 }
 .registration-row-actions {
   display: flex !important;
@@ -383,7 +383,7 @@
 }
 .dark .registration-table article > span {
   color: #C4E6FF;
-  background: #0D1320;
+  background: #0B0B0D;
 }
 .registration-list-loading,
 .registration-empty {

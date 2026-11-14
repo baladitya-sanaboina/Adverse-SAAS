@@ -27,9 +27,9 @@
 }
 
 .dark .crm-banner.success {
-  border-color: #42516A;
+  border-color: #424244;
   color: #A7D7FF;
-  background: #17213A;
+  background: #151517;
 }
 
 .dark .crm-banner.error {
@@ -184,7 +184,7 @@
 .dark .crm-layout-switch button:hover,
 .dark .crm-layout-switch button.active {
   color: #A7D7FF;
-  background: #17213A;
+  background: #151517;
 }
 
 .crm-filters {
@@ -299,9 +299,9 @@
 .dark .crm-convert:focus-visible,
 .dark .crm-back-link:hover,
 .dark .crm-back-link:focus-visible {
-  border-color: #42516A;
+  border-color: #424244;
   color: #A7D7FF;
-  background: #21304A;
+  background: #212123;
 }
 
 .crm-state button svg {
@@ -714,12 +714,12 @@
 
 .dark .crm-record-kind.lead {
   color: #A7D7FF;
-  background: #17213A;
+  background: #151517;
 }
 
 .dark .crm-record-kind.opportunity {
   color: #9ec0dc;
-  background: #1d2b38;
+  background: #1C1C1E;
 }
 
 .crm-inline-status {

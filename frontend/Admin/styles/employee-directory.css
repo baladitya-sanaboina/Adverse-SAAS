@@ -287,7 +287,7 @@
 .dark .employee-directory-row-actions a:focus-visible,
 .dark .employee-directory-row-actions button:hover,
 .dark .employee-directory-row-actions button:focus-visible {
-  background: #17213A;
+  background: #151517;
 }
 .employee-directory-row-actions button.danger {
   color: #a64b56;

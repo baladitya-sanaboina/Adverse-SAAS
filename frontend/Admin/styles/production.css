@@ -63,7 +63,7 @@
 .dark .production-tabs button.active {
   border-color: #31496d;
   color: #a7d7ff;
-  background: #17213a;
+  background: #151517;
 }
 
 /* Filters row: search plus up to three dropdowns. */
@@ -180,7 +180,7 @@
 .dark .production-info {
   border-color: #31496d;
   color: #a7d7ff;
-  background: #17213a;
+  background: #151517;
 }
 
 .management-form > .production-info,
@@ -450,9 +450,9 @@
 
 .dark .production-upload:hover,
 .dark .production-upload:focus-within {
-  border-color: #42516a;
+  border-color: #424244;
   color: #a7d7ff;
-  background: #17213a;
+  background: #151517;
 }
 
 .production-upload input {
@@ -582,7 +582,7 @@
 .dark .production-view-toggle button.active,
 .dark .production-view-toggle button:hover {
   color: #a7d7ff;
-  background: #17213a;
+  background: #151517;
 }
 
 /* Kanban board. */

@@ -203,9 +203,9 @@
 .dark .client-state button:focus-visible,
 .dark .client-history-state button:hover,
 .dark .client-history-state button:focus-visible {
-  border-color: #42516A;
+  border-color: #424244;
   color: #A7D7FF;
-  background: #21304A;
+  background: #212123;
 }
 .client-pagination {
   display: flex;

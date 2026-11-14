@@ -57,7 +57,7 @@
   transition: 0.2s;
 }
 .dark .dash-collapse {
-  border-color: #42516A;
+  border-color: #424244;
   color: #8CC8FF;
 }
 .dash-collapse:hover {
@@ -108,7 +108,7 @@
 }
 .dark .dash-nav-item:hover {
   color: #8CC8FF;
-  background: #0D1320;
+  background: #0B0B0D;
 }
 .dash-nav-item.active {
   color: #0876ED;
@@ -118,7 +118,7 @@
 .dark .dash-nav-item.active {
   color: #8CC8FF;
   border-left-color: #8CC8FF;
-  background: linear-gradient(90deg, #0D1320, transparent);
+  background: linear-gradient(90deg, #0B0B0D, transparent);
 }
 .dash-nav-item svg {
   width: 19px;
@@ -229,7 +229,7 @@
 }
 .dark .dash-breadcrumb a:hover {
   color: #8CC8FF;
-  background: #0D1320;
+  background: #0B0B0D;
 }
 .dash-menu-button,
 .dash-mobile-brand {
@@ -249,8 +249,8 @@
   pointer-events: auto;
 }
 .dark .dash-theme-switch {
-  border-color: #42516A;
-  background: #0D1320;
+  border-color: #424244;
+  background: #0B0B0D;
 }
 .dash-theme-icon {
   position: absolute;
@@ -359,7 +359,7 @@
   mask-image: linear-gradient(to bottom, #000 15%, transparent 96%);
 }
 .dark .dash-grid {
-  background-image: linear-gradient(#42516A 1px, transparent 1px), linear-gradient(90deg, #42516A 1px, transparent 1px);
+  background-image: linear-gradient(#424244 1px, transparent 1px), linear-gradient(90deg, #424244 1px, transparent 1px);
 }
 .dash-hero-content {
   position: relative;
@@ -435,9 +435,9 @@
   background: #EEF7FF;
 }
 .dark .dash-stat-head i {
-  border-color: #42516A;
+  border-color: #424244;
   color: #8CC8FF;
-  background: #0D1320;
+  background: #0B0B0D;
 }
 .dash-stat-head svg {
   width: 18px;
@@ -545,8 +545,8 @@
   font-weight: 700;
 }
 .dark .dash-actions button {
-  border-color: #42516A;
-  background: #0D1320;
+  border-color: #424244;
+  background: #0B0B0D;
 }
 .dash-about-hero {
   min-height: 360px;
@@ -868,9 +868,9 @@
   background: #EEF7FF;
 }
 .dark .company-dashboard-kpi i {
-  border-color: #42516A;
+  border-color: #424244;
   color: #8CC8FF;
-  background: #0D1320;
+  background: #0B0B0D;
 }
 .company-dashboard-kpi svg {
   width: 19px;
@@ -1180,7 +1180,7 @@
 }
 .dark .dash-logout {
   color: #8CC8FF;
-  background: #0D1320;
+  background: #0B0B0D;
 }
 .dark .dash-logout:hover {
   color: #fff;
@@ -1422,9 +1422,9 @@
   transform: translateX(2px);
 }
 .dark .dash-nav-item:hover {
-  border-color: #42516A;
+  border-color: #424244;
   color: #8CC8FF;
-  background: #0D1320;
+  background: #0B0B0D;
 }
 .dash-nav-item:hover .dash-nav-icon {
   color: #0876ED;
@@ -1434,8 +1434,8 @@
 }
 .dark .dash-nav-item:hover .dash-nav-icon {
   color: #8CC8FF;
-  border-color: #42516A;
-  background: #21304A;
+  border-color: #424244;
+  background: #212123;
 }
 .dash-nav-item:hover .dash-nav-arrow {
   opacity: 1;
@@ -1450,9 +1450,9 @@
   font-weight: 700;
 }
 .dark .dash-nav-item.active {
-  border-color: #42516A;
+  border-color: #424244;
   color: #A7D7FF;
-  background: linear-gradient(100deg, #0D1320, #1b1622);
+  background: linear-gradient(100deg, #0B0B0D, #0E0E10);
 }
 .dash-nav-item.active::before {
   opacity: 1;
@@ -1466,8 +1466,8 @@
 }
 .dark .dash-nav-item.active .dash-nav-icon {
   color: #A7D7FF;
-  border-color: #5d486e;
-  background: #21304A;
+  border-color: #424244;
+  background: #212123;
 }
 .dash-nav-item.active .dash-nav-arrow {
   opacity: 0.7;
@@ -1498,8 +1498,8 @@
 }
 .dark .dash-settings:hover {
   color: #8CC8FF;
-  border-color: #42516A;
-  background: #0D1320;
+  border-color: #424244;
+  background: #0B0B0D;
 }
 .is-collapsed .dash-sidebar-body {
   padding-inline: 10px;
@@ -1587,7 +1587,7 @@
 }
 
 .dark .dash-nav-item.active {
-  background: linear-gradient(100deg, #0D1320, #17213A);
+  background: linear-gradient(100deg, #0B0B0D, #151517);
 }
 
 .dash-nav-item.active .dash-nav-icon {
@@ -1595,7 +1595,7 @@
 }
 
 .dark .dash-nav-item.active .dash-nav-icon {
-  border-color: #42516A;
+  border-color: #424244;
 }
 
 .dash-nav-item:focus-visible {
@@ -1665,7 +1665,7 @@
 .dark .dash-nav-item:hover {
   border: 0;
   color: #8CC8FF;
-  background: #16202E;
+  background: #141416;
 }
 .dash-nav-item:hover .dash-nav-icon {
   color: #0876ED;
@@ -1689,7 +1689,7 @@
 .dark .dash-nav-item.active {
   border: 0;
   color: #A7D7FF;
-  background: #0D1320;
+  background: #0B0B0D;
 }
 .dash-nav-item.active .dash-nav-icon {
   color: #0876ED;
