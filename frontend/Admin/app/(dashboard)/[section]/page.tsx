@@ -10,6 +10,7 @@ import { ClientManagementPage } from "@/components/clients/client-management-pag
 import { CrmPipelinePage } from "@/components/crm/crm-pipeline-page";
 import { TaskManagementPage } from "@/components/tasks/task-management-page";
 import { PaymentsPage } from "@/components/payments/payments-page";
+import { PaymentSheetsPage } from "@/components/sheets/payment-sheets-page";
 import { ReportsPage } from "@/components/reports/reports-page";
 
 const errors: Record<string, string> = {
@@ -29,6 +30,7 @@ export default async function SectionPage({ params }: { params: Promise<{ sectio
   if (section === "crm") return <CrmPipelinePage />;
   if (section === "tasks") return <TaskManagementPage />;
   if (section === "payments") return <PaymentsPage />;
+  if (section === "sheets") return <PaymentSheetsPage />;
   if (section === "invoices") return <InvoicesPage />;
   if (section === "reports") return <ReportsPage />;
   if (section === "profile") return <ProfilePage />;

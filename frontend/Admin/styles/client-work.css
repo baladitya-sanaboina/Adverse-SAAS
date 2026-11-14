@@ -298,10 +298,28 @@ a.client-work-row:hover {
   background: color-mix(in srgb, #b74858 10%, transparent);
 }
 
-/* Budget, payments and invoices. */
+/* Payment sheets, then payments and invoices. */
+.client-work-sheets {
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.client-work-sheets h4 {
+  margin: 0 0 10px;
+  color: #0876ed;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.dark .client-work-sheets h4 {
+  color: #8cc8ff;
+}
+
 .client-work-money {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   border-top: 1px solid var(--border);
 }
 

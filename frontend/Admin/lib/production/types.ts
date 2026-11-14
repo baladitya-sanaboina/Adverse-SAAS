@@ -1,6 +1,8 @@
 // Shapes returned by the production-management backend (backend/app/schemas/production.py).
 // Money values arrive as decimal strings, dates as ISO strings.
 
+import type { SheetLine } from "@loopless-shared/production/payment-sheets";
+
 export type TaskStatus =
   | "PENDING"
   | "ASSIGNED"
@@ -209,6 +211,10 @@ export type WalletPeriod = {
   earned: string;
   balance: string;
   items: number;
+  /** Payment sheets (2026-11-14): balance carried from the previous sheet, day the money ran out, lines. */
+  carried_in: string;
+  ran_out_on: string | null;
+  lines: SheetLine[];
 };
 export type WalletLine = { day: string; kind: "TOP_UP" | "COMMISSION"; title: string; amount: string; balance: string };
 /** Manager advance (Phase 12): top-ups minus commission earned. */

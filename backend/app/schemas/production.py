@@ -376,7 +376,19 @@ class CommissionTaskLine(BaseModel):
     approved_at: datetime | None
 
 
+class SheetLine(BaseModel):
+    """One row of a payment sheet; `amount` is signed (money in +, work -)."""
+
+    day: date
+    kind: Literal["CARRIED", "PAYMENT", "ADJUSTMENT", "WORK"]
+    label: str
+    amount: Money
+    balance: Money
+
+
 class WalletPeriod(BaseModel):
+    """A manager payment sheet: one top-up, with the previous sheet's balance carried in."""
+
     index: int
     start: date
     end: date | None
@@ -384,6 +396,9 @@ class WalletPeriod(BaseModel):
     earned: Money
     balance: Money
     items: int
+    carried_in: Money = Decimal("0.00")
+    ran_out_on: date | None = None
+    lines: list[SheetLine] = []
 
 
 class WalletLine(BaseModel):

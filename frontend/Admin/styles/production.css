@@ -1344,6 +1344,29 @@
   background: #e0707e;
 }
 
+/* Payment sheet alerts: running low in the app's warning amber. */
+.production-dash-meters li > div > span.near {
+  color: #c96f05;
+  font-weight: 700;
+}
+
+.production-dash-meters .meter.near i {
+  background: #c96f05;
+}
+
+.dark .production-dash-meters li > div > span.near {
+  color: #f3b766;
+}
+
+.production-dash-sheet-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.production-dash-sheet-link:hover {
+  color: #0876ed;
+}
+
 /* Client payments: fully paid clients in the app's success green. */
 .production-dash-meters li > div > span.paid {
   color: #287150;

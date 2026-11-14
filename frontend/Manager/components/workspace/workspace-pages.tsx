@@ -2,7 +2,7 @@
 
 import { WorkspaceTasksPage } from "@loopless-shared/workspace/workspace-tasks-page";
 
-export { ManagerEarningsPage } from "@loopless-shared/workspace/workspace-earnings";
+export { ManagerEarningsPage, ManagerSheetsPage } from "@loopless-shared/workspace/workspace-earnings";
 
 /** Managers see tasks assigned to them and tasks they monitor. */
 export function MyTasksPage() {

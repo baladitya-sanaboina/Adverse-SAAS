@@ -7,9 +7,10 @@
  * payments. Data: GET /client-portal/billing (own client only; no internal costs or people).
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCheck, Download, PiggyBank, ReceiptText, Search, Wallet } from "lucide-react";
+import { CheckCheck, Download, ReceiptText, Search, Wallet } from "lucide-react";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { DashLoading, Panel, PanelHead } from "@/components/dashboard/role-dashboard-ui";
+import { PaymentSheets, type SheetLine } from "@/lib/payment-sheets";
 import { AmountEye, MoneyPrivacy, usePrivateMoney } from "@/lib/privacy";
 import "@/styles/client-portal.css";
 import "@/styles/billing.css";
@@ -31,6 +32,9 @@ type Billing = {
     used: string;
     remaining: string;
     items: number;
+    carried_in: string;
+    ran_out_on: string | null;
+    lines: SheetLine[];
   }[];
   deliveries: { delivered_on: string; title: string; service_name: string; amount: string; budget_left: string }[];
   days: { day: string; items: number; amount: string; budget_left: string }[];
@@ -237,47 +241,30 @@ function BillingContent() {
 
         <section className="company-dashboard-grid production-dash-grid">
           <Panel>
-            <PanelHead eyebrow="TOP-UPS" title={data.cycles.length ? "Money added and used" : "No top-ups yet"} />
+            <PanelHead
+              eyebrow="PAYMENT SHEETS"
+              title={data.cycles.length ? "Each top-up is a new sheet" : "No top-ups yet"}
+            />
             <div className="production-dash-panel-body">
-              {data.cycles.length === 0 ? (
-                <p className="production-dash-empty">
-                  <PiggyBank aria-hidden="true" />
-                  Your agency will add your budget and top-ups here.
-                </p>
-              ) : (
-                <ul className="billing-cycles">
-                  {[...data.cycles].reverse().map((item) => {
-                    const used =
-                      Number(item.amount) > 0 ? Math.min(100, (Number(item.used) / Number(item.amount)) * 100) : 0;
-                    const full = Number(item.remaining) <= 0;
-                    return (
-                      <li key={item.index}>
-                        <span className="billing-cycle-top">
-                          <strong>
-                            Top-up {item.index} · {money(item.amount, currency)}
-                          </strong>
-                          <small>
-                            {day(item.start, false)} – {item.end ? day(item.end, false) : "now"}
-                          </small>
-                        </span>
-                        <span className="billing-bar" aria-hidden="true">
-                          <i style={{ width: `${used}%` }} className={full ? "full" : undefined} />
-                        </span>
-                        <span className="billing-cycle-meta">
-                          Used {money(item.used, currency)} · {item.items} {item.items === 1 ? "video" : "videos"}
-                          <b className={full ? "full" : undefined}>
-                            {full
-                              ? Number(item.remaining) < 0
-                                ? `Over by ${money(-Number(item.remaining), currency)}`
-                                : "Used up"
-                              : `${money(item.remaining, currency)} left`}
-                          </b>
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              <PaymentSheets
+                sheets={data.cycles.map((item) => ({
+                  index: item.index,
+                  start: item.start,
+                  end: item.end,
+                  paid: item.amount,
+                  carried_in: item.carried_in,
+                  used: item.used,
+                  left: item.remaining,
+                  items: item.items,
+                  ran_out_on: item.ran_out_on,
+                  lines: item.lines,
+                }))}
+                currency={currency}
+                money={money}
+                date={(value) => day(value, false)}
+                itemWord="video"
+                empty="Your agency will add your budget here. Each top-up opens a new sheet."
+              />
             </div>
           </Panel>
           <Panel>

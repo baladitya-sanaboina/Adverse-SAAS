@@ -50,6 +50,47 @@ function Failed({ error, onRetry }: { error: string; onRetry: () => void }) {
 }
 
 /** Manager's own commission: earned on approval, minus payouts received. */
+/** Manager → Payment Sheets (owner request 2026-11-14): each Admin top-up is a sheet. */
+export function ManagerSheetsPage() {
+  return (
+    <MoneyPrivacy>
+      <ManagerSheetsPageContent />
+    </MoneyPrivacy>
+  );
+}
+
+function ManagerSheetsPageContent() {
+  const money = usePrivateMoney(formatMoneyText);
+  const { data, error, load } = useLoad<ManagerEarnings>("/api/workspace/earnings/commission");
+  return (
+    <>
+      <DashboardHero
+        title=""
+        highlight="Payment Sheets"
+        action={<PrivacyToggle className="" />}
+        description="Every top-up from the Admin opens a new sheet. What is left, or owed, carries into the next one."
+        compact
+      />
+      <div className="dash-content">
+        <section className="organization-workspace production-workspace">
+          {error ? (
+            <Failed error={error} onRetry={() => void load()} />
+          ) : !data ? (
+            <TableSkeleton />
+          ) : (
+            <AdvanceWallet
+              wallet={data.wallet ?? { topped_up: "0", earned: data.earned, balance: "0", periods: [], lines: [] }}
+              currency={data.currency}
+              money={money}
+              viewer="MANAGER"
+            />
+          )}
+        </section>
+      </div>
+    </>
+  );
+}
+
 export function ManagerEarningsPage() {
   return (
     <MoneyPrivacy>

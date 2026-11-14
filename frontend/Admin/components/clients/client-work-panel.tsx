@@ -19,6 +19,7 @@ import {
   statusTone,
 } from "@/lib/production/client";
 import type { AdminTask, ClientBudget, ClientPayment, Paged, PaymentList, TaskStatus } from "@/lib/production/types";
+import { PaymentSheets, type SheetLine } from "@loopless-shared/production/payment-sheets";
 import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
 import "@/styles/client-work.css";
 
@@ -31,6 +32,19 @@ type Invoice = {
   currency: string;
   subtotal: string;
   items: number;
+};
+
+type Cycle = {
+  index: number;
+  start: string;
+  end: string | null;
+  amount: string;
+  used: string;
+  remaining: string;
+  items: number;
+  carried_in: string;
+  ran_out_on: string | null;
+  lines: SheetLine[];
 };
 
 type Filter = "all" | "delivered" | "review" | "progress" | "cancelled";
@@ -50,8 +64,6 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "cancelled", label: "Cancelled" },
 ];
 
-const ENTRY_LABELS = { INITIAL: "First budget", TOP_UP: "Top-up", ADJUSTMENT: "Adjustment" } as const;
-
 function inGroup(task: AdminTask, filter: Filter): boolean {
   return filter === "all" || GROUPS[filter].includes(task.status);
 }
@@ -68,6 +80,7 @@ export function ClientWorkPanel({ clientId }: { clientId: string }) {
   const [budget, setBudget] = useState<ClientBudget | null>(null);
   const [payments, setPayments] = useState<PaymentList<ClientPayment> | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [cycles, setCycles] = useState<Cycle[]>([]);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
@@ -75,18 +88,20 @@ export function ClientWorkPanel({ clientId }: { clientId: string }) {
   const load = useCallback(async () => {
     setError("");
     try {
-      const [taskList, budgetData, paymentList, invoiceList] = await Promise.all([
+      const [taskList, budgetData, paymentList, invoiceList, cycleList] = await Promise.all([
         api<Paged<AdminTask>>(`/api/company/tasks${query({ client_id: clientId, page_size: 500 })}`),
         api<ClientBudget>(`/api/company/finance/budgets/${clientId}`).catch(() => null),
         api<PaymentList<ClientPayment>>(
           `/api/company/finance/client-payments${query({ client_id: clientId, page_size: 100 })}`,
         ).catch(() => null),
         api<Paged<Invoice>>(`/api/company/invoices${query({ client_id: clientId, page_size: 100 })}`).catch(() => null),
+        api<Cycle[]>(`/api/company/invoices/cycles/${clientId}`).catch(() => []),
       ]);
       setTasks(taskList.items);
       setBudget(budgetData);
       setPayments(paymentList);
       setInvoices(invoiceList?.items ?? []);
+      setCycles(cycleList);
     } catch (requestError) {
       setError(errorText(requestError, "Unable to load this client's work."));
     }
@@ -296,25 +311,30 @@ export function ClientWorkPanel({ clientId }: { clientId: string }) {
             </div>
           )}
 
+          <div className="client-work-sheets">
+            <h4>Payment sheets</h4>
+            <PaymentSheets
+              sheets={cycles.map((item) => ({
+                index: item.index,
+                start: item.start,
+                end: item.end,
+                paid: item.amount,
+                carried_in: item.carried_in,
+                used: item.used,
+                left: item.remaining,
+                items: item.items,
+                ran_out_on: item.ran_out_on,
+                lines: item.lines,
+              }))}
+              currency={currency}
+              money={money}
+              date={formatDate}
+              itemWord="video"
+              empty="No budget added yet. Each top-up you add in Payments → Budgets opens a new sheet."
+            />
+          </div>
+
           <div className="client-work-money">
-            <article>
-              <h4>Budget top-ups</h4>
-              {budget?.entries.length ? (
-                <ul>
-                  {budget.entries.map((entry) => (
-                    <li key={entry.id}>
-                      <span>
-                        <strong>{ENTRY_LABELS[entry.type]}</strong>
-                        <small>{formatDate(entry.created_at)}</small>
-                      </span>
-                      <em>{money(entry.amount, entry.currency)}</em>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>No budget added.</p>
-              )}
-            </article>
             <article>
               <h4>Payments received</h4>
               {payments?.items.length ? (

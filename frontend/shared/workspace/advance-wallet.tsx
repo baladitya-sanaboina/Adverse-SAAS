@@ -4,9 +4,11 @@
  * Manager advance (Phase 12, owner decision 2026-11-14): the Admin sends a manager money in
  * advance (a top-up); commission on approved work is taken from it. A negative balance means the
  * manager has earned more than was advanced, and the next top-up covers that first.
+ * Each top-up opens a payment sheet; the previous sheet's balance carries over (2026-11-14).
  * Used on the Manager's My Earnings page and in the Admin's manager view.
  */
 import { formatDate } from "../production/client";
+import { PaymentSheets } from "../production/payment-sheets";
 import type { ManagerWallet } from "../production/types";
 import "../styles/advance.css";
 
@@ -23,11 +25,6 @@ export function AdvanceWallet({
 }) {
   const balance = Number(wallet.balance);
   const owed = balance < 0;
-  const latest = wallet.periods[wallet.periods.length - 1];
-  const used =
-    latest && Number(latest.topped_up) > 0
-      ? Math.min(100, Math.round((Number(latest.earned) / Number(latest.topped_up)) * 100))
-      : 0;
   const balanceLabel = owed ? (viewer === "ADMIN" ? "You owe" : "Due to you") : "Advance left";
 
   return (
@@ -52,82 +49,31 @@ export function AdvanceWallet({
           </div>
         </dl>
       </div>
-      {latest && (
-        <div className="advance-meter" aria-label={`${used}% of the latest top-up used`}>
-          <span className="advance-bar" aria-hidden="true">
-            <i style={{ width: `${used}%` }} className={used >= 100 ? "full" : used >= 80 ? "near" : undefined} />
-          </span>
-          <small>
-            Latest top-up: {money(latest.earned, currency)} of {money(latest.topped_up, currency)} used ({used}%)
-          </small>
-        </div>
-      )}
-
-      <div className="advance-grid">
-        <div>
-          <h3>Periods</h3>
-          {wallet.periods.length === 0 ? (
-            <p className="advance-empty">No top-ups yet.</p>
-          ) : (
-            <ul className="advance-periods">
-              {[...wallet.periods].reverse().map((period) => {
-                const share =
-                  Number(period.topped_up) > 0
-                    ? Math.min(100, (Number(period.earned) / Number(period.topped_up)) * 100)
-                    : 0;
-                const negative = Number(period.balance) < 0;
-                return (
-                  <li key={period.index}>
-                    <span className="advance-period-top">
-                      <strong>Top-up {period.index}</strong>
-                      <small>
-                        {formatDate(period.start)} – {period.end ? formatDate(period.end) : "now"}
-                      </small>
-                    </span>
-                    <span className="advance-bar" aria-hidden="true">
-                      <i style={{ width: `${share}%` }} className={share >= 100 ? "full" : undefined} />
-                    </span>
-                    <span className="advance-period-meta">
-                      {money(period.earned, currency)} of {money(period.topped_up, currency)} · {period.items}{" "}
-                      {period.items === 1 ? "task" : "tasks"}
-                      <b className={negative ? "owed" : undefined}>
-                        {negative
-                          ? `${money(-Number(period.balance), currency)} over`
-                          : `${money(period.balance, currency)} left`}
-                      </b>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-        <div>
-          <h3>Timeline</h3>
-          {wallet.lines.length === 0 ? (
-            <p className="advance-empty">Top-ups and approved commission show up here.</p>
-          ) : (
-            <ul className="advance-lines">
-              {wallet.lines.slice(0, 12).map((line, index) => (
-                <li key={`${line.day}-${index}`}>
-                  <span>
-                    <strong>{line.kind === "TOP_UP" ? "Top-up" : line.title}</strong>
-                    <small>{formatDate(line.day)}</small>
-                  </span>
-                  <span className="meta">
-                    <em className={line.kind === "TOP_UP" ? "credit" : undefined}>
-                      {line.kind === "TOP_UP" ? "+" : "−"}
-                      {money(line.amount, currency)}
-                    </em>
-                    <small className={Number(line.balance) < 0 ? "owed" : undefined}>
-                      Balance {money(line.balance, currency)}
-                    </small>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      <div className="advance-sheets">
+        <h3>Payment sheets</h3>
+        <PaymentSheets
+          sheets={wallet.periods.map((period) => ({
+            index: period.index,
+            start: period.start,
+            end: period.end,
+            paid: period.topped_up,
+            carried_in: period.carried_in,
+            used: period.earned,
+            left: period.balance,
+            items: period.items,
+            ran_out_on: period.ran_out_on,
+            lines: period.lines,
+          }))}
+          currency={currency}
+          money={money}
+          date={formatDate}
+          itemWord="task"
+          empty={
+            viewer === "ADMIN"
+              ? "No top-ups yet. Each top-up you send opens a new sheet."
+              : "No top-ups yet. Each top-up from the Admin opens a new sheet."
+          }
+        />
       </div>
     </section>
   );

@@ -5,6 +5,7 @@ See docs/ProductionManagementPlan.md, sections 3 and 6.
 """
 
 from calendar import monthrange
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -343,8 +344,20 @@ def daily_summary(
 
 
 @dataclass(frozen=True)
+class CycleLine:
+    """One row of a payment sheet. `amount` is signed: money in is positive, work is negative."""
+
+    day: date
+    kind: Literal["CARRIED", "PAYMENT", "ADJUSTMENT", "WORK"]
+    label: str
+    amount: Decimal
+    balance: Decimal
+
+
+@dataclass(frozen=True)
 class BudgetCycle:
-    """One budget period: from a top-up (or the first budget) until the day before the next one."""
+    """One payment sheet (owner decision 2026-11-14): opens on a payment (top-up) and closes the
+    day before the next one. Whatever is left, plus or minus, is carried into the next sheet."""
 
     index: int
     start: date
@@ -352,17 +365,23 @@ class BudgetCycle:
     amount: Decimal
     used: Decimal
     items: int
+    carried_in: Decimal = Decimal("0.00")
+    ran_out_on: date | None = None
+    lines: tuple[CycleLine, ...] = ()
 
     @property
     def remaining(self) -> Decimal:
-        return money(self.amount - self.used)
+        return money(self.carried_in + self.amount - self.used)
 
 
 def budget_cycles(
-    entries: list[tuple[date, str, Decimal]], deliveries: list[tuple[date, Decimal]]
+    entries: list[tuple[date, str, Decimal]],
+    deliveries: Sequence[tuple[date, Decimal] | tuple[date, Decimal, str]],
 ) -> list[BudgetCycle]:
-    """Split the budget into top-up periods. Work before the first budget counts in the first
-    period; adjustments belong to the period they fall in; several top-ups on one day merge."""
+    """Split the money into payment sheets, one per top-up date (several top-ups on one day
+    merge). Work before the first payment counts in the first sheet; adjustments belong to the
+    sheet they fall in. Each sheet starts with the previous sheet's balance carried in, records
+    the day its money ran out, and lists its own lines with the running balance."""
     starts: dict[date, Decimal] = {}
     for day, kind, amount in entries:
         if kind in ("INITIAL", "TOP_UP") and Decimal(amount) > 0:
@@ -381,28 +400,63 @@ def budget_cycles(
                 return index
         return len(windows) - 1
 
-    amounts = [starts[start] for start in ordered]
+    # (day, order, kind, label, signed amount); on one day money in counts before work.
+    events: list[list[tuple[date, int, Literal["PAYMENT", "ADJUSTMENT", "WORK"], str, Decimal]]] = [
+        [] for _ in windows
+    ]
     for day, kind, amount in entries:
         if kind == "ADJUSTMENT":
-            amounts[window_of(day)] += Decimal(amount)
-    used = [Decimal("0")] * len(windows)
-    items = [0] * len(windows)
-    for day, amount in deliveries:
-        index = window_of(day)
-        used[index] += Decimal(amount)
-        items[index] += 1
-    first_day = min([ordered[0], *[day for day, _ in deliveries]])
-    return [
-        BudgetCycle(
+            events[window_of(day)].append((day, 0, "ADJUSTMENT", "Adjustment", Decimal(amount)))
+    for delivery in deliveries:
+        day, amount, *rest = delivery
+        events[window_of(day)].append(
+            (day, 1, "WORK", str(rest[0]) if rest else "", -Decimal(amount))
+        )
+
+    first_day = min([ordered[0], *[delivery[0] for delivery in deliveries]])
+    cycles: list[BudgetCycle] = []
+    carried = Decimal("0")
+    for index, (start, end) in enumerate(windows):
+        lines: list[CycleLine] = []
+        balance = carried
+        if index > 0 and carried != 0:
+            lines.append(
+                CycleLine(
+                    start, "CARRIED", f"Carried from sheet {index}", money(carried), money(carried)
+                )
+            )
+        amount = Decimal("0")
+        used = Decimal("0")
+        items = 0
+        ran_out_on: date | None = start if index > 0 and carried < 0 else None
+        # The payment is a dated line too, so work done before the first payment shows first.
+        dated = [(start, 0, "PAYMENT", "Payment", starts[start]), *events[index]]
+        for day, _, kind, label, signed in sorted(dated, key=lambda item: item[:2]):
+            balance += signed
+            if kind == "WORK":
+                used -= signed
+                items += 1
+            else:
+                amount += signed
+            if ran_out_on is None and balance <= 0:
+                ran_out_on = day
+            elif balance > 0:
+                ran_out_on = None
+            lines.append(CycleLine(day, kind, label, money(signed), money(balance)))
+        cycle = BudgetCycle(
             index=index + 1,
             start=first_day if index == 0 else start,
             end=end,
-            amount=money(amounts[index]),
-            used=money(used[index]),
-            items=items[index],
+            amount=money(amount),
+            used=money(used),
+            items=items,
+            carried_in=money(carried),
+            ran_out_on=ran_out_on,
+            lines=tuple(lines),
         )
-        for index, (start, end) in enumerate(windows)
-    ]
+        cycles.append(cycle)
+        carried = cycle.remaining
+    return cycles
 
 
 # -- manager advances (Phase 12) ------------------------------------------------------------

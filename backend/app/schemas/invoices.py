@@ -1,12 +1,19 @@
 """Invoice and client billing shapes (Phase 11)."""
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.schemas.production import ClientBudgetSummary, ClientPaymentLine, Money, NamedRef
+from app.schemas.production import (
+    ClientBudgetSummary,
+    ClientPaymentLine,
+    Money,
+    NamedRef,
+    SheetLine,
+)
 
 InvoiceStatus = Literal["DRAFT", "SENT", "PAID", "VOID"]
 
@@ -117,6 +124,11 @@ class BudgetCycleResponse(BaseModel):
     items: int
     invoice_id: UUID | None = None
     invoice_code: str | None = None
+    # Payment sheets (owner decision 2026-11-14): balance carried in from the previous sheet,
+    # the day the money ran out, and the sheet's own lines.
+    carried_in: Money = Decimal("0.00")
+    ran_out_on: date | None = None
+    lines: list[SheetLine] = []
 
 
 class ClientDeliveryRow(BaseModel):
@@ -160,3 +172,44 @@ class ClientBillingResponse(BaseModel):
     days: list[ClientDayRow]
     payments: list[ClientPaymentLine]
     invoices: list[ClientInvoiceSummary]
+
+
+# -- payment sheets overview (owner request 2026-11-14) ------------------------------------
+
+SheetStatus = Literal["OVER", "USED_UP", "NEAR", "OK"]
+
+
+class PaymentSheet(BaseModel):
+    """One payment sheet, the same shape for a manager top-up and a client budget top-up."""
+
+    index: int
+    start: date
+    end: date | None
+    paid: Money
+    carried_in: Money
+    used: Money
+    left: Money
+    items: int
+    ran_out_on: date | None
+    lines: list[SheetLine]
+
+
+class SheetOwner(BaseModel):
+    """A manager or client with their sheets; status is about the current (open) sheet."""
+
+    kind: Literal["MANAGER", "CLIENT"]
+    id: UUID
+    name: str
+    code: str
+    status: SheetStatus
+    left: Money
+    pot: Money
+    percent_used: float
+    ran_out_on: date | None
+    sheets: list[PaymentSheet]
+
+
+class SheetsOverviewResponse(BaseModel):
+    currency: str
+    managers: list[SheetOwner]
+    clients: list[SheetOwner]

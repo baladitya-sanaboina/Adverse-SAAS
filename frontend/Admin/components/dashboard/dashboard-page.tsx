@@ -20,6 +20,8 @@ import type { CompanyDashboard } from "@/lib/company-dashboard/types";
 import { MoneyPrivacy, PrivacyToggle, useMoneyPrivacy, usePrivateMoney } from "@loopless-shared/production/privacy";
 import { STATUS_LABELS, api, errorText, formatDate, money as formatMoney, query } from "@/lib/production/client";
 import type { ReportPeriod, TaskStatus } from "@/lib/production/types";
+import { STATUS_TEXT, ownerLine, type SheetsOverview } from "@/components/sheets/sheet-types";
+import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
 import "@/styles/production.css";
 
 // Password asked before the Admin dashboard shows money (owner request 2026-11-14). Change it with
@@ -296,6 +298,7 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
         <TeamPanel data={data} />
       </section>
 
+      <SheetAlertsPanel currency={data.currency} />
       <BudgetPanel data={data} />
       <ClientPaymentsPanel data={data} />
     </div>
@@ -729,6 +732,101 @@ function ClientPaymentsPanel({ data }: { data: AdminDashboard }) {
                       : row.unpaid_invoices > 0
                         ? ` · ${row.unpaid_invoices} ${row.unpaid_invoices === 1 ? "invoice" : "invoices"} sent`
                         : ""}
+                  </small>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/* ------------------------------------------------------------------ payment sheets */
+
+/** Managers and clients whose current payment sheet is running low or used up (2026-11-14). */
+function SheetAlertsPanel({ currency }: { currency: string }) {
+  const money = usePrivateMoney(formatMoney);
+  const [data, setData] = useState<SheetsOverview | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setData(await api<SheetsOverview>("/api/company/finance/sheets"));
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  useLiveRefresh(["task.", "payout.", "budget."], () => void load());
+
+  if (failed || !data) return null;
+  const owners = [...data.managers, ...data.clients];
+  const alerts = owners.filter((owner) => owner.status !== "OK");
+  return (
+    <article className="company-dashboard-panel production-dash-panel production-dash-budgets">
+      <PanelHead
+        eyebrow="PAYMENT SHEETS"
+        title={
+          alerts.length === 0
+            ? owners.length
+              ? "Everyone has money left"
+              : "No sheets yet"
+            : `${alerts.length} ${alerts.length === 1 ? "needs" : "need"} a top-up soon`
+        }
+        aside={
+          <Link href="/sheets" className="production-dash-link">
+            All sheets
+          </Link>
+        }
+      />
+      <div className="production-dash-panel-body">
+        {alerts.length === 0 ? (
+          <p className="production-dash-empty">
+            <PiggyBank aria-hidden="true" />
+            {owners.length
+              ? `${owners.length} open ${owners.length === 1 ? "sheet" : "sheets"}, none running low.`
+              : "A sheet opens when you send a manager top-up or add a client budget."}
+          </p>
+        ) : (
+          <ul className="production-dash-meters">
+            {alerts.map((owner) => {
+              const tone = owner.status === "NEAR" ? "near" : "over";
+              return (
+                <li key={`${owner.kind}-${owner.id}`}>
+                  <div>
+                    <strong>
+                      <Link
+                        href={`/sheets?tab=${owner.kind === "CLIENT" ? "clients" : "managers"}&owner=${owner.id}`}
+                        className="production-dash-sheet-link"
+                      >
+                        {owner.name}
+                      </Link>
+                    </strong>
+                    <span className={tone}>
+                      {owner.kind === "MANAGER" ? "Manager" : "Client"} · {STATUS_TEXT[owner.status]}
+                    </span>
+                  </div>
+                  <span
+                    className={`meter ${tone}`}
+                    role="meter"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(owner.percent_used)}
+                    aria-label={`${owner.name} sheet used`}
+                  >
+                    <i style={{ width: `${Math.min(owner.percent_used, 100)}%` }} />
+                  </span>
+                  <small>
+                    Sheet {owner.sheets.length} · {ownerLine(owner, money, currency)}
+                    {owner.ran_out_on ? ` · ran out ${formatDate(owner.ran_out_on)}` : ""}
                   </small>
                 </li>
               );

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query, Response
 from pydantic import ValidationError
 
 from app.middleware.authentication import AuthenticatedContext
+from app.schemas.invoices import SheetsOverviewResponse
 from app.schemas.production import (
     AdminDashboardResponse,
     BudgetEntryRequest,
@@ -37,6 +38,7 @@ from app.schemas.production import (
 from app.schemas.registration import ErrorResponse
 from app.services.authentication_service import AuthenticationError
 from app.services.finance_service import finance_service
+from app.services.invoice_service import invoice_service
 from app.services.production_rules import ReportPeriod
 
 router = APIRouter(prefix="/company/finance", tags=["finance"])
@@ -168,6 +170,19 @@ def add_budget_entry(
     client_id: UUID, request: BudgetEntryRequest, context: AuthenticatedContext
 ) -> ClientBudgetResponse:
     return finance_service.add_budget_entry(context, client_id, request)
+
+
+# -- payment sheets ------------------------------------------------------------------------
+
+
+@router.get(
+    "/sheets",
+    response_model=SheetsOverviewResponse,
+    summary="Every manager's and client's payment sheets, most urgent first (Admin only)",
+    responses=ERRORS,
+)
+def payment_sheets(context: AuthenticatedContext) -> SheetsOverviewResponse:
+    return invoice_service.sheets_overview(context)
 
 
 # -- client payments ----------------------------------------------------------------------

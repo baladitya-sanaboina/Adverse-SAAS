@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -33,9 +33,14 @@ from app.schemas.invoices import (
     InvoiceResponse,
     InvoiceSendResponse,
     InvoiceUpdateRequest,
+    PaymentSheet,
+    SheetOwner,
+    SheetsOverviewResponse,
+    SheetStatus,
 )
-from app.schemas.production import ClientBudgetSummary, ClientPaymentLine, NamedRef
+from app.schemas.production import ClientBudgetSummary, ClientPaymentLine, NamedRef, SheetLine
 from app.services.authentication_service import AuthenticationError
+from app.services.finance_service import finance_service
 from app.services.invoice_pdf import amount_text, render_invoice_pdf
 from app.services.notification_service import notification_service
 from app.services.permission_service import validate_user_action_access
@@ -49,6 +54,9 @@ from app.services.production_rules import (
 )
 
 logger = logging.getLogger(__name__)
+
+# A sheet counts as running low once this much of it is used (owner request 2026-11-14).
+SHEET_NEAR_PERCENT = 80
 ZERO = Decimal("0")
 
 
@@ -121,11 +129,15 @@ class InvoiceService:
     ) -> tuple[list[BudgetCycleResponse], list[tuple[date, Decimal]]]:
         tz, zone, _ = self._zone(company_id)
         entries = self._budget_entries(company_id, client_id, zone)
-        deliveries = [
-            (row.delivered_on, Decimal(row.amount))
-            for row in reversed(self.finance.client_deliveries(company_id, client_id, tz))
-        ]
-        cycles = budget_cycles(entries, deliveries)
+        rows = list(reversed(self.finance.client_deliveries(company_id, client_id, tz)))
+        deliveries = [(row.delivered_on, Decimal(row.amount)) for row in rows]
+        cycles = budget_cycles(
+            entries,
+            [
+                (row.delivered_on, Decimal(row.amount), f"{row.title} · {row.service_name}")
+                for row in rows
+            ],
+        )
         invoices, _ = self.repository.list(company_id, client_id, ["DRAFT", "SENT", "PAID"], 1, 100)
         by_start = {row.period_start: row for row in invoices if row.source == "TOP_UP"}
         return [
@@ -139,6 +151,18 @@ class InvoiceService:
                 items=cycle.items,
                 invoice_id=by_start[cycle.start].id if cycle.start in by_start else None,
                 invoice_code=by_start[cycle.start].code if cycle.start in by_start else None,
+                carried_in=cycle.carried_in,
+                ran_out_on=cycle.ran_out_on,
+                lines=[
+                    SheetLine(
+                        day=line.day,
+                        kind=line.kind,
+                        label=line.label,
+                        amount=line.amount,
+                        balance=line.balance,
+                    )
+                    for line in cycle.lines
+                ],
             )
             for cycle in cycles
         ], deliveries
@@ -475,6 +499,108 @@ class InvoiceService:
             )
         except Exception:  # noqa: BLE001 - never block the approval that triggered this
             logger.warning("Automatic invoice failed", exc_info=True)
+
+    # -- payment sheets overview (owner request 2026-11-14) -----------------------------------
+
+    @staticmethod
+    def _owner(
+        kind: Literal["MANAGER", "CLIENT"],
+        owner: NamedRef,
+        sheets: list[PaymentSheet],
+    ) -> SheetOwner:
+        current = sheets[-1]
+        pot = money(current.carried_in + current.paid)
+        left = money(current.left)
+        share = float(current.used / pot * 100) if pot > 0 else (100.0 if current.used > 0 else 0)
+        status: SheetStatus = (
+            "OVER"
+            if left < 0
+            else (
+                "USED_UP"
+                if left == 0 and (pot > 0 or current.used > 0)
+                else "NEAR" if share >= SHEET_NEAR_PERCENT else "OK"
+            )
+        )
+        return SheetOwner(
+            kind=kind,
+            id=owner.id,
+            name=owner.name,
+            code=owner.code,
+            status=status,
+            left=left,
+            pot=pot,
+            percent_used=min(share, 100.0),
+            ran_out_on=current.ran_out_on,
+            sheets=sheets,
+        )
+
+    def sheets_overview(self, context: AuthContext) -> SheetsOverviewResponse:
+        """Every manager's and client's payment sheets, most urgent first (Admin only)."""
+        company_id = self._admin(context, "VIEW")
+        tz, _, _ = self._zone(company_id)
+        clients: list[SheetOwner] = []
+        for row in self.finance.client_balances(company_id, tz, None, None):
+            cycles, _ = self._cycles(company_id, row.client_id)
+            if cycles:
+                clients.append(
+                    self._owner(
+                        "CLIENT",
+                        NamedRef(id=row.client_id, name=row.client_name, code=row.client_code),
+                        [
+                            PaymentSheet(
+                                index=cycle.index,
+                                start=cycle.start,
+                                end=cycle.end,
+                                paid=cycle.amount,
+                                carried_in=cycle.carried_in,
+                                used=cycle.used,
+                                left=cycle.remaining,
+                                items=cycle.items,
+                                ran_out_on=cycle.ran_out_on,
+                                lines=cycle.lines,
+                            )
+                            for cycle in cycles
+                        ],
+                    )
+                )
+        managers: list[SheetOwner] = []
+        for person in self.tasks.list_people(company_id):
+            if person.role != "MANAGER":
+                continue
+            wallet = finance_service.manager_earnings(company_id, person.id).wallet
+            if wallet is None or not wallet.periods:
+                continue
+            managers.append(
+                self._owner(
+                    "MANAGER",
+                    NamedRef(id=person.id, name=person.name, code=person.code),
+                    [
+                        PaymentSheet(
+                            index=period.index,
+                            start=period.start,
+                            end=period.end,
+                            paid=period.topped_up,
+                            carried_in=period.carried_in,
+                            used=period.earned,
+                            left=period.balance,
+                            items=period.items,
+                            ran_out_on=period.ran_out_on,
+                            lines=period.lines,
+                        )
+                        for period in wallet.periods
+                    ],
+                )
+            )
+        urgency = {"OVER": 0, "USED_UP": 1, "NEAR": 2, "OK": 3}
+
+        def order(owner: SheetOwner) -> tuple[int, Decimal, str]:
+            return (urgency[owner.status], owner.left, owner.name)
+
+        return SheetsOverviewResponse(
+            currency=self.finance.company_currency(company_id),
+            managers=sorted(managers, key=order),
+            clients=sorted(clients, key=order),
+        )
 
     # -- client portal ----------------------------------------------------------------------
 

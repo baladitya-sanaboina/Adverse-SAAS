@@ -257,9 +257,59 @@ class ClientLedgerTest(unittest.TestCase):
             (first.amount, first.used, first.items), (Decimal("9000.00"), Decimal("9000.00"), 2)
         )
         self.assertEqual(first.remaining, Decimal("0.00"))
+        # Work done before the first payment is listed before the payment line.
+        self.assertEqual([line.kind for line in first.lines[:2]], ["WORK", "PAYMENT"])
         self.assertEqual(
             (second.start, second.end, second.used), (date(2026, 11, 1), None, Decimal("700.00"))
         )
+
+    def test_sheet_runs_out_and_carries_minus_into_next(self) -> None:
+        # Owner example: Rs 10,000 on 14 Nov, used up on 16 Nov, next payment on 18 Nov.
+        entries = [
+            (date(2026, 11, 14), "TOP_UP", Decimal("10000")),
+            (date(2026, 11, 18), "TOP_UP", Decimal("5000")),
+        ]
+        deliveries = [
+            (date(2026, 11, 14), Decimal("6000"), "TSK-0001"),
+            (date(2026, 11, 16), Decimal("4500"), "TSK-0002"),
+            (date(2026, 11, 19), Decimal("550"), "TSK-0003"),
+        ]
+        first, second = budget_cycles(entries, deliveries)
+        self.assertEqual((first.start, first.end), (date(2026, 11, 14), date(2026, 11, 17)))
+        self.assertEqual(first.ran_out_on, date(2026, 11, 16))
+        self.assertEqual(first.remaining, Decimal("-500.00"))
+        self.assertEqual(
+            [(line.kind, line.label, line.balance) for line in first.lines],
+            [
+                ("PAYMENT", "Payment", Decimal("10000.00")),
+                ("WORK", "TSK-0001", Decimal("4000.00")),
+                ("WORK", "TSK-0002", Decimal("-500.00")),
+            ],
+        )
+        self.assertEqual(second.carried_in, Decimal("-500.00"))
+        self.assertEqual(second.remaining, Decimal("3950.00"))
+        self.assertIsNone(second.ran_out_on)
+        self.assertEqual(
+            [(line.kind, line.amount) for line in second.lines],
+            [
+                ("CARRIED", Decimal("-500.00")),
+                ("PAYMENT", Decimal("5000.00")),
+                ("WORK", Decimal("-550.00")),
+            ],
+        )
+
+    def test_early_payment_carries_what_is_left(self) -> None:
+        entries = [
+            (date(2026, 11, 14), "TOP_UP", Decimal("10000")),
+            (date(2026, 11, 18), "TOP_UP", Decimal("5000")),
+        ]
+        first, second = budget_cycles(entries, [(date(2026, 11, 15), Decimal("8000"))])
+        self.assertIsNone(first.ran_out_on)
+        self.assertEqual(first.remaining, Decimal("2000.00"))
+        self.assertEqual(
+            (second.carried_in, second.remaining), (Decimal("2000.00"), Decimal("7000.00"))
+        )
+        self.assertEqual(second.lines[0].label, "Carried from sheet 1")
 
     def test_no_budget_no_cycles(self) -> None:
         self.assertEqual(budget_cycles([], [(date(2026, 1, 1), Decimal("5"))]), [])

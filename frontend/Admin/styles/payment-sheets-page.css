@@ -1,0 +1,206 @@
+/* Admin → Payment sheets page (owner request 2026-11-14). Theme tokens and status colours only. */
+
+.sheets-tab-alert {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #fff;
+  background: #b74858;
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.sheets-page-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.sheets-page-state svg {
+  width: 16px;
+  flex: 0 0 auto;
+}
+
+.sheets-page-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 340px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+}
+
+.sheets-owner-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sheets-owner-list button {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--foreground);
+  background: var(--surface);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sheets-owner-list button.active {
+  border-color: #0876ed;
+  box-shadow: 0 0 0 1px #0876ed inset;
+}
+
+.sheets-owner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sheets-owner-top strong {
+  overflow: hidden;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheets-owner-list small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+.sheets-status {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.sheets-status.ok {
+  color: #287150;
+  background: color-mix(in srgb, #287150 12%, transparent);
+}
+
+.sheets-status.near {
+  color: #c96f05;
+  background: color-mix(in srgb, #c96f05 12%, transparent);
+}
+
+.sheets-status.used_up,
+.sheets-status.over {
+  color: #b74858;
+  background: color-mix(in srgb, #b74858 11%, transparent);
+}
+
+.sheets-owner-bar {
+  height: 6px;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.sheets-owner-bar i {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: #0876ed;
+}
+
+.sheets-owner-bar i.near {
+  background: #c96f05;
+}
+
+.sheets-owner-bar i.used_up,
+.sheets-owner-bar i.over {
+  background: #b74858;
+}
+
+.sheets-owner-detail {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--foreground);
+  background: var(--surface);
+}
+
+.sheets-owner-detail > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sheets-owner-detail > header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.sheets-owner-detail > header span {
+  color: #0876ed;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+}
+
+.sheets-owner-detail h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.sheets-owner-detail p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+
+.sheets-owner-detail > header a {
+  text-decoration: none;
+}
+
+.dark .sheets-owner-detail > header span {
+  color: #8cc8ff;
+}
+
+.dark .sheets-status.ok {
+  color: #86d3a9;
+}
+
+.dark .sheets-status.near {
+  color: #f3b766;
+}
+
+.dark .sheets-status.used_up,
+.dark .sheets-status.over {
+  color: #f0a6af;
+}
+
+@media (max-width: 900px) {
+  .sheets-page-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -71,6 +71,7 @@ from app.schemas.production import (
     SalaryRequest,
     ServiceReportResponse,
     ServiceReportRow,
+    SheetLine,
     TaskCounts,
     TeamReportResponse,
     TeamReportRow,
@@ -248,7 +249,7 @@ class FinanceService:
         earned = sum((amount for _, _, amount in commissions), ZERO)
         cycles = budget_cycles(
             [(day, "TOP_UP", amount) for day, _, amount in top_ups],
-            [(day, amount) for day, _, amount in commissions],
+            [(day, amount, title) for day, title, amount in commissions],
         )
         lines = wallet_timeline(top_ups, commissions)
         return ManagerWallet(
@@ -264,6 +265,18 @@ class FinanceService:
                     earned=cycle.used,
                     balance=cycle.remaining,
                     items=cycle.items,
+                    carried_in=cycle.carried_in,
+                    ran_out_on=cycle.ran_out_on,
+                    lines=[
+                        SheetLine(
+                            day=line.day,
+                            kind=line.kind,
+                            label=line.label,
+                            amount=line.amount,
+                            balance=line.balance,
+                        )
+                        for line in cycle.lines
+                    ],
                 )
                 for cycle in cycles
             ],
