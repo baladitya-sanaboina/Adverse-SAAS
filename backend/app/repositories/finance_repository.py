@@ -124,6 +124,17 @@ class CommissionTaskRow:
 
 
 @dataclass(frozen=True)
+class DeliveryRow:
+    """A delivered (approved/completed) task as a client may see it: no code, people or costs."""
+
+    task_id: UUID
+    title: str
+    service_name: str
+    delivered_on: date
+    amount: Decimal
+
+
+@dataclass(frozen=True)
 class ServiceCountRow:
     service_id: UUID
     service_name: str
@@ -881,6 +892,38 @@ class FinanceRepository:
                 )
                 for row in cursor.fetchall()
             ]
+
+    def client_deliveries(
+        self,
+        company_id: UUID,
+        client_id: UUID,
+        tz: str,
+        start: date | None = None,
+        end: date | None = None,
+        limit: int | None = None,
+    ) -> list[DeliveryRow]:
+        """Delivered (billable) work of one client, newest first, dated in the company timezone."""
+        delivered = _local_date("t.approved_at")
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT t.id, t.title, s.name, {delivered}, t.client_price_final
+                FROM tasks t JOIN company_services s ON s.id = t.service_id
+                WHERE t.company_id=%(company)s AND t.client_id=%(client)s AND t.status IN {_BILLABLE}
+                  AND t.approved_at IS NOT NULL AND {_range_sql(delivered, start, end)}
+                ORDER BY t.approved_at DESC, t.id
+                {"LIMIT %(limit)s" if limit else ""}
+                """,
+                {
+                    "company": company_id,
+                    "client": client_id,
+                    "tz": tz,
+                    "start": start,
+                    "end": end,
+                    "limit": limit,
+                },
+            )
+            return [DeliveryRow(*row) for row in cursor.fetchall()]
 
     def client_month_charged(
         self, company_id: UUID, client_id: UUID, tz: str, start: date, end: date

@@ -442,6 +442,19 @@ class ClientPaymentLine(BaseModel):
     reference: str
 
 
+class ClientDeliveryLine(BaseModel):
+    title: str
+    service_name: str
+    delivered_on: date
+    amount: Money
+
+
+class ClientMonthPoint(BaseModel):
+    month: date
+    items: int
+    amount: Money
+
+
 class ClientWorkspaceSummaryResponse(BaseModel):
     client_name: str
     currency: str
@@ -454,6 +467,8 @@ class ClientWorkspaceSummaryResponse(BaseModel):
     pending_amount: Money
     current_month_charged: Money
     payments: list[ClientPaymentLine]
+    recent_deliveries: list[ClientDeliveryLine] = []
+    monthly: list[ClientMonthPoint] = []
 
 
 # ---------------------------------------------------------------------------

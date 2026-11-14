@@ -115,3 +115,189 @@
   color: #f0a6af;
   background: #361f24;
 }
+
+/* ===================================================== Client dashboard (Admin-style, 2026-11-14) */
+
+/* Rows that are not links: same layout as .production-dash-rows a. */
+.production-dash-rows .client-dash-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
+}
+
+.production-dash-rows li:last-child .client-dash-row {
+  border-bottom: 0;
+}
+
+.production-dash-rows .client-dash-row > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.production-dash-rows .client-dash-row > span.meta {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+/* The budget panel's wrapper fills its grid cell. */
+.client-dash-anchor {
+  display: grid;
+  min-width: 0;
+  scroll-margin-top: 96px;
+}
+
+.client-budget-ring {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.client-ring {
+  width: 132px;
+  height: 132px;
+  flex: 0 0 auto;
+}
+
+.client-ring circle {
+  fill: none;
+  stroke-width: 12;
+}
+
+.client-ring .track {
+  stroke: var(--surface-muted);
+}
+
+.client-ring .fill {
+  stroke: #0876ed;
+  stroke-linecap: round;
+  transition: stroke-dasharray 400ms ease;
+}
+
+.client-ring .fill.near {
+  stroke: #c96f05;
+}
+
+.client-ring .fill.over {
+  stroke: #b74858;
+}
+
+.client-ring .value {
+  fill: var(--foreground);
+  font:
+    700 22px var(--font-poppins),
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+.client-ring .label {
+  fill: var(--muted);
+  font:
+    600 11px var(--font-poppins),
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+.client-budget-ring dl,
+.client-dash-facts {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+}
+
+.client-budget-ring dt,
+.client-dash-facts dt {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+
+.client-budget-ring dd,
+.client-dash-facts dd {
+  margin: 3px 0 0;
+  color: var(--foreground);
+  font-size: 0.95rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.client-dash-facts dd {
+  font-size: 0.75rem;
+}
+
+.client-dash-alert,
+.client-dash-note {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid;
+  border-radius: 12px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.client-dash-alert {
+  border-color: #efc8ce;
+  color: #9a4551;
+  background: #fbf0f2;
+}
+
+.dark .client-dash-alert {
+  border-color: #63323a;
+  color: #f0a6af;
+  background: #361f24;
+}
+
+.client-dash-note {
+  border-color: #f1d9b5;
+  color: #8a520c;
+  background: #fdf5ea;
+}
+
+.dark .client-dash-note {
+  border-color: #5a4320;
+  color: #e3a04f;
+  background: #2b2214;
+}
+
+@media (max-width: 520px) {
+  .client-budget-ring {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* Primary action button (same as .management-primary-action in the other apps; the Client app
+   does not load management-surfaces.css). */
+.production-dash-actions .management-primary-action {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border: 1px solid #0876ed;
+  border-radius: 9px;
+  color: #fff;
+  background: #0876ed;
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.production-dash-actions .management-primary-action:hover {
+  background: #065ec1;
+}
+
+.production-dash-actions .management-primary-action svg {
+  width: 16px;
+  height: 16px;
+}

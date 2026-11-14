@@ -1,40 +1,17 @@
 "use client";
 
+/*
+ * Client dashboard in the style of the Admin dashboard (owner request 2026-11-14).
+ * Data: GET /client-portal/summary (counts, budget, deliveries, payments) and
+ * GET /clients/me/dashboard (profile and agreed rates). No internal costs, people or task codes.
+ */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { DashboardHero } from "./dashboard-hero";
-import { StatCard } from "./stat-card";
-import { DashboardContentLoader } from "@/components/loader/dashboard-content-loader";
+import { CheckCheck, Hourglass, PiggyBank, ReceiptText, Wallet } from "lucide-react";
+import { DashHeader, DashLoading, MonthBars, Panel, PanelHead, Tile, todayText } from "./role-dashboard-ui";
 import "@/styles/client-portal.css";
-
-type ClientContact = {
-  id: string;
-  first_name: string;
-  last_name: string;
-  email: string | null;
-  phone: string | null;
-  designation: string;
-  is_primary: boolean;
-  status: "ACTIVE" | "INACTIVE";
-};
 
 type PricingModeCode = "PER_VIDEO" | "PER_PIECE" | "MONTHLY_FIXED" | "MONTHLY_PACKAGE" | "COMMISSION_PER_DELIVERABLE";
 
-type PricingItem = {
-  service_id: string;
-  service_name: string;
-  service_code: string;
-  configured: boolean;
-  default_pricing_model: PricingModeCode;
-  current_rate: {
-    id: string;
-    pricing_model: PricingModeCode;
-    amount: string | number;
-    currency: string;
-    notes: string;
-  } | null;
-};
-
-/** Profile and agreed rates (GET /clients/me/dashboard). */
 type ProfilePayload = {
   client: {
     id: string;
@@ -42,16 +19,20 @@ type ProfilePayload = {
     code: string;
     email: string | null;
     phone: string | null;
-    website: string | null;
     account_email: string | null;
-    contacts: ClientContact[];
   };
-  pricing: { items: PricingItem[] };
+  pricing: {
+    items: {
+      service_id: string;
+      service_name: string;
+      default_pricing_model: PricingModeCode;
+      current_rate: { pricing_model: PricingModeCode; amount: string | number; currency: string; notes: string } | null;
+    }[];
+  };
 };
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER" | "UPI" | "CHEQUE" | "CARD" | "OTHER";
 
-/** Work counts, budget and payments (GET /client-portal/summary). Never contains a task list. */
 type SummaryPayload = {
   client_name: string;
   currency: string;
@@ -64,6 +45,8 @@ type SummaryPayload = {
   pending_amount: string;
   current_month_charged: string;
   payments: { amount: string; received_on: string; method: PaymentMethod; reference: string }[];
+  recent_deliveries: { title: string; service_name: string; delivered_on: string; amount: string }[];
+  monthly: { month: string; items: number; amount: string }[];
 };
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -76,7 +59,7 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
 };
 
 function money(amount: string | number | null | undefined, currency = "INR") {
-  const numeric = amount == null ? Number.NaN : typeof amount === "number" ? amount : Number(amount);
+  const numeric = amount == null ? Number.NaN : Number(amount);
   if (!Number.isFinite(numeric)) return "—";
   return new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 2 }).format(numeric);
 }
@@ -99,10 +82,6 @@ function pricingLabel(value: PricingModeCode) {
   );
 }
 
-function scrollToId(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { cache: "no-store" });
   const body = (await response.json().catch(() => ({}))) as T | { detail?: string };
@@ -113,381 +92,294 @@ async function getJson<T>(url: string): Promise<T> {
   return body as T;
 }
 
+/** Ring showing how much of the budget approved work has used. */
+function BudgetRing({ percent, over }: { percent: number; over: boolean }) {
+  const radius = 52;
+  const length = 2 * Math.PI * radius;
+  const filled = (Math.min(percent, 100) / 100) * length;
+  return (
+    <svg className="client-ring" viewBox="0 0 132 132" role="img" aria-label={`${percent}% of budget used`}>
+      <circle className="track" cx="66" cy="66" r={radius} />
+      <circle
+        className={`fill${over ? " over" : percent >= 80 ? " near" : ""}`}
+        cx="66"
+        cy="66"
+        r={radius}
+        strokeDasharray={`${filled} ${length - filled}`}
+        transform="rotate(-90 66 66)"
+      />
+      <text x="66" y="64" textAnchor="middle" className="value">
+        {percent}%
+      </text>
+      <text x="66" y="82" textAnchor="middle" className="label">
+        used
+      </text>
+    </svg>
+  );
+}
+
 export function DashboardPage() {
   const [profile, setProfile] = useState<ProfilePayload | null>(null);
   const [summary, setSummary] = useState<SummaryPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [summaryError, setSummaryError] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    setSummaryError("");
     const [profileResult, summaryResult] = await Promise.allSettled([
       getJson<ProfilePayload>("/api/client/dashboard"),
       getJson<SummaryPayload>("/api/client/summary"),
     ]);
     if (profileResult.status === "fulfilled") setProfile(profileResult.value);
-    else setError(profileResult.reason instanceof Error ? profileResult.reason.message : "Unable to load dashboard.");
     if (summaryResult.status === "fulfilled") setSummary(summaryResult.value);
-    else
-      setSummaryError(
-        summaryResult.reason instanceof Error ? summaryResult.reason.message : "Work and billing are unavailable.",
-      );
+    else setError(summaryResult.reason instanceof Error ? summaryResult.reason.message : "Unable to load.");
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void load();
-    }, 120);
+    const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
-  }, [load, refreshKey]);
+  }, [load]);
 
-  const configuredRates = useMemo(
+  const rates = useMemo(
     () => (profile?.pricing.items ?? []).filter((item) => item.current_rate !== null),
     [profile?.pricing.items],
   );
 
-  if (loading) return <DashboardContentLoader />;
+  const name = profile?.client.name ?? summary?.client_name ?? "";
+  const header = (
+    <DashHeader
+      name={name}
+      subtitle={`${todayText()}${name ? ` · ${name}` : ""}`}
+      actions={
+        <a href="#client-budget-panel" className="management-primary-action">
+          <PiggyBank /> Budget
+        </a>
+      }
+    />
+  );
 
-  if (error && !summary) {
+  if (loading && !summary) {
     return (
-      <>
-        <DashboardHero
-          title="Welcome to the "
-          highlight="Client Portal"
-          description="See the work delivered for you, your budget and your payments in one place."
-          action={
-            <button type="button" onClick={() => setRefreshKey((current) => current + 1)}>
-              Retry
-            </button>
-          }
-        />
-        <div className="dash-content">
-          <section className="dash-panel client-dashboard-panel">
-            <header>
-              <h2>Unable to load your workspace</h2>
-              <p>{error}</p>
-            </header>
-          </section>
+      <div className="dash-content production-dashboard">
+        {header}
+        <DashLoading />
+      </div>
+    );
+  }
+  if (!summary) {
+    return (
+      <div className="dash-content production-dashboard">
+        {header}
+        <div className="organization-state">
+          <h3>{error || "Your workspace is not available yet."}</h3>
+          <button type="button" onClick={() => void load()}>
+            Retry
+          </button>
         </div>
-      </>
+      </div>
     );
   }
 
-  const currency = summary?.currency ?? "INR";
-  const budget = summary?.budget;
-  const overBudget = Boolean(budget?.has_budget && Number(budget.overage) > 0);
-  const usedPercent =
-    budget?.has_budget && Number(budget.total) > 0
-      ? Math.min(100, Math.round((Number(budget.used) / Number(budget.total)) * 100))
+  const { currency, budget } = summary;
+  const over = budget.has_budget && Number(budget.overage) > 0;
+  const percent =
+    budget.has_budget && Number(budget.total) > 0
+      ? Math.min(999, Math.round((Number(budget.used) / Number(budget.total)) * 100))
       : 0;
-  const topServices = (summary?.services ?? [])
-    .filter((service) => service.completed > 0)
-    .slice(0, 2)
-    .map((service) => `${service.service_name} ${service.completed}`)
-    .join(" · ");
+  const thisMonth = summary.monthly[summary.monthly.length - 1];
 
   return (
-    <>
-      <DashboardHero
-        title="Welcome back, "
-        highlight={profile?.client.name ?? summary?.client_name ?? "Client"}
-        description="See the work delivered for you, your budget and your payments in one place."
-        action={
-          <button type="button" onClick={() => scrollToId("client-budget-panel")}>
-            View budget
-          </button>
-        }
-      />
-      <div className="dash-content">
-        <section className="dash-stats" aria-label="Workspace summary">
-          <StatCard
-            label="Work Delivered"
-            value={summary ? String(summary.completed_items) : "—"}
-            change={summary ? topServices || "Approved and completed items" : "Not available yet"}
-            icon="eye"
-          />
-          <StatCard
-            label="In Progress"
-            value={summary ? String(summary.in_progress_items) : "—"}
-            change="Being worked on now"
-            icon="bolt"
-          />
-          <StatCard
-            label="Budget Remaining"
-            value={budget?.has_budget ? money(budget.remaining, currency) : "—"}
-            change={
-              !budget?.has_budget
-                ? "No budget recorded yet"
-                : overBudget
-                  ? `Over budget by ${money(budget.overage, currency)}`
-                  : `of ${money(budget.total, currency)} budget`
-            }
-            icon="globe"
-            tone={overBudget ? "warning" : undefined}
-          />
-          <StatCard
-            label="Pending Payment"
-            value={summary ? money(summary.pending_amount, currency) : "—"}
-            change={
-              summary
-                ? `Billed ${money(summary.total_charged, currency)} · paid ${money(summary.total_paid, currency)}`
-                : "Not available yet"
-            }
-            icon="money"
-          />
+    <div className="dash-content production-dashboard">
+      {header}
+      <div className="production-dash-body">
+        <section className="company-dashboard-kpis" aria-label="Your summary">
+          <Tile title="Delivered" value={String(summary.completed_items)} icon={<CheckCheck />}>
+            {thisMonth ? `${thisMonth.items} this month` : "Approved work"}
+          </Tile>
+          <Tile title="In progress" value={String(summary.in_progress_items)} icon={<Hourglass />}>
+            Being worked on now
+          </Tile>
+          <Tile
+            title={over ? "Over budget" : "Budget left"}
+            value={budget.has_budget ? money(over ? budget.overage : budget.remaining, currency) : "—"}
+            icon={<PiggyBank />}
+            tone={over ? "negative" : undefined}
+          >
+            {budget.has_budget ? `of ${money(budget.total, currency)} budget` : "No budget recorded yet"}
+          </Tile>
+          <Tile title="Pending payment" value={money(summary.pending_amount, currency)} icon={<Wallet />}>
+            Billed {money(summary.total_charged, currency)} · paid {money(summary.total_paid, currency)}
+          </Tile>
         </section>
 
-        {summaryError && (
-          <section className="dash-panel client-dashboard-panel">
-            <header>
-              <h2>Work and billing are not available</h2>
-              <p>{summaryError}</p>
-            </header>
-          </section>
-        )}
-
-        <section className="dash-workspace-grid">
-          <article className="dash-panel client-dashboard-panel" id="client-budget-panel">
-            <header>
-              <h2>Budget</h2>
-              <p>The amount you set aside with your agency, and how much of it approved work has used.</p>
-            </header>
-            {budget?.has_budget ? (
-              <>
-                <div className="client-dashboard-summary">
-                  <div>
-                    <span>Budget</span>
-                    <strong>{money(budget.total, currency)}</strong>
+        <section className="company-dashboard-grid production-dash-grid">
+          <Panel>
+            <PanelHead eyebrow="DELIVERED" title="Work per month" />
+            <div className="production-dash-panel-body">
+              <MonthBars
+                label="Items delivered per month"
+                points={summary.monthly.map((point) => ({
+                  key: point.month.slice(0, 7),
+                  value: point.items,
+                  display: String(point.items),
+                }))}
+              />
+              <p className="production-dash-footnote">
+                Billed this month {money(summary.current_month_charged, currency)}
+                {summary.services.some((service) => service.completed > 0)
+                  ? ` · ${summary.services
+                      .filter((service) => service.completed > 0)
+                      .map((service) => `${service.service_name} ${service.completed}`)
+                      .join(" · ")}`
+                  : ""}
+              </p>
+            </div>
+          </Panel>
+          <div id="client-budget-panel" className="client-dash-anchor">
+            <Panel>
+              <PanelHead eyebrow="BUDGET" title={budget.has_budget ? money(budget.total, currency) : "No budget yet"} />
+              <div className="production-dash-panel-body">
+                {budget.has_budget ? (
+                  <div className="client-budget-ring">
+                    <BudgetRing percent={percent} over={over} />
+                    <dl>
+                      <div>
+                        <dt>Used</dt>
+                        <dd>{money(budget.used, currency)}</dd>
+                      </div>
+                      <div>
+                        <dt>{over ? "Over by" : "Left"}</dt>
+                        <dd className={over ? "client-portal-negative" : undefined}>
+                          {money(over ? budget.overage : budget.remaining, currency)}
+                        </dd>
+                      </div>
+                    </dl>
                   </div>
-                  <div>
-                    <span>Used</span>
-                    <strong>{money(budget.used, currency)}</strong>
-                  </div>
-                  <div>
-                    <span>{overBudget ? "Over budget" : "Remaining"}</span>
-                    <strong className={overBudget ? "client-portal-negative" : undefined}>
-                      {money(overBudget ? budget.overage : budget.remaining, currency)}
-                    </strong>
-                  </div>
-                </div>
-                <div className="client-portal-meter-wrap">
-                  <div
-                    className={`client-portal-meter${overBudget ? " over" : usedPercent >= 80 ? " near" : ""}`}
-                    role="meter"
-                    aria-label="Budget used"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={usedPercent}
-                  >
-                    <i style={{ width: `${usedPercent}%` }} />
-                  </div>
-                  <span>{usedPercent}% used</span>
-                </div>
-                {overBudget ? (
-                  <p className="client-portal-alert" role="status">
+                ) : (
+                  <p className="production-dash-empty">
+                    <PiggyBank aria-hidden="true" />
+                    Your agency will add your budget and top-ups here.
+                  </p>
+                )}
+                {over ? (
+                  <p className="client-dash-alert" role="status">
                     Approved work has gone {money(budget.overage, currency)} over your budget. Please contact your
                     agency to top it up.
                   </p>
-                ) : usedPercent >= 80 ? (
-                  <p className="client-portal-note" role="status">
+                ) : budget.has_budget && percent >= 80 ? (
+                  <p className="client-dash-note" role="status">
                     You have used most of your budget. Consider a top-up so work continues smoothly.
                   </p>
                 ) : null}
-              </>
-            ) : (
-              <div className="client-dashboard-list">
-                <article>
-                  <div>
-                    <strong>No budget recorded yet</strong>
-                    <span>Your agency will add your budget and any top-ups here.</span>
-                  </div>
-                </article>
               </div>
-            )}
-          </article>
-          <article className="dash-panel client-dashboard-panel" id="client-rates-panel">
-            <header>
-              <h2>Your rates</h2>
-              <p>Prices agreed with your agency for each type of work.</p>
-            </header>
-            <div className="client-dashboard-list">
-              {configuredRates.length ? (
-                configuredRates.map((item) => (
-                  <article key={item.service_id}>
-                    <div>
-                      <strong>{item.service_name}</strong>
-                      <span>{pricingLabel(item.current_rate?.pricing_model ?? item.default_pricing_model)}</span>
-                    </div>
-                    <div>
-                      <strong>{money(item.current_rate?.amount, item.current_rate?.currency ?? currency)}</strong>
-                      <span>{item.current_rate?.notes || "Current rate"}</span>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <article>
-                  <div>
-                    <strong>No rates set yet</strong>
-                    <span>Your agency will add the price for each type of work.</span>
-                  </div>
-                </article>
-              )}
-            </div>
-          </article>
+            </Panel>
+          </div>
         </section>
 
-        <section className="dash-workspace-grid">
-          <article className="dash-panel client-dashboard-panel" id="client-work-panel">
-            <header>
-              <h2>Work delivered</h2>
-              <p>Finished work by service. You are billed only for work the agency has approved.</p>
-            </header>
-            <div className="client-dashboard-list">
-              {(summary?.services ?? []).length ? (
-                summary!.services.map((service) => (
-                  <article key={service.service_id}>
-                    <div>
-                      <strong>
-                        {service.service_name}: {service.completed} delivered
-                      </strong>
-                      <span>{service.in_progress ? `${service.in_progress} in progress` : "Nothing in progress"}</span>
-                    </div>
-                    <div>
-                      <strong>{money(service.charged, currency)}</strong>
-                      <span>Billed for this service</span>
-                    </div>
-                  </article>
-                ))
+        <section className="company-dashboard-grid production-dash-grid">
+          <Panel>
+            <PanelHead eyebrow="RECENT" title="Latest deliveries" />
+            <div className="production-dash-panel-body">
+              {summary.recent_deliveries.length === 0 ? (
+                <p className="production-dash-empty">
+                  <CheckCheck aria-hidden="true" />
+                  Delivered work shows up here.
+                </p>
               ) : (
-                <article>
-                  <div>
-                    <strong>No work delivered yet</strong>
-                    <span>Counts appear here as your agency completes work for you.</span>
-                  </div>
-                </article>
+                <ul className="production-dash-rows">
+                  {summary.recent_deliveries.map((item, index) => (
+                    <li key={`${item.delivered_on}-${index}`}>
+                      <div className="client-dash-row">
+                        <span>
+                          <small>{item.service_name}</small>
+                          <strong>{item.title}</strong>
+                        </span>
+                        <span className="meta">
+                          <em>{money(item.amount, currency)}</em>
+                          <small>{formatDate(item.delivered_on)}</small>
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
-          </article>
-          <article className="dash-panel client-dashboard-panel">
-            <header>
-              <h2>Quick actions</h2>
-              <p>Jump to the part of your workspace you need.</p>
-            </header>
-            <div className="dash-actions">
-              <button type="button" onClick={() => scrollToId("client-work-panel")}>
-                Work delivered
-              </button>
-              <button type="button" onClick={() => scrollToId("client-budget-panel")}>
-                Budget
-              </button>
-              <button type="button" onClick={() => scrollToId("client-billing-panel")}>
-                Payments
-              </button>
-              <button type="button" onClick={() => scrollToId("client-rates-panel")}>
-                Rates
-              </button>
+          </Panel>
+          <Panel>
+            <PanelHead eyebrow="PAYMENTS" title={`Paid ${money(summary.total_paid, currency)}`} />
+            <div className="production-dash-panel-body">
+              {summary.payments.length === 0 ? (
+                <p className="production-dash-empty">
+                  <ReceiptText aria-hidden="true" />
+                  Payments appear here once your agency records them.
+                </p>
+              ) : (
+                <ul className="production-dash-rows">
+                  {summary.payments.slice(0, 5).map((payment, index) => (
+                    <li key={`${payment.received_on}-${index}`}>
+                      <div className="client-dash-row">
+                        <span>
+                          <small>{METHOD_LABELS[payment.method] ?? payment.method}</small>
+                          <strong>{money(payment.amount, currency)}</strong>
+                        </span>
+                        <span className="meta">
+                          <em>{formatDate(payment.received_on)}</em>
+                          <small>{payment.reference || "Payment received"}</small>
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-          </article>
+          </Panel>
         </section>
 
-        <section className="dash-workspace-grid">
-          <article className="dash-panel client-dashboard-panel" id="client-billing-panel">
-            <header>
-              <h2>Billing and payments</h2>
-              <p>
-                {summary
-                  ? `Billed this month: ${money(summary.current_month_charged, currency)}`
-                  : "Your billing summary will appear here."}
-              </p>
-            </header>
-            <div className="client-dashboard-summary">
-              <div>
-                <span>Total billed</span>
-                <strong>{money(summary?.total_charged, currency)}</strong>
-              </div>
-              <div>
-                <span>Paid</span>
-                <strong>{money(summary?.total_paid, currency)}</strong>
-              </div>
-              <div>
-                <span>Pending</span>
-                <strong>{money(summary?.pending_amount, currency)}</strong>
-              </div>
-            </div>
-            <div className="client-dashboard-list">
-              {(summary?.payments ?? []).length ? (
-                summary!.payments.map((payment, index) => (
-                  <article key={`${payment.received_on}-${index}`}>
-                    <div>
-                      <strong>{money(payment.amount, currency)}</strong>
-                      <span>{METHOD_LABELS[payment.method] ?? payment.method}</span>
-                    </div>
-                    <div>
-                      <strong>{formatDate(payment.received_on)}</strong>
-                      <span>{payment.reference || "Payment received"}</span>
-                    </div>
-                  </article>
-                ))
+        <section className="company-dashboard-grid production-dash-grid">
+          <Panel>
+            <PanelHead eyebrow="RATES" title="Your rates" />
+            <div className="production-dash-panel-body">
+              {rates.length === 0 ? (
+                <p className="production-dash-empty">Your agency will add the price for each type of work.</p>
               ) : (
-                <article>
-                  <div>
-                    <strong>No payments recorded yet</strong>
-                    <span>Payments you make appear here once your agency records them.</span>
-                  </div>
-                </article>
+                <ul className="production-dash-rows">
+                  {rates.map((item) => (
+                    <li key={item.service_id}>
+                      <div className="client-dash-row">
+                        <span>
+                          <small>{pricingLabel(item.current_rate?.pricing_model ?? item.default_pricing_model)}</small>
+                          <strong>{item.service_name}</strong>
+                        </span>
+                        <span className="meta">
+                          <em>{money(item.current_rate?.amount, item.current_rate?.currency ?? currency)}</em>
+                          <small>{item.current_rate?.notes || "Current rate"}</small>
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
-          </article>
-          <article className="dash-panel client-dashboard-panel" id="client-profile-panel">
-            <header>
-              <h2>Client profile</h2>
-              <p>Your workspace identity and primary contacts.</p>
-            </header>
-            <div className="client-dashboard-grid">
-              <div>
-                <span>Client code</span>
-                <strong>{profile?.client.code ?? "—"}</strong>
-              </div>
-              <div>
-                <span>Workspace email</span>
-                <strong>{profile?.client.account_email || profile?.client.email || "—"}</strong>
-              </div>
-              <div>
-                <span>Contact phone</span>
-                <strong>{profile?.client.phone || "—"}</strong>
-              </div>
+          </Panel>
+          <Panel>
+            <PanelHead eyebrow="PROFILE" title={profile?.client.code ?? "Your account"} />
+            <div className="production-dash-panel-body">
+              <dl className="client-dash-facts">
+                <div>
+                  <dt>Workspace email</dt>
+                  <dd>{profile?.client.account_email || profile?.client.email || "—"}</dd>
+                </div>
+                <div>
+                  <dt>Phone</dt>
+                  <dd>{profile?.client.phone || "—"}</dd>
+                </div>
+              </dl>
             </div>
-            <div className="client-dashboard-list compact">
-              {(profile?.client.contacts ?? []).length ? (
-                profile!.client.contacts.map((contact) => (
-                  <article key={contact.id}>
-                    <div>
-                      <strong>{`${contact.first_name} ${contact.last_name}`.trim()}</strong>
-                      <span>{contact.designation || "Client contact"}</span>
-                    </div>
-                    <div>
-                      <strong>{contact.email || "No email"}</strong>
-                      <span>{contact.phone || "No phone"}</span>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <article>
-                  <div>
-                    <strong>No contacts configured</strong>
-                    <span>Your agency can add authorised contacts here.</span>
-                  </div>
-                </article>
-              )}
-            </div>
-          </article>
+          </Panel>
         </section>
       </div>
-    </>
+    </div>
   );
 }

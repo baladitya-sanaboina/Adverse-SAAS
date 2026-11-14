@@ -266,3 +266,29 @@ def salary_cost_in_range(rates: list[SalaryRate], start: date, end: date) -> Dec
             total += Decimal(rate.monthly_amount) / days_in_month
         day += timedelta(days=1)
     return money(total)
+
+
+def last_month_starts(today: date, count: int) -> list[date]:
+    """First day of each of the last `count` months, oldest first, ending with today's month."""
+    months = []
+    year, month = today.year, today.month
+    for _ in range(count):
+        months.append(date(year, month, 1))
+        month -= 1
+        if month == 0:
+            year, month = year - 1, 12
+    return list(reversed(months))
+
+
+def monthly_totals(
+    deliveries: list[tuple[date, Decimal]], month_starts: list[date]
+) -> list[tuple[date, int, Decimal]]:
+    """(month start, item count, amount) for each month, including empty months."""
+    counts = {start: 0 for start in month_starts}
+    amounts = {start: Decimal("0") for start in month_starts}
+    for delivered_on, amount in deliveries:
+        key = date(delivered_on.year, delivered_on.month, 1)
+        if key in counts:
+            counts[key] += 1
+            amounts[key] += Decimal(amount)
+    return [(start, counts[start], money(amounts[start])) for start in month_starts]

@@ -76,8 +76,12 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const id = new URLSearchParams(window.location.search).get("task");
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("task");
       if (id && TASK_ID.test(id)) setOpenId(id);
+      // Dashboard links: ?status=<STATUS> opens the list filtered to that status.
+      const statusFilter = params.get("status");
+      if (statusFilter && (COLUMNS as string[]).includes(statusFilter)) setStatus(statusFilter);
       try {
         const saved = window.localStorage.getItem(VIEW_KEY);
         if (saved === "board" || saved === "list") setView(saved);

@@ -28,6 +28,8 @@ from app.schemas.production import (
     BudgetEntryResponse,
     ClientBudgetResponse,
     ClientBudgetSummary,
+    ClientDeliveryLine,
+    ClientMonthPoint,
     ClientPaymentLine,
     ClientPaymentListResponse,
     ClientPaymentRequest,
@@ -78,7 +80,9 @@ from app.services.production_rules import (
     BILLABLE_STATUSES,
     SalaryRate,
     budget_position,
+    last_month_starts,
     money,
+    monthly_totals,
     resolve_period,
     salary_cost_in_range,
     salary_due_by_month,
@@ -356,6 +360,10 @@ class FinanceService:
         total_paid = sum((money(payment.amount) for payment in payments), ZERO)
         total_charged = money(totals.used)
         month_start, month_end = resolve_period("this_month", today)
+        month_starts = last_month_starts(today, 6)
+        recent = self.repository.client_deliveries(
+            company_id, client.id, tz, start=month_starts[0], end=today
+        )
         return ClientWorkspaceSummaryResponse(
             client_name=client.name,
             currency=currency,
@@ -394,6 +402,21 @@ class FinanceService:
                     reference=payment.reference,
                 )
                 for payment in payments
+            ],
+            recent_deliveries=[
+                ClientDeliveryLine(
+                    title=row.title,
+                    service_name=row.service_name,
+                    delivered_on=row.delivered_on,
+                    amount=money(row.amount),
+                )
+                for row in recent[:6]
+            ],
+            monthly=[
+                ClientMonthPoint(month=start, items=items, amount=amount)
+                for start, items, amount in monthly_totals(
+                    [(row.delivered_on, row.amount) for row in recent], month_starts
+                )
             ],
         )
 

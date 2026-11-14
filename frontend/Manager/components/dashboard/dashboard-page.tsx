@@ -1,24 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { DashboardHero } from "./dashboard-hero";
-import { WorkspaceDashboardBody } from "@/components/workspace/workspace-pages";
+import { WorkspaceDashboardPage } from "@loopless-shared/workspace/workspace-dashboard";
 
+/** Manager dashboard in the style of the Admin dashboard (owner request 2026-11-14). */
 export function DashboardPage() {
-  const router = useRouter();
-  return (
-    <>
-      <DashboardHero
-        title="Lead your "
-        highlight="Manager Workspace"
-        description="Track delivery, client momentum, and team execution from one clean Adverse command center."
-        action={
-          <button type="button" onClick={() => router.push("/tasks")}>
-            Open my tasks
-          </button>
-        }
-      />
-      <WorkspaceDashboardBody />
-    </>
-  );
+  return <WorkspaceDashboardPage role="MANAGER" />;
 }

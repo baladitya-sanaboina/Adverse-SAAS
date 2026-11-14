@@ -8,6 +8,8 @@ from app.services.production_rules import (
     budget_position,
     can_transition,
     is_overdue,
+    last_month_starts,
+    monthly_totals,
     resolve_period,
     salary_cost_in_range,
     salary_due_by_month,
@@ -171,6 +173,31 @@ class SalaryTest(unittest.TestCase):
             salary_cost_in_range(rates, date(2026, 11, 13), date(2026, 11, 13)), Decimal("1000.00")
         )
         self.assertEqual(salary_due_by_month([], date(2026, 11, 13)), [])
+
+
+class ClientMonthlyTest(unittest.TestCase):
+    def test_last_month_starts_cross_year(self) -> None:
+        self.assertEqual(
+            last_month_starts(date(2026, 2, 14), 3),
+            [date(2025, 12, 1), date(2026, 1, 1), date(2026, 2, 1)],
+        )
+
+    def test_monthly_totals_fill_empty_months_and_ignore_outside(self) -> None:
+        months = last_month_starts(date(2026, 11, 14), 3)
+        rows = [
+            (date(2026, 11, 2), Decimal("700")),
+            (date(2026, 11, 20), Decimal("700.50")),
+            (date(2026, 9, 30), Decimal("500")),
+            (date(2026, 1, 5), Decimal("999")),  # outside the window
+        ]
+        self.assertEqual(
+            monthly_totals(rows, months),
+            [
+                (date(2026, 9, 1), 1, Decimal("500.00")),
+                (date(2026, 10, 1), 0, Decimal("0.00")),
+                (date(2026, 11, 1), 2, Decimal("1400.50")),
+            ],
+        )
 
 
 if __name__ == "__main__":

@@ -1,11 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { CalendarDays, ClipboardList, History } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
-import { StatCard } from "@/components/dashboard/stat-card";
 import { Panel, TableSkeleton } from "../production/production-ui";
 import {
   STATUS_LABELS,
@@ -18,7 +15,6 @@ import {
 } from "../production/client";
 import { MoneyPrivacy, PrivacyToggle, usePrivateMoney } from "../production/privacy";
 import type { EmployeeSalary, ManagerEarnings } from "../production/types";
-import type { WorkspaceDashboard } from "./types";
 import "../styles/organization.css";
 import "../styles/service-pricing-settings.css";
 import "../styles/production.css";
@@ -271,106 +267,5 @@ function EmployeeSalaryPageContent() {
         </section>
       </div>
     </>
-  );
-}
-
-/**
- * Body of the Manager/Employee dashboard with real numbers. Keeps each app's existing hero,
- * stat cards and panels; only the values and lists are live.
- */
-export function WorkspaceDashboardBody() {
-  const money = formatMoneyText;
-  const router = useRouter();
-  const { data, error, load } = useLoad<WorkspaceDashboard>("/api/workspace/dashboard");
-  if (error) {
-    return (
-      <div className="dash-content">
-        <Failed error={error} onRetry={() => void load()} />
-      </div>
-    );
-  }
-  const counts = data?.counts;
-  const currency = data?.currency ?? "INR";
-  const manager = data?.role === "MANAGER";
-  const value = (n: number | undefined) => (n === undefined ? "…" : String(n));
-  return (
-    <div className="dash-content">
-      <section className="dash-stats" aria-label="Your work summary">
-        <StatCard
-          label="To start"
-          value={value(counts?.assigned)}
-          change={counts ? `${counts.in_progress} in progress` : "Loading"}
-          icon="globe"
-        />
-        <StatCard
-          label="Waiting for review"
-          value={value(counts ? counts.submitted + counts.in_review : undefined)}
-          change={counts ? `${counts.overdue} overdue` : "Loading"}
-          icon="eye"
-        />
-        <StatCard
-          label={manager ? "Commission this month" : "Salary this month"}
-          value={data ? money(data.current_month_earnings, currency) : "…"}
-          change={data ? `${money(data.pending_payment, currency)} pending payment` : "Loading"}
-          icon="money"
-        />
-        <StatCard
-          label={manager ? "Monitoring" : "Completed"}
-          value={value(manager ? counts?.monitoring : counts ? counts.approved + counts.completed : undefined)}
-          change={manager ? "Tasks where you track status" : "Approved and completed"}
-          icon="bolt"
-        />
-      </section>
-      <section className="dash-workspace-grid">
-        <article className="dash-panel">
-          <header>
-            <h2>Up next</h2>
-            <p>Your open tasks, soonest due first.</p>
-          </header>
-          <div className="dash-modules">
-            {!data ? (
-              <p>Loading…</p>
-            ) : data.upcoming_tasks.length === 0 ? (
-              <div>
-                <em>● all clear</em>
-                <h3>No open tasks</h3>
-                <p>New work appears here when the Admin assigns it to you.</p>
-              </div>
-            ) : (
-              data.upcoming_tasks.slice(0, 4).map((task) => (
-                <Link
-                  key={task.id}
-                  href={`/tasks?task=${task.id}`}
-                  style={{ color: "inherit", textDecoration: "none" }}
-                >
-                  <div>
-                    <em>● {task.is_overdue ? "overdue" : STATUS_LABELS[task.status].toLowerCase()}</em>
-                    <h3>{task.title}</h3>
-                    <p>
-                      {task.code} · {task.client_name}
-                    </p>
-                    <strong>{task.due_date ? `Due ${formatDate(task.due_date)}` : "No due date"}</strong>
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
-        </article>
-        <article className="dash-panel">
-          <header>
-            <h2>Quick actions</h2>
-            <p>Move into work without extra clicks.</p>
-          </header>
-          <div className="dash-actions">
-            <button type="button" onClick={() => router.push("/tasks")}>
-              Open my tasks
-            </button>
-            <button type="button" onClick={() => router.push(manager ? "/earnings" : "/salary")}>
-              {manager ? "View my earnings" : "View my salary"}
-            </button>
-          </div>
-        </article>
-      </section>
-    </div>
   );
 }

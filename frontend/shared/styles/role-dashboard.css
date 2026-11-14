@@ -1,0 +1,237 @@
+/*
+ * Role dashboards (Manager, Employee, Client) in the style of the Admin dashboard.
+ * The company-dashboard-* rules below are copied unchanged from Admin/styles/dashboard.css so the
+ * tiles and panels look identical; the role-chart rules are new.
+ */
+.company-dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.company-dashboard-kpi {
+  min-height: 166px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px #2b1f380a;
+}
+.company-dashboard-kpi > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.company-dashboard-kpi span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.company-dashboard-kpi i {
+  width: 39px;
+  height: 39px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #DCEEFF;
+  border-radius: 11px;
+  color: #0876ED;
+  background: #EEF7FF;
+}
+.dark .company-dashboard-kpi i {
+  border-color: #424244;
+  color: #8CC8FF;
+  background: #0B0B0D;
+}
+.company-dashboard-kpi svg {
+  width: 19px;
+  height: 19px;
+}
+.company-dashboard-kpi strong {
+  display: block;
+  margin-top: 14px;
+  font-size: 2rem;
+  line-height: 1;
+}
+.company-dashboard-kpi.is-unavailable strong {
+  color: var(--muted);
+}
+.company-dashboard-kpi small,
+.company-dashboard-kpi > a {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.company-dashboard-kpi > a {
+  color: #0876ED;
+}
+.dark .company-dashboard-kpi > a {
+  color: #8CC8FF;
+}
+.company-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(270px, 0.85fr);
+  gap: 20px;
+}
+.company-dashboard-panel {
+  min-height: 350px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px #2b1f380a;
+}
+.company-dashboard-panel > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.company-dashboard-panel header span {
+  color: #0876ED;
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.dark .company-dashboard-panel header span {
+  color: #8CC8FF;
+}
+.company-dashboard-panel h2,
+.company-dashboard-panel h3,
+.company-dashboard-panel p {
+  margin: 0;
+}
+.company-dashboard-panel h2 {
+  margin-top: 3px;
+  font-size: 1.1rem;
+}
+.company-dashboard-panel header > p {
+  max-width: 260px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-align: right;
+}
+.company-dashboard-loading {
+  min-height: 100vh;
+  padding: 92px 32px 48px;
+}
+.company-dashboard-loading i,
+.company-dashboard-loading__hero {
+  display: block;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  animation: company-dashboard-pulse 1.35s ease-in-out infinite;
+}
+.company-dashboard-loading__hero {
+  height: 250px;
+  border-radius: 18px;
+}
+.company-dashboard-loading__cards,
+.company-dashboard-loading__panels {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+}
+.company-dashboard-loading__cards {
+  grid-template-columns: repeat(4, 1fr);
+}
+.company-dashboard-loading__cards i {
+  height: 166px;
+  border-radius: 16px;
+}
+.company-dashboard-loading__panels {
+  grid-template-columns: 2fr 0.85fr;
+}
+.company-dashboard-loading__panels i {
+  height: 340px;
+  border-radius: 16px;
+}
+@keyframes company-dashboard-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (max-width: 1050px) {
+  .company-dashboard-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .company-dashboard-grid,
+  .company-dashboard-loading__panels {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 720px) {
+  .company-dashboard-kpis,
+  .company-dashboard-loading__cards {
+    grid-template-columns: 1fr;
+  }
+  .company-dashboard-panel > header {
+    align-items: start;
+    flex-direction: column;
+    gap: 7px;
+  }
+}
+
+/* ---------------------------------------------------------------- single-series month chart */
+.role-chart {
+  position: relative;
+  width: 100%;
+  min-height: 210px;
+}
+
+.role-chart svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.role-chart .grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.role-chart .axis,
+.role-chart .value {
+  fill: var(--muted);
+  font: 600 10px var(--font-poppins), Arial, Helvetica, sans-serif;
+}
+
+.role-chart .value {
+  fill: var(--foreground);
+}
+
+.role-chart rect.bar {
+  fill: var(--chart-revenue, #0876ed);
+}
+
+.role-chart rect.bar.current {
+  fill: var(--chart-revenue, #0876ed);
+}
+
+.role-chart rect.bar.past {
+  opacity: 0.55;
+}
+
+.role-chart-empty {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+/* Header actions are links as well as buttons. */
+.production-dash-actions > a {
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  .production-dash-actions > button {
+    width: 100%;
+  }
+}
