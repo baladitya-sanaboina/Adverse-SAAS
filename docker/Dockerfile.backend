@@ -12,4 +12,6 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Live event streams never close by themselves; without a short graceful timeout a code reload
+# waits for them forever and the API stops answering.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--timeout-graceful-shutdown", "3"]
