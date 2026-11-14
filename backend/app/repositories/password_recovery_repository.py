@@ -48,6 +48,37 @@ class PasswordRecoveryRepository:
                     (uuid4(), user_id, token_hash, expires_at),
                 )
 
+    def seconds_since_latest(self, user_id: UUID) -> float | None:
+        """Seconds since the user's open reset code was sent, or None when none is open."""
+        with database_pool.connection(timeout=2) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT EXTRACT(EPOCH FROM (NOW() - created_at)) "
+                    'FROM "password_reset_tokens" '
+                    "WHERE user_id = %s AND used_at IS NULL AND expires_at > NOW() "
+                    "ORDER BY created_at DESC LIMIT 1",
+                    (user_id,),
+                )
+                record = cursor.fetchone()
+                return float(record[0]) if record else None
+
+    def use_attempt(self, user_id: UUID) -> int | None:
+        """Count one check of the user's open reset code before it is compared.
+
+        Returns how many checks the code has had, or None when the user has no open code.
+        Counting first (in one locked UPDATE) means parallel guesses cannot slip past the limit.
+        """
+        with database_pool.connection(timeout=2) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    'UPDATE "password_reset_tokens" SET attempts = attempts + 1 '
+                    "WHERE user_id = %s AND used_at IS NULL AND expires_at > NOW() "
+                    "RETURNING attempts",
+                    (user_id,),
+                )
+                record = cursor.fetchone()
+                return int(record[0]) if record else None
+
     def find_reset_token(self, token_hash: str) -> PasswordResetRecord | None:
         with database_pool.connection(timeout=2) as connection:
             with connection.cursor() as cursor:

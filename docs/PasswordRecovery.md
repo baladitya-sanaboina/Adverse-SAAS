@@ -36,4 +36,5 @@ Passwords require at least 12 characters, including uppercase and lowercase lett
 - Reset tokens are single-use, time-limited and compared by hash.
 - Successful reset revokes all active access/refresh sessions.
 - Invalid, expired, used and inactive-account cases return consistent error codes.
+- The emailed 6-digit code can be checked at most 5 times. After that the code is refused with `RESET_ATTEMPTS_EXCEEDED` (429) until a new code is requested, and a new code is sent at most once a minute. Email verification codes have the same 5-check limit (`VERIFICATION_ATTEMPTS_EXCEEDED`).
 - The UI provides loading, success, network error, password visibility and strength states.

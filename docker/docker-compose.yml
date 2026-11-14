@@ -142,8 +142,8 @@ services:
       POSTGRES_DB: loopless_dev
       POSTGRES_USER: loopless
       POSTGRES_PASSWORD: loopless
-    ports:
-      - "5432:5432"
+    # No published port: the backend reaches it on the compose network, and publishing it put a
+    # default password on every network interface. Use `docker compose exec postgres psql`.
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -154,8 +154,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    # No published port (no password on this dev Redis); the backend uses the compose network.
     volumes:
       - redis_data:/data
     healthcheck:
@@ -168,8 +167,8 @@ services:
     image: axllent/mailpit:v1.27
     restart: unless-stopped
     ports:
-      - "8025:8025"
-      - "1025:1025"
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
     environment:
       MP_DATABASE: /data/mailpit.db
       MP_MAX_MESSAGES: 5000

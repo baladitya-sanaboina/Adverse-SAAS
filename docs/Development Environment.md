@@ -67,8 +67,9 @@ docker compose -f docker/docker-compose.yml down -v
 | Swagger API documentation | http://localhost:8000/docs |
 | ReDoc API documentation | http://localhost:8000/redoc |
 | OpenAPI schema | http://localhost:8000/openapi.json |
-| PostgreSQL | localhost:5432 |
-| Redis | localhost:6379 |
+| PostgreSQL | not published: `docker compose exec postgres psql -U loopless -d loopless_dev` |
+| Redis | not published: `docker compose exec redis redis-cli` |
+| Mailpit inbox | http://localhost:8025 (this machine only) |
 
 ## Folder overview
 

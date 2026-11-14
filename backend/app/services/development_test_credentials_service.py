@@ -63,7 +63,9 @@ _TEST_ACCOUNTS: tuple[DevelopmentTestAccount, ...] = (
 
 class DevelopmentTestCredentialsService:
     def ensure(self) -> None:
-        if settings.environment == "production":
+        # Shared password "1234" accounts: only on a developer's own machine, never on a staging
+        # or production server that other people can reach.
+        if settings.environment != "development":
             return
 
         try:

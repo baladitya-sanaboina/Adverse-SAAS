@@ -56,6 +56,21 @@ class EmailVerificationRepository:
                 record = cursor.fetchone()
                 return float(record[0]) if record else None
 
+    def use_attempt(self, user_id: UUID) -> int | None:
+        """Count one check of the user's open verification code before it is compared.
+
+        Returns how many checks the code has had, or None when the user has no open code.
+        """
+        with database_pool.connection(timeout=2) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    'UPDATE "email_verification_tokens" SET attempts = attempts + 1 '
+                    "WHERE user_id = %s AND expires_at > NOW() RETURNING attempts",
+                    (user_id,),
+                )
+                record = cursor.fetchone()
+                return int(record[0]) if record else None
+
     def find_token(self, token_hash: str) -> VerificationTokenRecord | None:
         with database_pool.connection(timeout=2) as connection:
             with connection.cursor() as cursor:

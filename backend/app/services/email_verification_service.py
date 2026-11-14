@@ -22,6 +22,10 @@ def verification_token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+# Each six-digit code may be checked only a few times; a new one needs the normal resend wait.
+MAX_CODE_ATTEMPTS = 5
+
+
 def verification_otp_hash(user_id: UUID, otp: str) -> str:
     return verification_token_hash(f"{user_id}:{otp}")
 
@@ -30,6 +34,7 @@ class EmailVerificationRepositoryProtocol(Protocol):
     def find_user_by_email(self, email: str) -> VerificationUserRecord | None: ...
     def create_token(self, user_id: UUID, token_hash: str, expires_at: datetime) -> None: ...
     def seconds_since_latest(self, user_id: UUID) -> float | None: ...
+    def use_attempt(self, user_id: UUID) -> int | None: ...
     def find_token(self, token_hash: str) -> VerificationTokenRecord | None: ...
     def activate_user(self, token_id: UUID, user_id: UUID) -> bool: ...
     def foundation_is_ready(self) -> bool: ...
@@ -85,6 +90,13 @@ class EmailVerificationService:
         if user is None:
             raise AuthenticationError(
                 400, "INVALID_VERIFICATION_TOKEN", "Verification code is invalid."
+            )
+        attempts = self.repository.use_attempt(user.id)
+        if attempts is not None and attempts > MAX_CODE_ATTEMPTS:
+            raise AuthenticationError(
+                429,
+                "VERIFICATION_ATTEMPTS_EXCEEDED",
+                "Too many wrong codes. Request a new verification code.",
             )
         record = self.repository.find_token(verification_otp_hash(user.id, otp))
         return self._consume_record(record)

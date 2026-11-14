@@ -20,6 +20,11 @@ from app.services.authentication_service import AuthenticationError
 from app.services.email_service import PasswordResetEmailSender, email_service
 from app.services.password_service import hash_password
 
+# A six-digit code has 900,000 values, so each code may be checked only a few times. A used-up
+# code stays on file until it expires, so the resend wait below still applies to it.
+MAX_CODE_ATTEMPTS = 5
+RESEND_COOLDOWN_SECONDS = 60
+
 
 def reset_token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -33,6 +38,10 @@ class PasswordRecoveryRepositoryProtocol(Protocol):
     def find_user_by_email(self, email: str) -> RecoveryUserRecord | None: ...
 
     def create_reset_token(self, user_id: UUID, token_hash: str, expires_at: datetime) -> None: ...
+
+    def seconds_since_latest(self, user_id: UUID) -> float | None: ...
+
+    def use_attempt(self, user_id: UUID) -> int | None: ...
 
     def find_reset_token(self, token_hash: str) -> PasswordResetRecord | None: ...
 
@@ -55,6 +64,10 @@ class PasswordRecoveryService:
         if user is None or user.status != "ACTIVE":
             return ForgotPasswordResponse()
 
+        elapsed = self.repository.seconds_since_latest(user.id)
+        if elapsed is not None and elapsed < RESEND_COOLDOWN_SECONDS:
+            return ForgotPasswordResponse()
+
         otp = f"{secrets.randbelow(900000) + 100000:06d}"
         expires_at = datetime.now(UTC) + timedelta(minutes=settings.password_reset_expiry_minutes)
         self.repository.create_reset_token(user.id, reset_otp_hash(user.id, otp), expires_at)
@@ -73,6 +86,13 @@ class PasswordRecoveryService:
             if user is None:
                 record = None
             else:
+                attempts = self.repository.use_attempt(user.id)
+                if attempts is not None and attempts > MAX_CODE_ATTEMPTS:
+                    raise AuthenticationError(
+                        429,
+                        "RESET_ATTEMPTS_EXCEEDED",
+                        "Too many wrong codes. Request a new password reset code.",
+                    )
                 record = self.repository.find_reset_token(
                     reset_otp_hash(user.id, request.otp or "")
                 )

@@ -11,6 +11,8 @@ from app.repositories.password_recovery_repository import (
 from app.schemas.authentication import ForgotPasswordRequest, ResetPasswordRequest
 from app.services.authentication_service import AuthenticationError
 from app.services.password_recovery_service import (
+    MAX_CODE_ATTEMPTS,
+    RESEND_COOLDOWN_SECONDS,
     PasswordRecoveryService,
     reset_otp_hash,
 )
@@ -24,13 +26,25 @@ class FakeRecoveryRepository:
         self.token_hash = ""
         self.password_hash = ""
         self.sessions_revoked = False
+        self.attempts = 0
+        self.elapsed: float | None = None
 
     def find_user_by_email(self, email: str):
         return self.user if email == self.user.email else None
 
     def create_reset_token(self, user_id, token_hash, expires_at):
         self.token_hash = token_hash
+        self.attempts = 0
         self.token = PasswordResetRecord(uuid4(), user_id, expires_at, None, "ACTIVE")
+
+    def seconds_since_latest(self, user_id):
+        return self.elapsed
+
+    def use_attempt(self, user_id):
+        if self.token is None or self.token.used_at is not None:
+            return None
+        self.attempts += 1
+        return self.attempts
 
     def find_reset_token(self, token_hash: str):
         return self.token if token_hash == self.token_hash else None
@@ -127,6 +141,55 @@ class PasswordRecoveryTests(unittest.TestCase):
                     confirm_password="NewStrongPass!123",
                 )
             )
+
+    def reset_with(self, code: str) -> None:
+        self.service.reset_password(
+            ResetPasswordRequest(
+                email="user@example.com",
+                otp=code,
+                new_password="NewStrongPass!123",
+                confirm_password="NewStrongPass!123",
+            )
+        )
+
+    def test_code_is_locked_after_too_many_wrong_guesses(self):
+        code = self.request_code()
+        wrong = "100000" if code != "100000" else "100001"
+        for _ in range(MAX_CODE_ATTEMPTS):
+            with self.assertRaisesRegex(AuthenticationError, "invalid"):
+                self.reset_with(wrong)
+        with self.assertRaises(AuthenticationError) as caught:
+            self.reset_with(code)
+        self.assertEqual(caught.exception.code, "RESET_ATTEMPTS_EXCEEDED")
+        self.assertEqual(self.repository.password_hash, "")
+        # The used-up code stays blocked, and a new one still waits for the resend gap.
+        self.repository.elapsed = 5
+        self.email.reset_code = ""
+        self.service.forgot_password(ForgotPasswordRequest(email="user@example.com"))
+        self.assertEqual(self.email.reset_code, "")
+        with self.assertRaises(AuthenticationError) as again:
+            self.reset_with(code)
+        self.assertEqual(again.exception.code, "RESET_ATTEMPTS_EXCEEDED")
+        self.assertEqual(self.repository.password_hash, "")
+
+    def test_right_code_within_the_limit_still_works(self):
+        code = self.request_code()
+        wrong = "100000" if code != "100000" else "100001"
+        for _ in range(MAX_CODE_ATTEMPTS - 1):
+            with self.assertRaisesRegex(AuthenticationError, "invalid"):
+                self.reset_with(wrong)
+        self.reset_with(code)
+        self.assertTrue(verify_password("NewStrongPass!123", self.repository.password_hash))
+
+    def test_new_code_is_not_sent_again_straight_away(self):
+        first = self.request_code()
+        self.repository.elapsed = 5
+        self.email.reset_code = ""
+        self.service.forgot_password(ForgotPasswordRequest(email="user@example.com"))
+        self.assertEqual(self.email.reset_code, "")
+        self.assertEqual(self.repository.token_hash, reset_otp_hash(self.repository.user.id, first))
+        self.repository.elapsed = RESEND_COOLDOWN_SECONDS + 1
+        self.assertRegex(self.request_code(), r"^\d{6}$")
 
     def test_token_fallback_is_still_supported(self):
         request = ResetPasswordRequest(
