@@ -2,6 +2,7 @@ import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
@@ -295,7 +296,11 @@ app.include_router(staff_calendar_router, prefix=settings.api_prefix)
 app.include_router(chat_router, prefix=settings.api_prefix)
 app.include_router(crm_router, prefix=settings.api_prefix)
 app.include_router(audit_logs_router, prefix=settings.api_prefix)
-app.mount("/storage", StaticFiles(directory="storage", check_dir=False), name="storage")
+# Public logos and profile pictures. The folder only appears after the first upload, and a
+# missing folder made every /storage request a 500, so create it up front.
+PUBLIC_STORAGE = Path("storage")
+PUBLIC_STORAGE.mkdir(parents=True, exist_ok=True)
+app.mount("/storage", StaticFiles(directory=PUBLIC_STORAGE), name="storage")
 app.add_middleware(
     TenantContextMiddleware,
     exempt_path_prefixes={
