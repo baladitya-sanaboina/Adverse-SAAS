@@ -40,13 +40,14 @@ def money_text(amount: Decimal, currency: str) -> str:
 def budget_threshold_crossed(
     total: Decimal, used_before: Decimal, used_after: Decimal
 ) -> str | None:
-    """'over' when approved work first goes past the budget, 'near' when it first reaches 80%."""
+    """'over' when approved work first uses up the budget (reaches or passes it), 'near' when
+    it first reaches 80% without using it up."""
     if total <= 0 or used_after <= used_before:
         return None
-    if used_before <= total < used_after:
+    if used_before < total <= used_after:
         return "over"
     near = total * Decimal("0.8")
-    if used_before < near <= used_after <= total:
+    if used_before < near <= used_after < total:
         return "near"
     return None
 
@@ -137,32 +138,43 @@ class TaskEvents:
                 exclude=actor_id,
             )
             if by_admin and row.status in BILLABLE and previous_status not in BILLABLE:
-                self._budget_check(company_id, row)
+                self._budget_check(company_id, row, actor_id)
         except Exception:  # noqa: BLE001
             logger.warning("Status notification failed", exc_info=True)
 
-    def _budget_check(self, company_id: UUID, row: TaskRow) -> None:
+    def _budget_check(self, company_id: UUID, row: TaskRow, actor_id: UUID) -> None:
         totals = self.repository.budget_totals(company_id, row.client_id)
         price = Decimal(row.client_price_final or 0)
         crossed = budget_threshold_crossed(totals.total, totals.used - price, totals.used)
         if crossed is None:
             return
         overage = totals.used - totals.total
+        left = money_text(totals.total - totals.used, row.currency)
         if crossed == "over":
-            admin_title = f"{row.client_name} is over budget"
+            used_up = overage == 0
+            admin_title = (
+                f"{row.client_name} has used their whole budget"
+                if used_up
+                else f"{row.client_name} is over budget"
+            )
             admin_body = (
-                f"Over by {money_text(overage, row.currency)}. Add a top-up or send an invoice."
+                "A draft invoice for this top-up is ready to review and send."
+                if used_up
+                else f"Over by {money_text(overage, row.currency)}. "
+                "A draft invoice for this top-up is ready to review and send."
             )
             client_title = "Your budget has been used up"
             client_body = (
-                f"Approved work is {money_text(overage, row.currency)} over your budget. "
+                "Please top it up so work continues smoothly."
+                if used_up
+                else f"Approved work is {money_text(overage, row.currency)} over your budget. "
                 "Please contact your agency to top it up."
             )
         else:
             admin_title = f"{row.client_name} has used 80% of their budget"
-            admin_body = f"{money_text(totals.total - totals.used, row.currency)} left."
+            admin_body = f"{left} left."
             client_title = "80% of your budget is used"
-            client_body = f"{money_text(totals.total - totals.used, row.currency)} left."
+            client_body = f"{left} left."
         data = {"client_id": str(row.client_id), "level": crossed}
         self.notifier.notify(
             company_id,
@@ -170,19 +182,23 @@ class TaskEvents:
             f"budget.{crossed}",
             admin_title,
             admin_body,
-            "/payments",
+            "/invoices" if crossed == "over" else "/payments",
             data,
         )
-        client_user = self.notifier.client_user(company_id, row.client_id)
         self.notifier.notify(
             company_id,
-            [client_user],
+            [self.notifier.client_user(company_id, row.client_id)],
             f"budget.{crossed}",
             client_title,
             client_body,
-            "/dashboard#client-budget-panel",
+            "/billing",
             data,
         )
+        if crossed == "over":
+            # Imported here to keep module imports one-directional (invoice_service -> rules).
+            from app.services.invoice_service import invoice_service
+
+            invoice_service.create_for_used_up_budget(company_id, row.client_id, actor_id)
 
     def commented(self, company_id: UUID, task_id: UUID, actor_id: UUID, content: str) -> None:
         try:

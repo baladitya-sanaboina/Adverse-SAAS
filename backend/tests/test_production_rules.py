@@ -5,12 +5,15 @@ from decimal import Decimal
 from app.services.production_rules import (
     SalaryRate,
     allowed_transitions,
+    budget_cycles,
     budget_position,
     can_transition,
+    daily_summary,
     is_overdue,
     last_month_starts,
     monthly_totals,
     resolve_period,
+    running_budget_left,
     salary_cost_in_range,
     salary_due_by_month,
     status_timestamp_updates,
@@ -198,6 +201,67 @@ class ClientMonthlyTest(unittest.TestCase):
                 (date(2026, 11, 1), 2, Decimal("1400.50")),
             ],
         )
+
+
+class ClientLedgerTest(unittest.TestCase):
+    def test_running_budget_left_counts_top_ups_from_their_date(self) -> None:
+        entries = [(date(2026, 10, 1), Decimal("2100")), (date(2026, 10, 3), Decimal("700"))]
+        deliveries = [
+            (date(2026, 10, 1), Decimal("700")),
+            (date(2026, 10, 2), Decimal("700")),
+            (date(2026, 10, 3), Decimal("700")),
+            (date(2026, 10, 4), Decimal("700")),
+            (date(2026, 10, 5), Decimal("700")),
+        ]
+        self.assertEqual(
+            running_budget_left(entries, deliveries),
+            [
+                Decimal("1400.00"),
+                Decimal("700.00"),
+                Decimal("700.00"),
+                Decimal("0.00"),
+                Decimal("-700.00"),
+            ],
+        )
+
+    def test_daily_summary_groups_and_orders_newest_first(self) -> None:
+        deliveries = [
+            (date(2026, 9, 24), Decimal("500")),
+            (date(2026, 9, 24), Decimal("700")),
+            (date(2026, 9, 25), Decimal("700")),
+        ]
+        rows = daily_summary(deliveries, [Decimal("1500"), Decimal("800"), Decimal("100")])
+        self.assertEqual(
+            [(r.day, r.items, r.amount, r.budget_left) for r in rows],
+            [
+                (date(2026, 9, 25), 1, Decimal("700.00"), Decimal("100")),
+                (date(2026, 9, 24), 2, Decimal("1200.00"), Decimal("800")),
+            ],
+        )
+
+    def test_budget_cycles_split_by_top_up(self) -> None:
+        entries = [
+            (date(2026, 10, 1), "INITIAL", Decimal("10000")),
+            (date(2026, 10, 10), "ADJUSTMENT", Decimal("-1000")),
+            (date(2026, 11, 1), "TOP_UP", Decimal("12000")),
+        ]
+        deliveries = [
+            (date(2026, 9, 30), Decimal("1000")),  # before the budget: first period
+            (date(2026, 10, 15), Decimal("8000")),
+            (date(2026, 11, 2), Decimal("700")),
+        ]
+        first, second = budget_cycles(entries, deliveries)
+        self.assertEqual((first.start, first.end), (date(2026, 9, 30), date(2026, 10, 31)))
+        self.assertEqual(
+            (first.amount, first.used, first.items), (Decimal("9000.00"), Decimal("9000.00"), 2)
+        )
+        self.assertEqual(first.remaining, Decimal("0.00"))
+        self.assertEqual(
+            (second.start, second.end, second.used), (date(2026, 11, 1), None, Decimal("700.00"))
+        )
+
+    def test_no_budget_no_cycles(self) -> None:
+        self.assertEqual(budget_cycles([], [(date(2026, 1, 1), Decimal("5"))]), [])
 
 
 if __name__ == "__main__":

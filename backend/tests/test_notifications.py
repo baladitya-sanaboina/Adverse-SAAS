@@ -32,6 +32,11 @@ class BudgetThresholdTest(unittest.TestCase):
         self.assertIsNone(budget_threshold_crossed(Decimal("0"), Decimal("0"), Decimal("500")))
         self.assertIsNone(budget_threshold_crossed(Decimal("1000"), Decimal("900"), Decimal("900")))
 
+    def test_exactly_used_up_counts_as_over(self) -> None:
+        self.assertEqual(
+            budget_threshold_crossed(Decimal("1000"), Decimal("900"), Decimal("1000")), "over"
+        )
+
     def test_jump_straight_over_reports_over(self) -> None:
         self.assertEqual(
             budget_threshold_crossed(Decimal("1000"), Decimal("100"), Decimal("1500")), "over"

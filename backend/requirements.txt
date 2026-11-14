@@ -10,3 +10,4 @@ redis
 PyJWT
 python-multipart
 cryptography
+reportlab

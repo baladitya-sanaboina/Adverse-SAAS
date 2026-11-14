@@ -5,6 +5,7 @@
  * Data: GET /client-portal/summary (counts, budget, deliveries, payments) and
  * GET /clients/me/dashboard (profile and agreed rates). No internal costs, people or task codes.
  */
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCheck, Hourglass, PiggyBank, ReceiptText, Wallet } from "lucide-react";
 import { DashHeader, DashLoading, MonthBars, Panel, PanelHead, Tile, todayText } from "./role-dashboard-ui";
@@ -153,9 +154,9 @@ export function DashboardPage() {
       name={name}
       subtitle={`${todayText()}${name ? ` · ${name}` : ""}`}
       actions={
-        <a href="#client-budget-panel" className="management-primary-action">
-          <PiggyBank /> Budget
-        </a>
+        <Link href="/billing" className="management-primary-action">
+          <ReceiptText /> Billing
+        </Link>
       }
     />
   );

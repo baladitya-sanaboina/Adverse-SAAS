@@ -109,6 +109,7 @@ model Company {
   taskPriceChanges    TaskPriceChange[]
   taskComments        TaskComment[]
   notifications       Notification[]
+  invoices            Invoice[]
   taskFiles           TaskFile[]
   clientBudgetEntries ClientBudgetEntry[]
   clientPayments      ClientPayment[]
@@ -506,6 +507,7 @@ model User {
   taskPriceChanges        TaskPriceChange[]        @relation("TaskPriceActor")
   taskComments            TaskComment[]            @relation("TaskCommentAuthor")
   notifications           Notification[]           @relation("NotificationRecipient")
+  invoicesCreated         Invoice[]                @relation("InvoiceCreator")
   taskFilesUploaded       TaskFile[]               @relation("TaskFileUploader")
   clientBudgetEntries     ClientBudgetEntry[]      @relation("ClientBudgetActor")
   clientPaymentsRecorded  ClientPayment[]          @relation("ClientPaymentActor")
@@ -596,6 +598,7 @@ model Client {
   tasks                 Task[]
   budgetEntries         ClientBudgetEntry[]
   payments              ClientPayment[]
+  invoices              Invoice[]
   leads                 Lead[]
   opportunities         Opportunity[]
 
@@ -1214,6 +1217,7 @@ model Task {
   priceChanges       TaskPriceChange[]
   comments           TaskComment[]
   files              TaskFile[]
+  invoiceLines       InvoiceLine[]
 
   @@unique([companyId, number])
   @@index([companyId, status, dueDate])
@@ -1419,4 +1423,61 @@ model Notification {
   @@index([userId, createdAt])
   @@index([userId, readAt])
   @@map("notifications")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  VOID
+}
+
+/// Client invoice (owner request 2026-11-14): a snapshot of the work delivered in a period
+/// (usually one budget top-up) plus the payments received in that period. No tax for now.
+model Invoice {
+  id            String        @id @default(uuid()) @db.Uuid
+  companyId     String        @map("company_id") @db.Uuid
+  clientId      String        @map("client_id") @db.Uuid
+  number        Int
+  status        InvoiceStatus @default(DRAFT)
+  source        String        @default("MANUAL") @db.VarChar(20)
+  periodStart   DateTime      @map("period_start") @db.Date
+  periodEnd     DateTime      @map("period_end") @db.Date
+  issueDate     DateTime      @map("issue_date") @db.Date
+  dueDate       DateTime?     @map("due_date") @db.Date
+  currency      String        @db.VarChar(3)
+  subtotal      Decimal       @db.Decimal(12, 2)
+  paymentsTotal Decimal       @map("payments_total") @db.Decimal(12, 2)
+  budgetAdded   Decimal       @map("budget_added") @db.Decimal(12, 2)
+  payments      Json          @default("[]")
+  notes         String        @default("") @db.VarChar(1000)
+  createdById   String        @map("created_by_id") @db.Uuid
+  sentAt        DateTime?     @map("sent_at")
+  paidAt        DateTime?     @map("paid_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("InvoiceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  lines         InvoiceLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, clientId, createdAt])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id          String   @id @default(uuid()) @db.Uuid
+  invoiceId   String   @map("invoice_id") @db.Uuid
+  taskId      String?  @map("task_id") @db.Uuid
+  position    Int
+  deliveredOn DateTime @map("delivered_on") @db.Date
+  title       String   @db.VarChar(200)
+  serviceName String   @map("service_name") @db.VarChar(120)
+  amount      Decimal  @db.Decimal(12, 2)
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  task        Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId, position])
+  @@map("invoice_lines")
 }

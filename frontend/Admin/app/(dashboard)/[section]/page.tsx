@@ -2,6 +2,7 @@ import { ErrorState, FoundationPage } from "@/components/foundation/ui-foundatio
 import { AnimatedErrorPage } from "@/components/status/AnimatedErrorPage";
 import { navigationItems } from "@/lib/navigation";
 import { ProfilePage } from "@/components/profile/ProfilePage";
+import { InvoicesPage } from "@/components/invoices/invoices-page";
 import { NotificationsPage } from "@loopless-shared/notifications/notification-center";
 import { CompanySettingsPage } from "@/components/settings/company-settings-page";
 import { EmployeeDirectoryPage } from "@/components/employees/employee-directory-page";
@@ -28,6 +29,7 @@ export default async function SectionPage({ params }: { params: Promise<{ sectio
   if (section === "crm") return <CrmPipelinePage />;
   if (section === "tasks") return <TaskManagementPage />;
   if (section === "payments") return <PaymentsPage />;
+  if (section === "invoices") return <InvoicesPage />;
   if (section === "reports") return <ReportsPage />;
   if (section === "profile") return <ProfilePage />;
   if (section === "settings") return <CompanySettingsPage />;

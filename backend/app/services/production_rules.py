@@ -292,3 +292,114 @@ def monthly_totals(
             counts[key] += 1
             amounts[key] += Decimal(amount)
     return [(start, counts[start], money(amounts[start])) for start in month_starts]
+
+
+# -- client billing ledger (Phase 11) ------------------------------------------------------
+
+
+def running_budget_left(
+    budget_entries: list[tuple[date, Decimal]], deliveries: list[tuple[date, Decimal]]
+) -> list[Decimal]:
+    """Budget left after each delivery, like the owner's sheets.
+
+    `deliveries` must be in chronological order. A budget entry counts from its own date,
+    before that day's deliveries. Negative results mean the budget is exceeded.
+    """
+    entries = sorted(budget_entries, key=lambda item: item[0])
+    result: list[Decimal] = []
+    budget = Decimal("0")
+    used = Decimal("0")
+    position = 0
+    for delivered_on, amount in deliveries:
+        while position < len(entries) and entries[position][0] <= delivered_on:
+            budget += Decimal(entries[position][1])
+            position += 1
+        used += Decimal(amount)
+        result.append(money(budget - used))
+    return result
+
+
+@dataclass(frozen=True)
+class DaySummary:
+    day: date
+    items: int
+    amount: Decimal
+    budget_left: Decimal
+
+
+def daily_summary(
+    deliveries: list[tuple[date, Decimal]], budget_left_after: list[Decimal]
+) -> list[DaySummary]:
+    """One row per delivery day, newest first; budget left is after that day's last item."""
+    days: dict[date, list[Decimal]] = {}
+    left: dict[date, Decimal] = {}
+    for (delivered_on, amount), balance in zip(deliveries, budget_left_after, strict=True):
+        days.setdefault(delivered_on, []).append(Decimal(amount))
+        left[delivered_on] = balance
+    return [
+        DaySummary(day, len(amounts), money(sum(amounts, Decimal("0"))), left[day])
+        for day, amounts in sorted(days.items(), key=lambda item: item[0], reverse=True)
+    ]
+
+
+@dataclass(frozen=True)
+class BudgetCycle:
+    """One budget period: from a top-up (or the first budget) until the day before the next one."""
+
+    index: int
+    start: date
+    end: date | None
+    amount: Decimal
+    used: Decimal
+    items: int
+
+    @property
+    def remaining(self) -> Decimal:
+        return money(self.amount - self.used)
+
+
+def budget_cycles(
+    entries: list[tuple[date, str, Decimal]], deliveries: list[tuple[date, Decimal]]
+) -> list[BudgetCycle]:
+    """Split the budget into top-up periods. Work before the first budget counts in the first
+    period; adjustments belong to the period they fall in; several top-ups on one day merge."""
+    starts: dict[date, Decimal] = {}
+    for day, kind, amount in entries:
+        if kind in ("INITIAL", "TOP_UP") and Decimal(amount) > 0:
+            starts[day] = starts.get(day, Decimal("0")) + Decimal(amount)
+    if not starts:
+        return []
+    ordered = sorted(starts)
+    windows: list[tuple[date, date | None]] = []
+    for index, start in enumerate(ordered):
+        end = ordered[index + 1] - timedelta(days=1) if index + 1 < len(ordered) else None
+        windows.append((start, end))
+
+    def window_of(day: date) -> int:
+        for index, (start, end) in enumerate(windows):
+            if (index == 0 or day >= start) and (end is None or day <= end):
+                return index
+        return len(windows) - 1
+
+    amounts = [starts[start] for start in ordered]
+    for day, kind, amount in entries:
+        if kind == "ADJUSTMENT":
+            amounts[window_of(day)] += Decimal(amount)
+    used = [Decimal("0")] * len(windows)
+    items = [0] * len(windows)
+    for day, amount in deliveries:
+        index = window_of(day)
+        used[index] += Decimal(amount)
+        items[index] += 1
+    first_day = min([ordered[0], *[day for day, _ in deliveries]])
+    return [
+        BudgetCycle(
+            index=index + 1,
+            start=first_day if index == 0 else start,
+            end=end,
+            amount=money(amounts[index]),
+            used=money(used[index]),
+            items=items[index],
+        )
+        for index, (start, end) in enumerate(windows)
+    ]

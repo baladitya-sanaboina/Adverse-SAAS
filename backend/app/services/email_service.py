@@ -311,5 +311,61 @@ class EmailService:
         )
         self._send(message)
 
+    def send_invoice(
+        self,
+        email: str,
+        *,
+        company_name: str,
+        client_name: str,
+        invoice_code: str,
+        amount: str,
+        period: str,
+        portal_url: str,
+        pdf: bytes,
+        filename: str,
+    ) -> None:
+        """Invoice email with the PDF attached (Phase 11)."""
+        message = EmailMessage()
+        message["Subject"] = f"Invoice {invoice_code} from {company_name}"
+        message["From"] = settings.smtp_from_email or settings.smtp_username
+        message["To"] = email
+        message.set_content(
+            f"Hello {client_name},\n\nPlease find attached invoice {invoice_code} for {amount} "
+            f"covering work delivered {period}.\n\nYou can also view all your invoices and "
+            f"payments in your client portal: {portal_url}\n\nThank you,\n{company_name}"
+        )
+        safe = {
+            key: escape(value)
+            for key, value in {
+                "company": company_name,
+                "client": client_name,
+                "code": invoice_code,
+                "amount": amount,
+                "period": period,
+                "url": portal_url,
+            }.items()
+        }
+        message.add_alternative(
+            f"""<!doctype html><html lang="en"><body style="margin:0;padding:24px;background:#f4f7fb;
+font-family:Arial,Helvetica,sans-serif;color:#0f172a">
+<table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;
+border:1px solid #e2e8f0;border-radius:14px;border-top:4px solid #0876ED">
+<tr><td style="padding:28px 28px 8px"><p style="margin:0;color:#0876ED;font-size:12px;
+font-weight:700;letter-spacing:.08em;text-transform:uppercase">Invoice {safe["code"]}</p>
+<h1 style="margin:8px 0 6px;font-size:22px">{safe["amount"]}</h1>
+<p style="margin:0;color:#64748b;font-size:14px">Work delivered {safe["period"]}</p></td></tr>
+<tr><td style="padding:16px 28px;font-size:14px;line-height:1.6">Hello {safe["client"]},<br>
+The invoice is attached as a PDF. Every video in this period is listed with its date and amount.
+</td></tr>
+<tr><td style="padding:4px 28px 28px"><a href="{safe["url"]}" style="display:inline-block;
+padding:12px 18px;border-radius:9px;background:#0876ED;color:#ffffff;text-decoration:none;
+font-weight:700;font-size:14px">Open client portal</a>
+<p style="margin:18px 0 0;color:#64748b;font-size:12px">{safe["company"]}</p></td></tr>
+</table></body></html>""",
+            subtype="html",
+        )
+        message.add_attachment(pdf, maintype="application", subtype="pdf", filename=filename)
+        self._send(message)
+
 
 email_service = EmailService()

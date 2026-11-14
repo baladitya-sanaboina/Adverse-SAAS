@@ -102,9 +102,14 @@ export function Panel({ children }: { children: ReactNode }) {
 export function MonthBars({
   points,
   label,
+  axisLabel = monthShort,
+  emptyText = "Nothing yet in the last six months.",
 }: {
   points: { key: string; value: number; display: string }[];
   label: string;
+  /** Text under each bar; defaults to the short month name of a YYYY-MM key. */
+  axisLabel?: (key: string) => string;
+  emptyText?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(560);
@@ -125,7 +130,7 @@ export function MonthBars({
   return (
     <div className="role-chart" ref={box}>
       {max === 0 ? (
-        <div className="role-chart-empty">Nothing yet in the last six months.</div>
+        <div className="role-chart-empty">{emptyText}</div>
       ) : (
         <svg viewBox={`0 0 ${width} ${height}`} height={height} role="img" aria-label={label}>
           {[0.5, 1].map((step) => (
@@ -154,7 +159,7 @@ export function MonthBars({
                     height={Math.max(2, y(0) - top)}
                     rx={4}
                   >
-                    <title>{`${monthShort(point.key)}: ${point.display}`}</title>
+                    <title>{`${axisLabel(point.key)}: ${point.display}`}</title>
                   </rect>
                 )}
                 {point.value > 0 && (
@@ -163,7 +168,7 @@ export function MonthBars({
                   </text>
                 )}
                 <text className="axis" x={x + barW / 2} y={height - 8} textAnchor="middle">
-                  {monthShort(point.key)}
+                  {axisLabel(point.key)}
                 </text>
               </g>
             );

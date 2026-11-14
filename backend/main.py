@@ -24,6 +24,8 @@ from app.api.employees import router as employees_router
 from app.api.finance import router as finance_router
 from app.api.health import router as health_router
 from app.api.invitations import router as invitations_router
+from app.api.invoices import client_router as client_billing_router
+from app.api.invoices import router as invoices_router
 from app.api.notifications import realtime_router
 from app.api.notifications import router as notifications_router
 from app.api.organization import router as organization_router
@@ -280,6 +282,8 @@ app.include_router(workspace_router, prefix=settings.api_prefix)
 app.include_router(client_portal_router, prefix=settings.api_prefix)
 app.include_router(notifications_router, prefix=settings.api_prefix)
 app.include_router(realtime_router, prefix=settings.api_prefix)
+app.include_router(invoices_router, prefix=settings.api_prefix)
+app.include_router(client_billing_router, prefix=settings.api_prefix)
 app.include_router(finance_router, prefix=settings.api_prefix)
 app.include_router(crm_router, prefix=settings.api_prefix)
 app.include_router(audit_logs_router, prefix=settings.api_prefix)
