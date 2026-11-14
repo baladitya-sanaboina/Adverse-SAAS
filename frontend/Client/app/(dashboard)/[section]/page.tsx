@@ -2,6 +2,7 @@ import { ErrorState, FoundationPage } from "@/components/foundation/ui-foundatio
 import { AnimatedErrorPage } from "@/components/status/AnimatedErrorPage";
 import { navigationItems } from "@/lib/navigation";
 import { ProfilePage } from "@/components/profile/ProfilePage";
+import { NotificationsPage } from "@/components/notifications/notification-center";
 
 const errors: Record<string, string> = {
   "401": "Unauthorized",
@@ -14,6 +15,7 @@ const companyInternalSections = new Set(["clients", "crm", "roles", "departments
 export default async function SectionPage({ params }: { params: Promise<{ section: string }> }) {
   const { section } = await params;
   if (section === "404") return <AnimatedErrorPage />;
+  if (section === "notifications") return <NotificationsPage />;
   if (errors[section]) return <ErrorState code={section} title={errors[section]} />;
   if (companyInternalSections.has(section)) {
     return <ErrorState code="403" title="This company workspace area is not available to client accounts" />;

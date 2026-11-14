@@ -21,8 +21,11 @@ from app.api.company_settings import router as company_settings_router
 from app.api.crm import router as crm_router
 from app.api.developer_management import router as developer_management_router
 from app.api.employees import router as employees_router
+from app.api.finance import router as finance_router
 from app.api.health import router as health_router
 from app.api.invitations import router as invitations_router
+from app.api.notifications import realtime_router
+from app.api.notifications import router as notifications_router
 from app.api.organization import router as organization_router
 from app.api.platform_dashboard import router as platform_dashboard_router
 from app.api.platform_settings import router as platform_settings_router
@@ -30,14 +33,13 @@ from app.api.profile import router as profile_router
 from app.api.registration import router as registration_router
 from app.api.role_management import router as role_management_router
 from app.api.service_pricing import router as service_pricing_router
-from app.api.finance import router as finance_router
-from app.api.tasks import router as tasks_router
-from app.api.workspace import portal_router as client_portal_router
-from app.api.workspace import router as workspace_router
 from app.api.subscription_management import router as subscription_management_router
+from app.api.tasks import router as tasks_router
 from app.api.tenant import router as tenant_router
 from app.api.user_assignments import router as user_assignments_router
 from app.api.users import router as users_router
+from app.api.workspace import portal_router as client_portal_router
+from app.api.workspace import router as workspace_router
 from app.core.settings import settings
 from app.database.connectivity import close_database_pool, open_database_pool
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -276,6 +278,8 @@ app.include_router(service_pricing_router, prefix=settings.api_prefix)
 app.include_router(tasks_router, prefix=settings.api_prefix)
 app.include_router(workspace_router, prefix=settings.api_prefix)
 app.include_router(client_portal_router, prefix=settings.api_prefix)
+app.include_router(notifications_router, prefix=settings.api_prefix)
+app.include_router(realtime_router, prefix=settings.api_prefix)
 app.include_router(finance_router, prefix=settings.api_prefix)
 app.include_router(crm_router, prefix=settings.api_prefix)
 app.include_router(audit_logs_router, prefix=settings.api_prefix)

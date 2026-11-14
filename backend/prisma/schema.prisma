@@ -108,6 +108,7 @@ model Company {
   taskStatusHistory   TaskStatusHistory[]
   taskPriceChanges    TaskPriceChange[]
   taskComments        TaskComment[]
+  notifications       Notification[]
   taskFiles           TaskFile[]
   clientBudgetEntries ClientBudgetEntry[]
   clientPayments      ClientPayment[]
@@ -504,6 +505,7 @@ model User {
   taskStatusChanges       TaskStatusHistory[]      @relation("TaskStatusActor")
   taskPriceChanges        TaskPriceChange[]        @relation("TaskPriceActor")
   taskComments            TaskComment[]            @relation("TaskCommentAuthor")
+  notifications           Notification[]           @relation("NotificationRecipient")
   taskFilesUploaded       TaskFile[]               @relation("TaskFileUploader")
   clientBudgetEntries     ClientBudgetEntry[]      @relation("ClientBudgetActor")
   clientPaymentsRecorded  ClientPayment[]          @relation("ClientPaymentActor")
@@ -1396,4 +1398,25 @@ model ManagerPayout {
   @@index([companyId, managerUserId, paidOn])
   @@index([companyId, paidOn])
   @@map("manager_payouts")
+}
+
+/// In-app notification for one user (owner request 2026-11-14). Delivered live over the realtime
+/// stream and kept here for the bell and the Notifications page.
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String    @db.VarChar(60)
+  title     String    @db.VarChar(200)
+  body      String    @default("") @db.VarChar(500)
+  link      String    @default("") @db.VarChar(300)
+  data      Json      @default("{}")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User      @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notifications")
 }

@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
-import { Bell } from "lucide-react";
+import { NotificationBell } from "@/components/notifications/notification-center";
 import Image from "next/image";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 
@@ -30,10 +30,7 @@ export function ShellActions({
 
   return (
     <div className="shell-actions">
-      <button type="button" aria-label="Notifications" style={{ display: "grid", placeItems: "center", padding: 0 }}>
-        <Bell width={18} height={18} strokeWidth={1.8} style={{ display: "block" }} aria-hidden="true" />
-        <i />
-      </button>
+      <NotificationBell />
       <div className="shell-profile" aria-label={`${userName} profile`}>
         <b>
           {profileImageUrl ? (

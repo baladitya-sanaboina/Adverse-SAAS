@@ -75,6 +75,7 @@ from app.schemas.production import (
     WorkspaceDashboardResponse,
 )
 from app.services.authentication_service import AuthenticationError
+from app.services.notification_service import notification_service
 from app.services.permission_service import validate_user_action_access
 from app.services.production_rules import (
     BILLABLE_STATUSES,
@@ -87,6 +88,7 @@ from app.services.production_rules import (
     salary_cost_in_range,
     salary_due_by_month,
 )
+from app.services.task_events import money_text
 from app.services.task_service import WORKER_ROLES, TaskService
 
 ZERO = Decimal("0.00")
@@ -463,6 +465,17 @@ class FinanceService:
             money(request.amount),
             request.note,
         )
+        if request.type in ("INITIAL", "TOP_UP") and money(request.amount) > 0:
+            currency = self.repository.company_currency(company_id)
+            notification_service.notify(
+                company_id,
+                [notification_service.client_user(company_id, client_id)],
+                "budget.topup",
+                "Budget added" if request.type == "INITIAL" else "Budget topped up",
+                f"{money_text(money(request.amount), currency)} added to your budget.",
+                "/dashboard#client-budget-panel",
+                {"client_id": str(client_id)},
+            )
         return self.get_client_budget(context, client_id)
 
     # -- admin: client payments ------------------------------------------------------------
@@ -491,7 +504,18 @@ class FinanceService:
         )
         row = self.repository.get_client_payment(company_id, payment_id)
         assert row is not None
-        return self._client_payment(row)
+        payment = self._client_payment(row)
+        notification_service.notify(
+            company_id,
+            [notification_service.client_user(company_id, request.client_id)],
+            "payment.received",
+            "Payment received",
+            f"{money_text(payment.amount, payment.currency)} received on "
+            f"{payment.received_on:%d %b %Y}. Thank you.",
+            "/dashboard",
+            {"payment_id": str(payment_id)},
+        )
+        return payment
 
     def delete_payment(self, context: AuthContext, kind: str, payment_id: UUID) -> None:
         company_id = self._admin(context, "FINANCE", "DELETE")
@@ -632,7 +656,17 @@ class FinanceService:
         )
         row = self.repository.get_salary_payment(company_id, payment_id)
         assert row is not None
-        return self._salary_payment(row)
+        payment = self._salary_payment(row)
+        notification_service.notify(
+            company_id,
+            [request.user_id],
+            "salary.paid",
+            "Salary paid",
+            f"{money_text(payment.amount, payment.currency)} paid on {payment.paid_on:%d %b %Y}.",
+            "/salary",
+            {"payment_id": str(payment_id)},
+        )
+        return payment
 
     def list_payouts(
         self, context: AuthContext, filters: PaymentListFilters
@@ -656,7 +690,17 @@ class FinanceService:
         payout_id = self.repository.create_payout(company_id, context.user_id, request.model_dump())
         row = self.repository.get_payout(company_id, payout_id)
         assert row is not None
-        return self._payout(row)
+        payout = self._payout(row)
+        notification_service.notify(
+            company_id,
+            [request.manager_user_id],
+            "payout.paid",
+            "Payout received",
+            f"{money_text(payout.amount, payout.currency)} paid on {payout.paid_on:%d %b %Y}.",
+            "/earnings",
+            {"payout_id": str(payout_id)},
+        )
+        return payout
 
     # -- admin: dashboard and reports ------------------------------------------------------
 

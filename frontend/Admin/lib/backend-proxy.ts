@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticatedBackend, setSession } from "@/lib/auth/server";
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_-]+$/;
-const PASSED_HEADERS = ["content-type", "content-disposition", "content-length"];
+const PASSED_HEADERS = ["content-type", "content-disposition", "content-length", "cache-control", "x-accel-buffering"];
 
 /**
  * Forward a request from an Admin API route to one fixed backend prefix.
@@ -23,7 +23,8 @@ export async function proxyToBackend(
   const path = [prefix, ...parts].join("/") + request.nextUrl.search;
   const method = request.method;
   const contentType = request.headers.get("content-type") ?? "";
-  const init: RequestInit & { duplex?: "half" } = { method };
+  // The signal closes the backend request when the browser goes away (live event streams).
+  const init: RequestInit & { duplex?: "half" } = { method, signal: request.signal };
   if (!["GET", "HEAD", "DELETE"].includes(method)) {
     init.headers = contentType ? { "Content-Type": contentType } : {};
     if (contentType.startsWith("multipart/form-data")) {

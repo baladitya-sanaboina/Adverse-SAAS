@@ -68,6 +68,7 @@ from app.services.production_rules import (
     status_timestamp_updates,
     task_margin,
 )
+from app.services.task_events import NoTaskEvents, TaskEvents
 from app.services.task_file_storage import TaskFileStorage
 
 WORKER_ROLES = {"COMPANY_MANAGER": "MANAGER", "COMPANY_EMPLOYEE": "EMPLOYEE"}
@@ -95,10 +96,13 @@ class TaskService:
         repository: TaskRepository | None = None,
         finance_repository: FinanceRepository | None = None,
         storage: TaskFileStorage | None = None,
+        events: TaskEvents | None = None,
     ):
         self.repository = repository or TaskRepository()
         self.finance = finance_repository or FinanceRepository()
         self.storage = storage or TaskFileStorage()
+        # Notifications are sent only by the app's own instance (see the bottom of this file).
+        self.events = events or NoTaskEvents()
 
     # -- access ----------------------------------------------------------------------------
 
@@ -558,6 +562,7 @@ class TaskService:
             },
             price_changes,
         )
+        self.events.assigned(company_id, task_id, context.user_id, None, None)
         return self._write_response(company_id, task_id)
 
     def update_task(
@@ -645,6 +650,9 @@ class TaskService:
             return mutation
 
         self._mutate(company_id, task_id, context.user_id, plan)
+        self.events.assigned(
+            company_id, task_id, context.user_id, current.assignee_user_id, current.monitor_user_id
+        )
         return self._write_response(company_id, task_id)
 
     def set_monitor(
@@ -668,6 +676,9 @@ class TaskService:
             return TaskMutation(updates={"monitor_user_id": request.monitor_user_id})
 
         self._mutate(company_id, task_id, context.user_id, plan)
+        self.events.assigned(
+            company_id, task_id, context.user_id, current.assignee_user_id, current.monitor_user_id
+        )
         return self._admin_detail(company_id, task_id)
 
     def change_prices(
@@ -719,11 +730,15 @@ class TaskService:
     ) -> TaskWriteResponse:
         action = "APPROVE" if request.status in BILLABLE_STATUSES else "EDIT"
         company_id = self._admin(context, action)
-        self._mutate(
-            company_id,
-            task_id,
-            context.user_id,
-            lambda row: self._status_plan(row, "ADMIN", request),
+        previous: dict[str, str] = {}
+
+        def plan(row: TaskRow) -> TaskMutation:
+            previous["status"] = row.status
+            return self._status_plan(row, "ADMIN", request)
+
+        self._mutate(company_id, task_id, context.user_id, plan)
+        self.events.status_changed(
+            company_id, task_id, context.user_id, previous.get("status"), by_admin=True
         )
         return self._write_response(company_id, task_id)
 
@@ -794,13 +809,19 @@ class TaskService:
                 403, "TASKS_EDIT_REQUIRED", "Tasks edit permission is required."
             )
 
+        previous: dict[str, str] = {}
+
         def plan(row: TaskRow) -> TaskMutation:
             role = self._worker_role(row, context.user_id)
             if role is None:
                 raise _not_found()
+            previous["status"] = row.status
             return self._status_plan(row, role, request)
 
         self._mutate(company_id, task_id, context.user_id, plan)
+        self.events.status_changed(
+            company_id, task_id, context.user_id, previous.get("status"), by_admin=False
+        )
         return self._worker_detail(company_id, context.user_id, task_id)
 
     # -- comments and files (admin and workers) ----------------------------------------------
@@ -810,6 +831,7 @@ class TaskService:
     ) -> list[TaskCommentResponse]:
         company_id = self._comment_access(context, task_id)
         self.repository.add_comment(company_id, task_id, context.user_id, request.content)
+        self.events.commented(company_id, task_id, context.user_id, request.content)
         return [
             TaskCommentResponse(**item.__dict__) for item in self.repository.list_comments(task_id)
         ]
@@ -857,6 +879,7 @@ class TaskService:
         except Exception:
             self.storage.delete(stored.storage_path)
             raise
+        self.events.file_added(company_id, task_id, context.user_id, stored.file_name, kind)
         _, _, files = self._shared_detail(task_id)
         return files
 
@@ -904,4 +927,4 @@ class TaskService:
         return self.repository.is_ready()
 
 
-task_service = TaskService()
+task_service = TaskService(events=TaskEvents())
