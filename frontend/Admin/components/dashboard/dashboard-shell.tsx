@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatLauncher } from "@loopless-shared/chat/chat-launcher";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -100,9 +101,7 @@ function Sidebar({
       <nav className="dash-sidebar-body" aria-label="Dashboard navigation">
         <p className="dash-nav-label">Navigation</p>
         {items.map((item) => {
-          const active =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
+          const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
           const Icon = item.icon;
           return (
             <Link
@@ -280,6 +279,10 @@ export function DashboardShell({ children, roleLabel }: { children: ReactNode; r
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  // Chat is full screen (owner request 2026-11-14): entering it collapses the sidebar (it can
+  // still be opened), and leaving it restores the sidebar if chat collapsed it.
+  const chatMode = pathname === "/chat";
+  const chatCollapsed = useRef(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [navigating, setNavigating] = useState(false);
   const [theme, setTheme] = useState<Theme>("dark");
@@ -295,10 +298,7 @@ export function DashboardShell({ children, roleLabel }: { children: ReactNode; r
   const hasPlanAccess = (item: (typeof navigationItems)[number]) =>
     !("feature" in item) || enabledFeatures[String(item.feature)] === true;
   const items = navigationItems.filter(
-    (item) =>
-      (!("sidebar" in item) || item.sidebar !== false) &&
-      hasModuleAccess(item) &&
-      hasPlanAccess(item),
+    (item) => (!("sidebar" in item) || item.sidebar !== false) && hasModuleAccess(item) && hasPlanAccess(item),
   );
   const requestedItem = navigationItems.find(
     (item) => item.href === pathname || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`)),
@@ -306,6 +306,21 @@ export function DashboardShell({ children, roleLabel }: { children: ReactNode; r
   const subscriptionDenied = Boolean(requestedItem && !hasPlanAccess(requestedItem));
   const permissionDenied = Boolean(requestedItem && !hasModuleAccess(requestedItem));
   const displayRole = currentUser?.role.name ?? roleLabel;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (chatMode) {
+        setCollapsed((current) => {
+          chatCollapsed.current = !current;
+          return true;
+        });
+      } else if (chatCollapsed.current) {
+        chatCollapsed.current = false;
+        setCollapsed(false);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [chatMode]);
 
   useEffect(() => {
     let active = true;
@@ -367,7 +382,9 @@ export function DashboardShell({ children, roleLabel }: { children: ReactNode; r
   if (authLoading) return <DashboardContentLoader />;
 
   return (
-    <div className={`dash-shell${collapsed ? " is-collapsed" : ""}${mobileOpen ? " is-mobile-open" : ""}`}>
+    <div
+      className={`dash-shell${collapsed ? " is-collapsed" : ""}${mobileOpen ? " is-mobile-open" : ""}${chatMode ? " is-chat" : ""}`}
+    >
       <Sidebar
         roleLabel={displayRole}
         user={currentUser}
@@ -405,6 +422,7 @@ export function DashboardShell({ children, roleLabel }: { children: ReactNode; r
         </main>
         <AppFooter role={displayRole} />
       </div>
+      {!chatMode && <ChatLauncher />}
     </div>
   );
 }

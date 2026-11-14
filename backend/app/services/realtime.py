@@ -46,16 +46,41 @@ def publish(user_ids: Iterable[UUID], event_type: str, data: dict[str, Any]) -> 
         logger.warning("Realtime publish failed for %s", event_type, exc_info=True)
 
 
+PRESENCE_SECONDS = HEARTBEAT_SECONDS * 3
+
+
+def presence_key(user_id: UUID | str) -> str:
+    return f"presence:user:{user_id}"
+
+
+def online(user_ids: Iterable[UUID]) -> set[UUID]:
+    """Who has the app open right now (a live stream refreshes the key every heartbeat)."""
+    ids = list(dict.fromkeys(user_ids))
+    if not ids:
+        return set()
+    try:
+        values = _redis().mget([presence_key(user_id) for user_id in ids])
+    except Exception:  # noqa: BLE001 - presence is best effort
+        logger.debug("Presence lookup failed", exc_info=True)
+        return set()
+    return {user_id for user_id, value in zip(ids, values, strict=True) if value}
+
+
 async def stream(
     user_id: UUID, is_disconnected: Callable[[], Awaitable[bool]]
 ) -> AsyncIterator[str]:
-    """Yield SSE frames for one user until the browser disconnects."""
+    """Yield SSE frames for one user until the browser disconnects. While the stream is open the
+    user counts as online (chat presence, Phase 14)."""
     client = AsyncRedis.from_url(settings.redis_url)
     pubsub = client.pubsub()
     try:
         await pubsub.subscribe(channel(user_id))
         yield 'event: ready\ndata: {"type":"ready"}\n\n'
         while True:
+            try:
+                await client.set(presence_key(user_id), "1", ex=PRESENCE_SECONDS)
+            except Exception:  # noqa: BLE001
+                logger.debug("Presence update failed", exc_info=True)
             if await is_disconnected():
                 break
             message = await pubsub.get_message(

@@ -111,6 +111,8 @@ model Company {
   notifications       Notification[]
   invoices            Invoice[]
   calendarEntries     ContentCalendarEntry[]
+  chatConversations   ChatConversation[]
+  chatMessages        ChatMessage[]
   taskFiles           TaskFile[]
   clientBudgetEntries ClientBudgetEntry[]
   clientPayments      ClientPayment[]
@@ -510,6 +512,10 @@ model User {
   notifications           Notification[]           @relation("NotificationRecipient")
   invoicesCreated         Invoice[]                @relation("InvoiceCreator")
   calendarEntriesCreated  ContentCalendarEntry[]   @relation("CalendarEntryCreator")
+  chatConversationsMade   ChatConversation[]       @relation("ChatConversationCreator")
+  chatMemberships         ChatMember[]
+  chatMessagesSent        ChatMessage[]            @relation("ChatMessageSender")
+  chatStatus              ChatStatus?
   taskFilesUploaded       TaskFile[]               @relation("TaskFileUploader")
   clientBudgetEntries     ClientBudgetEntry[]      @relation("ClientBudgetActor")
   clientPaymentsRecorded  ClientPayment[]          @relation("ClientPaymentActor")
@@ -602,6 +608,7 @@ model Client {
   payments              ClientPayment[]
   invoices              Invoice[]
   calendarEntries       ContentCalendarEntry[]
+  chatRooms             ChatConversation[]
   leads                 Lead[]
   opportunities         Opportunity[]
 
@@ -1522,4 +1529,104 @@ model ContentCalendarEntry {
   @@index([companyId, clientId, entryDate])
   @@index([taskId])
   @@map("content_calendar_entries")
+}
+
+enum ChatConversationType {
+  DIRECT
+  GROUP
+  CLIENT
+}
+
+/// Chat (Phase 14, owner decisions 2026-11-14): client rooms the admin creates by hand (the
+/// client, the admin and the staff the admin adds), direct chats (staff with staff, a client with
+/// the admin) and staff groups.
+model ChatConversation {
+  id            String               @id @default(uuid()) @db.Uuid
+  companyId     String               @map("company_id") @db.Uuid
+  type          ChatConversationType
+  title         String               @default("") @db.VarChar(120)
+  clientId      String?              @map("client_id") @db.Uuid
+  directKey     String?              @map("direct_key") @db.VarChar(80)
+  createdById   String               @map("created_by_id") @db.Uuid
+  lastMessageAt DateTime?            @map("last_message_at")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+  company       Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client        Client?              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy     User                 @relation("ChatConversationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  members       ChatMember[]
+  messages      ChatMessage[]
+
+  @@unique([companyId, directKey])
+  @@index([companyId, lastMessageAt])
+  @@index([clientId])
+  @@map("chat_conversations")
+}
+
+/// Members of every chat, with read state. Admins also see every client room.
+model ChatMember {
+  id             String           @id @default(uuid()) @db.Uuid
+  conversationId String           @map("conversation_id") @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  isMember       Boolean          @default(true) @map("is_member")
+  lastReadAt     DateTime?        @map("last_read_at")
+  joinedAt       DateTime         @default(now()) @map("joined_at")
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("chat_members")
+}
+
+model ChatMessage {
+  id             String           @id @default(uuid()) @db.Uuid
+  companyId      String           @map("company_id") @db.Uuid
+  conversationId String           @map("conversation_id") @db.Uuid
+  senderId       String           @map("sender_id") @db.Uuid
+  body           String           @default("") @db.VarChar(4000)
+  replyToId      String?          @map("reply_to_id") @db.Uuid
+  editedAt       DateTime?        @map("edited_at")
+  deletedAt      DateTime?        @map("deleted_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User             @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+  replyTo        ChatMessage?     @relation("ChatReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        ChatMessage[]    @relation("ChatReply")
+  attachments    ChatAttachment[]
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+
+model ChatAttachment {
+  id          String      @id @default(uuid()) @db.Uuid
+  messageId   String      @map("message_id") @db.Uuid
+  fileName    String      @map("file_name") @db.VarChar(200)
+  storagePath String      @map("storage_path") @db.VarChar(500)
+  mimeType    String      @map("mime_type") @db.VarChar(200)
+  sizeBytes   BigInt      @map("size_bytes")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("chat_attachments")
+}
+
+enum ChatStatusValue {
+  AVAILABLE
+  BUSY
+  AWAY
+}
+
+/// The status a person sets for chat (owner request 2026-11-14). Shown as Offline while they do
+/// not have the app open.
+model ChatStatus {
+  userId    String          @id @map("user_id") @db.Uuid
+  status    ChatStatusValue @default(AVAILABLE)
+  updatedAt DateTime        @updatedAt @map("updated_at")
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("chat_statuses")
 }

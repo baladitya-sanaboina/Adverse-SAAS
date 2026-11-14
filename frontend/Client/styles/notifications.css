@@ -218,7 +218,7 @@
   position: fixed;
   z-index: 960;
   right: 20px;
-  bottom: 20px;
+  bottom: 96px; /* above the floating chat button */
   display: grid;
   gap: 10px;
   width: min(360px, calc(100vw - 32px));
@@ -601,7 +601,7 @@
   position: fixed;
   z-index: 970;
   right: 20px;
-  bottom: 20px;
+  bottom: 96px; /* above the floating chat button */
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
   gap: 12px;
@@ -680,6 +680,6 @@
 @media (max-width: 560px) {
   .notify-consent {
     right: 16px;
-    bottom: 16px;
+    bottom: 80px; /* above the floating chat button */
   }
 }
