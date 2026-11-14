@@ -201,6 +201,24 @@ export type CommissionLine = {
   commission: string;
   approved_at: string | null;
 };
+export type WalletPeriod = {
+  index: number;
+  start: string;
+  end: string | null;
+  topped_up: string;
+  earned: string;
+  balance: string;
+  items: number;
+};
+export type WalletLine = { day: string; kind: "TOP_UP" | "COMMISSION"; title: string; amount: string; balance: string };
+/** Manager advance (Phase 12): top-ups minus commission earned. */
+export type ManagerWallet = {
+  topped_up: string;
+  earned: string;
+  balance: string;
+  periods: WalletPeriod[];
+  lines: WalletLine[];
+};
 export type ManagerEarnings = {
   currency: string;
   earned: string;
@@ -210,6 +228,7 @@ export type ManagerEarnings = {
   current_month_earned: string;
   tasks: CommissionLine[];
   payouts: ManagerPayout[];
+  wallet?: ManagerWallet | null;
 };
 export type SalaryMonth = { month: string; due: string; paid: string; pending: string };
 export type EmployeeSalary = {

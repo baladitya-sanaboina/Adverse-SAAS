@@ -59,6 +59,7 @@ import type {
   TaskStatus,
   TaskWrite,
 } from "@/lib/production/types";
+import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
 import "@/styles/organization.css";
 import "@/styles/service-pricing-settings.css";
 import "@/styles/production.css";
@@ -161,26 +162,32 @@ export function TaskManagementPage() {
     return () => window.clearTimeout(fromUrl);
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await api<Paged<AdminTask>>(
-        `/api/company/tasks${query({ search, status, client_id: client, page_size: 500 })}`,
-      );
-      setItems(data.items);
-      setTotal(data.total);
-    } catch (requestError) {
-      setError(errorText(requestError, "Unable to load tasks."));
-    } finally {
-      setLoading(false);
-    }
-  }, [search, status, client]);
+  const load = useCallback(
+    async (quiet = false) => {
+      if (!quiet) setLoading(true);
+      setError("");
+      try {
+        const data = await api<Paged<AdminTask>>(
+          `/api/company/tasks${query({ search, status, client_id: client, page_size: 500 })}`,
+        );
+        setItems(data.items);
+        setTotal(data.total);
+      } catch (requestError) {
+        setError(errorText(requestError, "Unable to load tasks."));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [search, status, client],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 250);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  // Submissions and status changes by the team show up live, without a page reload.
+  useLiveRefresh(["task."], () => void load(true));
 
   const chooseView = (next: TaskView) => {
     setView(next);
@@ -983,6 +990,9 @@ function TaskDetail({
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  // A submission, comment or file from the team refreshes the open task.
+  useLiveRefresh(["task."], () => void load());
 
   const applyWrite = (result: TaskWrite | AdminTaskDetail, message: string) => {
     const detail = "task" in result ? result.task : result;

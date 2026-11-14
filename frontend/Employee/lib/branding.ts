@@ -26,6 +26,10 @@ export const adverseBrand = Object.freeze({
   },
 });
 
-export function getBrandLogo(theme: BrandTheme, variant: BrandLogoVariant): string {
-  return adverseBrand.logos[variant][theme === "dark" ? "dark" : "light"];
+/**
+ * The blue (#0876ED) logo is used in both themes (owner decision 2026-11-14: dark mode is black,
+ * white and #0876ED). `theme` is kept so callers do not change.
+ */
+export function getBrandLogo(_theme: BrandTheme, variant: BrandLogoVariant): string {
+  return adverseBrand.logos[variant].light;
 }

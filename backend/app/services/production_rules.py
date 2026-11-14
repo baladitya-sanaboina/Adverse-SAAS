@@ -403,3 +403,42 @@ def budget_cycles(
         )
         for index, (start, end) in enumerate(windows)
     ]
+
+
+# -- manager advances (Phase 12) ------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WalletEvent:
+    day: date
+    kind: Literal["TOP_UP", "COMMISSION"]
+    title: str
+    amount: Decimal
+    balance: Decimal
+
+
+def wallet_timeline(
+    top_ups: list[tuple[date, str, Decimal]], commissions: list[tuple[date, str, Decimal]]
+) -> list[WalletEvent]:
+    """Advance balance after every top-up and every approved commission, oldest first.
+
+    On the same day a top-up counts before that day's commission. A negative balance means the
+    manager has earned more than they were advanced (the admin owes the difference)."""
+    events: list[tuple[date, int, str, Decimal]] = [
+        (day, 0, title, Decimal(amount)) for day, title, amount in top_ups
+    ] + [(day, 1, title, Decimal(amount)) for day, title, amount in commissions]
+    events.sort(key=lambda item: (item[0], item[1]))
+    balance = Decimal("0")
+    result: list[WalletEvent] = []
+    for day, order, title, amount in events:
+        balance += amount if order == 0 else -amount
+        result.append(
+            WalletEvent(
+                day=day,
+                kind="TOP_UP" if order == 0 else "COMMISSION",
+                title=title,
+                amount=money(amount),
+                balance=money(balance),
+            )
+        )
+    return result

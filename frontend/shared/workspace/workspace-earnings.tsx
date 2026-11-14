@@ -14,6 +14,7 @@ import {
   money as formatMoneyText,
 } from "../production/client";
 import { MoneyPrivacy, PrivacyToggle, usePrivateMoney } from "../production/privacy";
+import { AdvanceWallet } from "./advance-wallet";
 import type { EmployeeSalary, ManagerEarnings } from "../production/types";
 import "../styles/organization.css";
 import "../styles/service-pricing-settings.css";
@@ -67,7 +68,7 @@ function ManagerEarningsPageContent() {
         title=""
         highlight="My Earnings"
         action={<PrivacyToggle className="" />}
-        description="Your commission from approved tasks and the payouts you have received."
+        description="Your advance from the Admin, the commission it covers, and every top-up you have received."
         compact
       />
       <div className="dash-content">
@@ -78,6 +79,7 @@ function ManagerEarningsPageContent() {
             <TableSkeleton />
           ) : (
             <>
+              {data.wallet && <AdvanceWallet wallet={data.wallet} currency={currency} money={money} viewer="MANAGER" />}
               <div className="services-pricing-summary-grid production-summary">
                 <article>
                   <span>This month</span>
@@ -95,9 +97,11 @@ function ManagerEarningsPageContent() {
                   <small>Your tasks not yet approved</small>
                 </article>
                 <article>
-                  <span>Pending payment</span>
-                  <strong>{money(data.pending, currency)}</strong>
-                  <small>Paid so far {money(data.paid, currency)}</small>
+                  <span>Top-ups received</span>
+                  <strong>{money(data.paid, currency)}</strong>
+                  <small>
+                    {data.payouts.length} {data.payouts.length === 1 ? "top-up" : "top-ups"} so far
+                  </small>
                 </article>
               </div>
               <div className="production-detail">
@@ -128,10 +132,10 @@ function ManagerEarningsPageContent() {
                   </Panel>
                 </div>
                 <div>
-                  <Panel icon={<History />} eyebrow="PAYOUTS" title="Received">
+                  <Panel icon={<History />} eyebrow="TOP-UPS" title="Received">
                     <div className="production-panel-body">
                       {data.payouts.length === 0 ? (
-                        <p className="production-muted">No payouts yet.</p>
+                        <p className="production-muted">No top-ups yet.</p>
                       ) : (
                         <ul className="production-list">
                           {data.payouts.map((payout) => (

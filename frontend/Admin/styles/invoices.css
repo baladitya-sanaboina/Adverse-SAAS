@@ -188,3 +188,152 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Simpler create flow (owner request 2026-11-14). */
+.invoice-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.invoice-range button {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--foreground);
+  background: var(--surface);
+  font:
+    600 0.64rem var(--font-poppins),
+    Arial,
+    Helvetica,
+    sans-serif;
+  cursor: pointer;
+}
+
+.invoice-range button.active {
+  border-color: #0876ed;
+  color: #ffffff;
+  background: #0876ed;
+}
+
+.invoice-range button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.invoice-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.invoice-hint.error {
+  color: #b74858;
+}
+
+.dark .invoice-hint.error {
+  color: #f0a6af;
+}
+
+.invoice-preview-total {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.invoice-preview-total span {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+.invoice-preview-total span:first-child {
+  border-color: rgba(8, 118, 237, 0.4);
+}
+
+.invoice-preview-total small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+.invoice-preview-total strong {
+  color: var(--foreground);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.invoice-preview-lines {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.invoice-preview-lines li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.invoice-preview-lines li:first-child {
+  border-top: 0;
+}
+
+.invoice-preview-lines li > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.invoice-preview-lines strong {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invoice-preview-lines small,
+.invoice-preview-lines li.more {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+.invoice-preview-lines em {
+  flex: 0 0 auto;
+  color: var(--foreground);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.invoice-more {
+  display: grid;
+  gap: 12px;
+}
+
+.invoice-more summary {
+  color: #0876ed;
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dark .invoice-more summary {
+  color: #8cc8ff;
+}
+
+.invoice-more[open] summary {
+  margin-bottom: 4px;
+}

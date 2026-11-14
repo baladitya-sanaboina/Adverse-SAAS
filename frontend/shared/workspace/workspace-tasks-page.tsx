@@ -42,6 +42,7 @@ import {
 } from "../production/task-board-ui";
 import type { Paged, TaskComment, TaskFile, TaskStatus } from "../production/types";
 import type { WorkerTask, WorkerTaskDetail } from "./types";
+import { useLiveRefresh } from "../realtime/realtime";
 import "../styles/organization.css";
 import "../styles/service-pricing-settings.css";
 import "../styles/production.css";
@@ -92,25 +93,31 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await api<Paged<WorkerTask>>(
-        `/api/workspace/tasks${query({ search, status, role, page_size: 500 })}`,
-      );
-      setItems(data.items);
-    } catch (requestError) {
-      setError(errorText(requestError, "Unable to load your tasks."));
-    } finally {
-      setLoading(false);
-    }
-  }, [search, status, role]);
+  const load = useCallback(
+    async (quiet = false) => {
+      if (!quiet) setLoading(true);
+      setError("");
+      try {
+        const data = await api<Paged<WorkerTask>>(
+          `/api/workspace/tasks${query({ search, status, role, page_size: 500 })}`,
+        );
+        setItems(data.items);
+      } catch (requestError) {
+        setError(errorText(requestError, "Unable to load your tasks."));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [search, status, role],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 250);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  // New or changed tasks show up live, without a page reload.
+  useLiveRefresh(["task."], () => void load(true));
 
   const choose = (next: TaskView) => {
     setView(next);
@@ -383,6 +390,8 @@ function TaskDetail({
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useLiveRefresh(["task."], () => void load());
 
   if (error || !task) {
     return (

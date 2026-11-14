@@ -80,6 +80,19 @@ class InvoiceDetailResponse(InvoiceResponse):
     payments: list[InvoicePaymentResponse]
 
 
+class InvoicePreviewResponse(BaseModel):
+    """What an invoice would contain, shown before it is created."""
+
+    period_start: date
+    period_end: date
+    currency: str
+    items: int
+    subtotal: Money
+    payments_total: Money
+    budget_added: Money
+    lines: list[InvoiceLineResponse]
+
+
 class InvoiceSendResponse(BaseModel):
     invoice: InvoiceDetailResponse
     emailed: bool

@@ -139,6 +139,7 @@ class TaskEvents:
             )
             if by_admin and row.status in BILLABLE and previous_status not in BILLABLE:
                 self._budget_check(company_id, row, actor_id)
+                self._advance_check(company_id, row)
         except Exception:  # noqa: BLE001
             logger.warning("Status notification failed", exc_info=True)
 
@@ -199,6 +200,60 @@ class TaskEvents:
             from app.services.invoice_service import invoice_service
 
             invoice_service.create_for_used_up_budget(company_id, row.client_id, actor_id)
+
+    def _advance_check(self, company_id: UUID, row: TaskRow) -> None:
+        """Manager advances (Phase 12): alert when commission first reaches 80% of the money
+        advanced, and when it uses the advance up. Work is never blocked."""
+        commission = Decimal(row.commission_final or 0)
+        if row.assignee_type != "MANAGER" or row.assignee_user_id is None or commission <= 0:
+            return
+        from app.repositories.finance_repository import FinanceRepository
+
+        finance = FinanceRepository()
+        topped = sum(
+            (Decimal(p.amount) for p in finance.list_payouts_for(company_id, row.assignee_user_id)),
+            Decimal("0"),
+        )
+        earned = Decimal(finance.manager_earned_totals(company_id).get(row.assignee_user_id, 0))
+        crossed = budget_threshold_crossed(topped, earned - commission, earned)
+        if crossed is None:
+            return
+        name = row.assignee_name or "A manager"
+        if crossed == "over":
+            owed = earned - topped
+            admin_title = f"{name}'s advance is used up"
+            admin_body = (
+                f"Commission is {money_text(owed, row.currency)} more than advanced. Add a top-up."
+                if owed > 0
+                else "Add a top-up so their next commission is covered."
+            )
+            own_title = "Your advance is used up"
+            own_body = "Your commission keeps counting; the next top-up covers it first."
+        else:
+            left = money_text(topped - earned, row.currency)
+            admin_title = f"{name} has used 80% of their advance"
+            admin_body = f"{left} left."
+            own_title = "80% of your advance is used"
+            own_body = f"{left} left."
+        data = {"manager_user_id": str(row.assignee_user_id), "level": crossed}
+        self.notifier.notify(
+            company_id,
+            self.notifier.admins(company_id),
+            f"advance.{crossed}",
+            admin_title,
+            admin_body,
+            "/payments",
+            data,
+        )
+        self.notifier.notify(
+            company_id,
+            [row.assignee_user_id],
+            f"advance.{crossed}",
+            own_title,
+            own_body,
+            "/earnings",
+            data,
+        )
 
     def commented(self, company_id: UUID, task_id: UUID, actor_id: UUID, content: str) -> None:
         try:

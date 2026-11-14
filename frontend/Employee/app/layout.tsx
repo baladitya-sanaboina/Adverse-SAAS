@@ -9,7 +9,8 @@ import "../styles/globals.css";
 
 const poppins = Poppins({
   variable: "--font-poppins",
-  subsets: ["latin"],
+  // latin-ext carries the ₹ sign, so amounts render fully in Poppins.
+  subsets: ["latin", "latin-ext"],
   weight: ["400", "500", "600", "700", "800"],
 });
 

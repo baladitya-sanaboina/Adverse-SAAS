@@ -16,6 +16,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
+import { AdvanceWallet } from "@loopless-shared/workspace/advance-wallet";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { CrudActionButtons } from "@/components/foundation/crud-action-buttons";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
@@ -62,7 +63,7 @@ const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   { id: "client-payments", label: "Client payments", icon: <Wallet /> },
   { id: "budgets", label: "Budgets", icon: <PiggyBank /> },
   { id: "salaries", label: "Salaries", icon: <Banknote /> },
-  { id: "payouts", label: "Manager payouts", icon: <HandCoins /> },
+  { id: "payouts", label: "Manager top-ups", icon: <HandCoins /> },
 ];
 
 const BUDGET_TYPE_OPTIONS: { value: BudgetEntryType; label: string }[] = [
@@ -101,7 +102,7 @@ export function PaymentsPage() {
       <DashboardHero
         title=""
         highlight="Payments"
-        description="Money received from clients, client budgets, salaries and manager commission payouts."
+        description="Money received from clients, client budgets, salaries and manager top-ups."
         compact
       />
       <div className="dash-content">
@@ -381,7 +382,7 @@ function PaymentEditor({
           ? "Money from a client lowers their pending amount. It does not change their budget."
           : kind === "salary"
             ? "Salary paid lowers what is pending for that month."
-            : "A payout lowers the commission still owed to the manager."
+            : "A top-up adds to the manager's advance; commission on approved work is taken from it."
       }
       onCancel={onCancel}
     >
@@ -1095,7 +1096,7 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
     if (message) onNotice(message);
     void load();
   };
-  const backLabel = isManager ? "Back to manager payouts" : "Back to salaries";
+  const backLabel = isManager ? "Back to manager top-ups" : "Back to salaries";
 
   if (view.mode === "person") {
     return (
@@ -1155,7 +1156,7 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
             </button>
           )}
           <button type="button" onClick={() => setView({ mode: "payment", payment: null })}>
-            <Plus /> {isManager ? "Record payout" : "Record payment"}
+            <Plus /> {isManager ? "Add top-up" : "Record payment"}
           </button>
         </span>
       </header>
@@ -1200,7 +1201,7 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
                   edit={
                     isManager
                       ? {
-                          label: `Record payout for ${row.person.name}`,
+                          label: `Add top-up for ${row.person.name}`,
                           onClick: () =>
                             setView({
                               mode: "payment",
@@ -1219,11 +1220,11 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
             ))}
           </div>
           <div className="production-section-title">
-            <span>{isManager ? "Payout history" : "Salary payment history"}</span>
+            <span>{isManager ? "Top-up history" : "Salary payment history"}</span>
             <small>Edit or delete a payment recorded by mistake.</small>
           </div>
           {history.length === 0 ? (
-            <p className="production-muted">No {isManager ? "payouts" : "salary payments"} recorded yet.</p>
+            <p className="production-muted">No {isManager ? "top-ups" : "salary payments"} recorded yet.</p>
           ) : (
             <PaymentTable
               kind={kind}
@@ -1367,7 +1368,7 @@ function PersonDetail({
                 setView({ mode: "payment", payment: null, amount: pending && Number(pending) > 0 ? pending : "" });
               }}
             >
-              <Plus /> {isManager ? "Record payout" : "Record payment"}
+              <Plus /> {isManager ? "Add top-up" : "Record payment"}
             </button>
           </span>
         )}
@@ -1471,6 +1472,7 @@ function ManagerFinance({
   const currency = earnings.currency;
   return (
     <>
+      {earnings.wallet && <AdvanceWallet wallet={earnings.wallet} currency={currency} money={money} viewer="ADMIN" />}
       <div className="services-pricing-summary-grid production-summary">
         <article>
           <span>Earned</span>
@@ -1528,14 +1530,14 @@ function ManagerFinance({
           </Panel>
         </div>
         <div>
-          <Panel icon={<History />} eyebrow="PAYOUTS" title="Paid to this manager">
+          <Panel icon={<History />} eyebrow="TOP-UPS" title="Sent to this manager">
             <div className="production-panel-body">
               <PaymentList
                 items={earnings.payouts}
                 currency={currency}
                 onEdit={onEdit}
                 onRemove={onRemove}
-                empty="No payouts recorded yet."
+                empty="No top-ups recorded yet."
               />
             </div>
           </Panel>

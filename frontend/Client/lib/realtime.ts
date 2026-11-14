@@ -4,6 +4,7 @@
  * Events are { type, data }: "notification", "notification.read", and chat events (Phase 14).
  * EventSource reconnects by itself; if the server closes the stream (e.g. signed out) we retry later.
  */
+import { useEffect, useRef } from "react";
 
 export type RealtimeEvent = { type: string; data: Record<string, unknown> };
 type Handler = (event: RealtimeEvent) => void;
@@ -51,4 +52,34 @@ export function subscribeRealtime(handler: Handler): () => void {
   return () => {
     handlers.delete(handler);
   };
+}
+
+/**
+ * Re-run `refresh` when a live notification of one of these kinds arrives (e.g. "task." for a new
+ * or changed task), so lists update without a page reload. Bursts are merged into one refresh.
+ */
+export function useLiveRefresh(prefixes: string[], refresh: () => void) {
+  const key = prefixes.join("|");
+  const latest = useRef(refresh);
+  useEffect(() => {
+    latest.current = refresh;
+  }, [refresh]);
+  useEffect(() => {
+    const kinds = key.split("|");
+    let timer: number | null = null;
+    const unsubscribe = subscribeRealtime((event) => {
+      if (event.type !== "notification") return;
+      const kind = String((event.data as { type?: unknown }).type ?? "");
+      if (!kinds.some((prefix) => kind.startsWith(prefix))) return;
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        latest.current();
+      }, 400);
+    });
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [key]);
 }

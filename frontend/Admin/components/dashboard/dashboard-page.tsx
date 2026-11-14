@@ -22,6 +22,10 @@ import { STATUS_LABELS, api, errorText, formatDate, money as formatMoney, query 
 import type { ReportPeriod, TaskStatus } from "@/lib/production/types";
 import "@/styles/production.css";
 
+// Password asked before the Admin dashboard shows money (owner request 2026-11-14). Change it with
+// NEXT_PUBLIC_MONEY_PASSWORD. Screen privacy only: the server already limits money to the Admin.
+const MONEY_PASSWORD = process.env.NEXT_PUBLIC_MONEY_PASSWORD || "1234";
+
 type Trend = { month: string; revenue: string; team_cost: string; margin: string };
 type AdminDashboard = {
   period: { period: ReportPeriod; start: string | null; end: string | null };
@@ -177,7 +181,7 @@ export function DashboardPage() {
   );
 
   return (
-    <MoneyPrivacy>
+    <MoneyPrivacy password={MONEY_PASSWORD}>
       <div className="dash-content production-dashboard">
         <header className="production-dash-header">
           <div>

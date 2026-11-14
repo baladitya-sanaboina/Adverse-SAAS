@@ -305,6 +305,35 @@ export function InvoicesPage() {
 
 /* ---------------------------------------------------------------------------------- create */
 
+type Preview = {
+  period_start: string;
+  period_end: string;
+  currency: string;
+  items: number;
+  subtotal: string;
+  payments_total: string;
+  budget_added: string;
+  lines: { position: number; delivered_on: string; title: string; service_name: string; amount: string }[];
+};
+type Range = "topup" | "this-month" | "last-month" | "custom";
+
+function isoDay(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** Start and end (ISO days) of this or last month, in the browser's local time. */
+function monthRange(offset: 0 | -1): [string, string] {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const last = offset === 0 ? now : new Date(now.getFullYear(), now.getMonth(), 0);
+  return [isoDay(first), isoDay(last)];
+}
+
+/*
+ * Create invoice, simplified on owner request (2026-11-14): pick the client, pick what to bill
+ * (a top-up, this month, last month or any dates), see the exact videos and total before saving,
+ * then save a draft or create and email it in one click.
+ */
 function CreateInvoice({
   clients,
   initialClient,
@@ -317,29 +346,33 @@ function CreateInvoice({
   onCreated: (id: string, message: string) => void;
 }) {
   const [clientId, setClientId] = useState(initialClient);
-  const [mode, setMode] = useState<"cycle" | "custom">("cycle");
+  const [range, setRange] = useState<Range>("topup");
   const [cycles, setCycles] = useState<Cycle[] | null>(null);
-  const [cycleIndex, setCycleIndex] = useState<number | null>(null);
+  const [cycleIndex, setCycleIndex] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [due, setDue] = useState("");
   const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [saving, setSaving] = useState<"" | "draft" | "send">("");
   const [error, setError] = useState("");
+
+  const today = isoDay(new Date());
 
   useEffect(() => {
     if (!clientId) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       setCycles(null);
-      setCycleIndex(null);
+      setCycleIndex("");
       try {
         const data = await api<Cycle[]>(`/api/company/invoices/cycles/${clientId}`);
         if (cancelled) return;
         setCycles(data);
-        setMode(data.length ? "cycle" : "custom");
-        const next = [...data].reverse().find((cycle) => !cycle.invoice_id);
-        setCycleIndex(next?.index ?? data[data.length - 1]?.index ?? null);
+        const next = [...data].reverse().find((cycle) => !cycle.invoice_id) ?? data[data.length - 1];
+        setCycleIndex(next ? String(next.index) : "");
+        setRange(data.length ? "topup" : "this-month");
       } catch {
         if (!cancelled) setCycles([]);
       }
@@ -350,17 +383,45 @@ function CreateInvoice({
     };
   }, [clientId]);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const chosen = cycles?.find((cycle) => cycle.index === cycleIndex) ?? null;
+  const chosen = cycles?.find((cycle) => String(cycle.index) === cycleIndex) ?? null;
+  const [periodStart, periodEnd] = useMemo((): [string, string] => {
+    if (range === "topup") return chosen ? [chosen.start, chosen.end ?? today] : ["", ""];
+    if (range === "this-month") return monthRange(0);
+    if (range === "last-month") return monthRange(-1);
+    return [start, end];
+  }, [range, chosen, start, end, today]);
+  const periodError =
+    periodStart && periodEnd && periodEnd < periodStart ? "The end date is before the start date." : "";
 
-  async function create() {
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setPreview(null);
+      if (!clientId || !periodStart || !periodEnd || periodEnd < periodStart) return;
+      setPreviewing(true);
+      try {
+        const data = await api<Preview>(
+          `/api/company/invoices/preview${query({ client_id: clientId, start: periodStart, end: periodEnd })}`,
+        );
+        if (!cancelled) setPreview(data);
+      } catch (requestError) {
+        if (!cancelled) setError(errorText(requestError, "Unable to preview the invoice."));
+      } finally {
+        if (!cancelled) setPreviewing(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [clientId, periodStart, periodEnd]);
+
+  async function create(send: boolean) {
     setError("");
-    const periodStart = mode === "cycle" ? chosen?.start : start;
-    const periodEnd = mode === "cycle" ? (chosen?.end ?? today) : end;
     if (!clientId) return setError("Choose a client.");
-    if (!periodStart || !periodEnd) return setError("Choose the period to invoice.");
-    if (periodEnd < periodStart) return setError("The end date must be on or after the start date.");
-    setSaving(true);
+    if (!periodStart || !periodEnd) return setError("Choose what to bill.");
+    if (periodError) return setError(periodError);
+    setSaving(send ? "send" : "draft");
     try {
       const invoice = await api<InvoiceDetail>("/api/company/invoices", {
         method: "POST",
@@ -372,32 +433,51 @@ function CreateInvoice({
           notes: notes.trim(),
         },
       });
-      onCreated(
-        invoice.id,
-        `${invoice.code} created as a draft with ${invoice.items} ${invoice.items === 1 ? "item" : "items"}.`,
-      );
+      const count = `${invoice.items} ${invoice.items === 1 ? "video" : "videos"}`;
+      if (!send) return onCreated(invoice.id, `${invoice.code} saved as a draft with ${count}.`);
+      try {
+        const result = await api<{ message: string }>(`/api/company/invoices/${invoice.id}/send`, { method: "POST" });
+        onCreated(invoice.id, `${invoice.code} created and sent (${count}). ${result.message}`);
+      } catch (sendError) {
+        onCreated(
+          invoice.id,
+          `${invoice.code} was saved as a draft but not sent: ${errorText(sendError, "sending failed")}.`,
+        );
+      }
     } catch (requestError) {
       setError(errorText(requestError, "Unable to create the invoice."));
     } finally {
-      setSaving(false);
+      setSaving("");
     }
   }
+
+  const ranges: { value: Range; label: string; disabled?: boolean }[] = [
+    { value: "topup", label: "A top-up", disabled: !cycles?.length },
+    { value: "this-month", label: "This month" },
+    { value: "last-month", label: "Last month" },
+    { value: "custom", label: "Pick dates" },
+  ];
+  const shown = preview?.lines.slice(0, 6) ?? [];
+  const balance = preview ? Number(preview.subtotal) - Number(preview.payments_total) : 0;
 
   return (
     <>
       <SheetHeader eyebrow="New invoice" title="Create invoice" onClose={onClose} />
       <Panel
         icon={<ReceiptText />}
-        eyebrow="CLIENT AND PERIOD"
-        title="What to invoice"
-        description="Pick a top-up period, or any dates. Every video approved in the period is listed."
+        eyebrow="STEP 1 AND 2"
+        title="Who and what to bill"
+        description="Every video approved in the chosen dates goes on the invoice."
       >
         <div className="production-panel-body">
           {error && <div className="management-form-message">{error}</div>}
           <Field label="Client">
             <LooplessSelect
               value={clientId}
-              onValueChange={setClientId}
+              onValueChange={(value) => {
+                setError("");
+                setClientId(value);
+              }}
               ariaLabel="Client"
               options={[
                 { value: "", label: "Choose a client" },
@@ -406,71 +486,43 @@ function CreateInvoice({
             />
           </Field>
           {clientId && (
-            <div className="production-view-toggle invoice-mode" role="group" aria-label="Period">
-              <button
-                type="button"
-                className={mode === "cycle" ? "active" : ""}
-                aria-pressed={mode === "cycle"}
-                disabled={!cycles?.length}
-                onClick={() => setMode("cycle")}
-              >
-                Top-up period
-              </button>
-              <button
-                type="button"
-                className={mode === "custom" ? "active" : ""}
-                aria-pressed={mode === "custom"}
-                onClick={() => setMode("custom")}
-              >
-                Custom dates
-              </button>
-            </div>
+            <Field label="Bill for">
+              <div className="invoice-range" role="radiogroup" aria-label="Bill for">
+                {ranges.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={range === option.value}
+                    className={range === option.value ? "active" : ""}
+                    disabled={option.disabled}
+                    onClick={() => {
+                      setError("");
+                      setRange(option.value);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </Field>
           )}
-          {clientId && mode === "cycle" && (
-            <div className="invoice-cycles" role="radiogroup" aria-label="Top-up periods">
-              {cycles === null ? (
-                <p className="production-muted">Loading budget periods…</p>
-              ) : cycles.length === 0 ? (
-                <p className="production-muted">This client has no budget yet. Use custom dates.</p>
-              ) : (
-                [...cycles].reverse().map((cycle) => {
-                  const used =
-                    Number(cycle.amount) > 0 ? Math.min(100, (Number(cycle.used) / Number(cycle.amount)) * 100) : 0;
-                  return (
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={cycleIndex === cycle.index}
-                      key={cycle.index}
-                      className={`invoice-cycle${cycleIndex === cycle.index ? " active" : ""}`}
-                      onClick={() => setCycleIndex(cycle.index)}
-                    >
-                      <span className="invoice-cycle-top">
-                        <strong>Period {cycle.index}</strong>
-                        <small>
-                          {formatDate(cycle.start)} – {cycle.end ? formatDate(cycle.end) : "now"}
-                        </small>
-                      </span>
-                      <span className="invoice-cycle-bar" aria-hidden="true">
-                        <i
-                          style={{ width: `${used}%` }}
-                          className={Number(cycle.remaining) <= 0 ? "full" : undefined}
-                        />
-                      </span>
-                      <span className="invoice-cycle-meta">
-                        <span>
-                          {money(cycle.used)} of {money(cycle.amount)} · {cycle.items}{" "}
-                          {cycle.items === 1 ? "item" : "items"}
-                        </span>
-                        {cycle.invoice_code && <em>{cycle.invoice_code} already made</em>}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
+          {clientId && range === "topup" && cycles && cycles.length > 0 && (
+            <Field label="Top-up">
+              <LooplessSelect
+                value={cycleIndex}
+                onValueChange={setCycleIndex}
+                ariaLabel="Top-up"
+                options={[...cycles].reverse().map((cycle) => ({
+                  value: String(cycle.index),
+                  label: `Top-up ${cycle.index} · ${formatDate(cycle.start)} – ${
+                    cycle.end ? formatDate(cycle.end) : "now"
+                  } · ${money(cycle.amount)}${cycle.invoice_code ? ` · ${cycle.invoice_code} made` : ""}`,
+                }))}
+              />
+            </Field>
           )}
-          {clientId && mode === "custom" && (
+          {clientId && range === "custom" && (
             <div className="invoice-dates">
               <Field label="From">
                 <span className="management-input">
@@ -486,41 +538,113 @@ function CreateInvoice({
               </Field>
             </div>
           )}
-          <div className="invoice-dates">
-            <Field label="Due date (optional)">
-              <span className="management-input">
-                <CalendarDays aria-hidden="true" />
-                <input type="date" value={due} onChange={(event) => setDue(event.target.value)} />
-              </span>
-            </Field>
-          </div>
-          <Field label="Notes (optional)">
-            <span className="management-input organization-textarea-shell">
-              <FileText aria-hidden="true" />
-              <textarea
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="Shown at the bottom of the invoice"
-                maxLength={1000}
-              />
-            </span>
-          </Field>
-          <div className="production-inline-actions">
-            <button type="button" className="management-secondary-action" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="management-primary-action"
-              disabled={saving || !clientId}
-              onClick={() => void create()}
-            >
-              {saving && <RefreshCw className="spin" />}
-              {saving ? "Creating…" : "Create draft"}
-            </button>
-          </div>
+          {chosen?.invoice_code && range === "topup" && (
+            <p className="invoice-hint">{chosen.invoice_code} was already made for this top-up. A new one is a copy.</p>
+          )}
+          {periodError && <p className="invoice-hint error">{periodError}</p>}
         </div>
       </Panel>
+
+      {clientId && periodStart && periodEnd && !periodError && (
+        <Panel
+          icon={<FileText />}
+          eyebrow="STEP 3"
+          title="Check and create"
+          description={`${formatDate(periodStart)} – ${formatDate(periodEnd)}`}
+        >
+          <div className="production-panel-body">
+            {!preview ? (
+              <p className="production-muted">{previewing ? "Working out the invoice…" : "No preview yet."}</p>
+            ) : (
+              <>
+                <div className="invoice-preview-total">
+                  <span>
+                    <small>
+                      {preview.items} {preview.items === 1 ? "video" : "videos"}
+                    </small>
+                    <strong>{money(preview.subtotal, preview.currency)}</strong>
+                  </span>
+                  {Number(preview.payments_total) > 0 && (
+                    <span>
+                      <small>Paid in these dates</small>
+                      <strong>{money(preview.payments_total, preview.currency)}</strong>
+                    </span>
+                  )}
+                  <span>
+                    <small>{balance > 0 ? "Balance due" : "Balance"}</small>
+                    <strong>{money(Math.max(balance, 0), preview.currency)}</strong>
+                  </span>
+                </div>
+                {preview.items === 0 ? (
+                  <p className="invoice-hint">No approved videos in these dates. The invoice would be empty.</p>
+                ) : (
+                  <ol className="invoice-preview-lines">
+                    {shown.map((line) => (
+                      <li key={line.position}>
+                        <span>
+                          <strong>{line.title}</strong>
+                          <small>
+                            {formatDate(line.delivered_on)} · {line.service_name}
+                          </small>
+                        </span>
+                        <em>{money(line.amount, preview.currency)}</em>
+                      </li>
+                    ))}
+                    {preview.lines.length > shown.length && (
+                      <li className="more">+ {preview.lines.length - shown.length} more on the invoice</li>
+                    )}
+                  </ol>
+                )}
+              </>
+            )}
+            <details className="invoice-more">
+              <summary>Due date and notes (optional)</summary>
+              <div className="invoice-dates">
+                <Field label="Due date">
+                  <span className="management-input">
+                    <CalendarDays aria-hidden="true" />
+                    <input type="date" value={due} onChange={(event) => setDue(event.target.value)} />
+                  </span>
+                </Field>
+              </div>
+              <Field label="Notes">
+                <span className="management-input organization-textarea-shell">
+                  <FileText aria-hidden="true" />
+                  <textarea
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    placeholder="Shown at the bottom of the invoice"
+                    maxLength={1000}
+                  />
+                </span>
+              </Field>
+            </details>
+            <div className="production-inline-actions">
+              <button type="button" className="management-secondary-action" onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="management-secondary-action"
+                disabled={Boolean(saving) || !preview || preview.items === 0}
+                onClick={() => void create(false)}
+              >
+                {saving === "draft" && <RefreshCw className="spin" />}
+                Save draft
+              </button>
+              <button
+                type="button"
+                className="management-primary-action"
+                disabled={Boolean(saving) || !preview || preview.items === 0}
+                onClick={() => void create(true)}
+              >
+                {saving === "send" ? <RefreshCw className="spin" /> : <Send />}
+                {saving === "send" ? "Sending…" : "Create and email"}
+              </button>
+            </div>
+          </div>
+        </Panel>
+      )}
     </>
   );
 }

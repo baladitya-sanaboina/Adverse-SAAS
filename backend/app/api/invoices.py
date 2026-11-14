@@ -6,6 +6,7 @@ the finance router's generic DELETE /company/finance/{kind}/{payment_id}.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 from uuid import UUID
 
@@ -18,6 +19,7 @@ from app.schemas.invoices import (
     InvoiceCreateRequest,
     InvoiceDetailResponse,
     InvoiceListResponse,
+    InvoicePreviewResponse,
     InvoiceSendResponse,
     InvoiceStatus,
     InvoiceUpdateRequest,
@@ -67,6 +69,18 @@ def list_invoices(
 )
 def client_cycles(context: AuthenticatedContext, client_id: UUID) -> list[BudgetCycleResponse]:
     return invoice_service.cycles(context, client_id)
+
+
+@router.get(
+    "/preview",
+    response_model=InvoicePreviewResponse,
+    summary="Preview the work and total an invoice would have, without creating it",
+    responses=ERRORS,
+)
+def preview_invoice(
+    context: AuthenticatedContext, client_id: UUID, start: date, end: date
+) -> InvoicePreviewResponse:
+    return invoice_service.preview(context, client_id, start, end)
 
 
 @router.post(

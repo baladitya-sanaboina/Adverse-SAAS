@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -28,6 +29,7 @@ from app.schemas.invoices import (
     InvoiceLineResponse,
     InvoiceListResponse,
     InvoicePaymentResponse,
+    InvoicePreviewResponse,
     InvoiceResponse,
     InvoiceSendResponse,
     InvoiceUpdateRequest,
@@ -195,18 +197,11 @@ class InvoiceService:
             ],
         )
 
-    def _make(
-        self,
-        company_id: UUID,
-        client_id: UUID,
-        actor_id: UUID,
-        start: date,
-        end: date,
-        source: str,
-        due_date: date | None = None,
-        notes: str = "",
-    ) -> UUID:
-        tz, zone, today = self._zone(company_id)
+    def _collect(
+        self, company_id: UUID, client_id: UUID, start: date, end: date
+    ) -> tuple[list[Any], list[Any], Decimal]:
+        """Delivered work (oldest first), payments and budget added in the period."""
+        tz, zone, _ = self._zone(company_id)
         deliveries = list(
             reversed(self.finance.client_deliveries(company_id, client_id, tz, start, end))
         )
@@ -223,6 +218,21 @@ class InvoiceService:
             ),
             ZERO,
         )
+        return deliveries, payments, budget_added
+
+    def _make(
+        self,
+        company_id: UUID,
+        client_id: UUID,
+        actor_id: UUID,
+        start: date,
+        end: date,
+        source: str,
+        due_date: date | None = None,
+        notes: str = "",
+    ) -> UUID:
+        _, _, today = self._zone(company_id)
+        deliveries, payments, budget_added = self._collect(company_id, client_id, start, end)
         return self.repository.create(
             company_id,
             client_id,
@@ -287,6 +297,40 @@ class InvoiceService:
         if self.tasks.get_client(company_id, client_id) is None:
             raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
         return self._cycles(company_id, client_id)[0]
+
+    def preview(
+        self, context: AuthContext, client_id: UUID, start: date, end: date
+    ) -> InvoicePreviewResponse:
+        """What an invoice for this client and period would contain, without saving it."""
+        company_id = self._admin(context, "VIEW")
+        if end < start:
+            raise AuthenticationError(
+                422, "INVALID_PERIOD", "The end date must be on or after the start date."
+            )
+        if self.tasks.get_client(company_id, client_id) is None:
+            raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
+        deliveries, payments, budget_added = self._collect(company_id, client_id, start, end)
+        subtotal = money(sum((Decimal(row.amount) for row in deliveries), ZERO))
+        paid = money(sum((Decimal(p.amount) for p in payments), ZERO))
+        return InvoicePreviewResponse(
+            period_start=start,
+            period_end=end,
+            currency=self.finance.company_currency(company_id),
+            items=len(deliveries),
+            subtotal=subtotal,
+            payments_total=paid,
+            budget_added=money(budget_added),
+            lines=[
+                InvoiceLineResponse(
+                    position=index,
+                    delivered_on=row.delivered_on,
+                    title=row.title,
+                    service_name=row.service_name,
+                    amount=money(row.amount),
+                )
+                for index, row in enumerate(deliveries, start=1)
+            ],
+        )
 
     def create(self, context: AuthContext, request: InvoiceCreateRequest) -> InvoiceDetailResponse:
         company_id = self._admin(context, "CREATE")

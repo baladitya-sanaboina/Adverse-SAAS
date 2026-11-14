@@ -1,5 +1,5 @@
-"use client";
 // Copy of frontend/shared/notifications/notification-center.tsx (the Client app cannot import shared/). Keep in sync.
+"use client";
 
 /*
  * Notifications (Phase 10): live bell in the top bar, toasts, desktop alerts with a sound, and a
@@ -7,8 +7,9 @@
  * /api/realtime/stream. Sound and desktop preferences are kept per device in localStorage.
  */
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, BellRing, Check, CheckCheck, Inbox, Volume2, VolumeX, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Bell, BellRing, Check, CheckCheck, Cookie, Inbox, Volume2, VolumeX, X } from "lucide-react";
 import { subscribeRealtime } from "@/lib/realtime";
 import "@/styles/notifications.css";
 
@@ -66,27 +67,59 @@ export function timeAgo(value: string): string {
 
 let audio: AudioContext | null = null;
 
-/** Short two-note chime made with Web Audio (no sound file needed). */
+function audioContext(): AudioContext | null {
+  const Context =
+    window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Context) return null;
+  audio = audio ?? new Context();
+  return audio;
+}
+
+/**
+ * Browsers keep audio locked until the person clicks or types once on the page. We unlock it on
+ * the first interaction so a chime can play when a notification arrives later.
+ */
+function unlockAudioOnce() {
+  const unlock = () => {
+    try {
+      void audioContext()?.resume();
+    } catch {
+      // Sound stays off; the visual alert still shows.
+    }
+  };
+  window.addEventListener("pointerdown", unlock, { once: true, capture: true });
+  window.addEventListener("keydown", unlock, { once: true, capture: true });
+}
+
+/** Soft three-note bell made with Web Audio (no sound file needed). */
 export function playChime() {
   try {
-    const Context =
-      window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Context) return;
-    audio = audio ?? new Context();
-    const ctx = audio;
-    const now = ctx.currentTime;
-    [880, 1318.5].forEach((frequency, index) => {
-      const oscillator = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const start = now + index * 0.12;
-      oscillator.type = "sine";
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.16, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.38);
-      oscillator.connect(gain).connect(ctx.destination);
-      oscillator.start(start);
-      oscillator.stop(start + 0.4);
+    const ctx = audioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") void ctx.resume();
+    const now = ctx.currentTime + 0.02;
+    const master = ctx.createGain();
+    master.gain.value = 0.22;
+    master.connect(ctx.destination);
+    // E6, G#6, B6: a bright, friendly major arpeggio with a soft bell overtone.
+    [1318.5, 1661.2, 1975.5].forEach((frequency, index) => {
+      const start = now + index * 0.09;
+      [
+        { ratio: 1, level: 1, type: "sine" as OscillatorType },
+        { ratio: 2.01, level: 0.18, type: "sine" as OscillatorType },
+        { ratio: 0.5, level: 0.12, type: "triangle" as OscillatorType },
+      ].forEach((partial) => {
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.type = partial.type;
+        oscillator.frequency.value = frequency * partial.ratio;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(partial.level, start + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.9);
+        oscillator.connect(gain).connect(master);
+        oscillator.start(start);
+        oscillator.stop(start + 0.95);
+      });
     });
   } catch {
     // Audio is blocked until the user interacts with the page; the visual alert still shows.
@@ -105,6 +138,124 @@ function showDesktop(item: AppNotification, onOpen: () => void): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/** Renders fixed overlays on <body>: the top bar's backdrop-filter would otherwise trap them inside it. */
+function BodyPortal({ children }: { children: ReactNode }) {
+  return typeof document === "undefined" ? null : createPortal(children, document.body);
+}
+
+/* --------------------------------------------------------------------------- permission cards */
+
+const COOKIE_KEY = "adverse-cookie-consent";
+const ASKED_KEY = "adverse-notify-asked";
+
+function stored(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Two small cards, one at a time, in the app's own style (owner request 2026-11-14):
+ * 1. cookies: we only use the sign-in cookies that keep you logged in for 7 days;
+ * 2. notifications: asks the browser for permission to show alerts and play a sound.
+ * "Not now" on the alerts card asks again after 3 days.
+ */
+function PermissionPrompts() {
+  const [step, setStep] = useState<"cookies" | "alerts" | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (stored(COOKIE_KEY) !== "accepted") return setStep("cookies");
+      if (typeof Notification === "undefined" || Notification.permission !== "default") return;
+      const asked = Number(stored(ASKED_KEY) ?? 0);
+      if (Date.now() - asked > 3 * 24 * 60 * 60 * 1000) setStep("alerts");
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const nextAfterCookies = () => {
+    writeRaw(COOKIE_KEY, "accepted");
+    const askAlerts =
+      typeof Notification !== "undefined" &&
+      Notification.permission === "default" &&
+      Date.now() - Number(stored(ASKED_KEY) ?? 0) > 3 * 24 * 60 * 60 * 1000;
+    setStep(askAlerts ? "alerts" : null);
+  };
+
+  const allowAlerts = async () => {
+    writeRaw(ASKED_KEY, String(Date.now()));
+    setStep(null);
+    try {
+      void audioContext()?.resume();
+      const result = await Notification.requestPermission();
+      if (result === "granted") {
+        writePref(DESKTOP_KEY, true);
+        writePref(SOUND_KEY, true);
+        playChime();
+        new Notification("Notifications are on", { body: "You will hear a chime for new updates." });
+      }
+    } catch {
+      // The browser refused to ask; the setting stays available on the Notifications page.
+    }
+  };
+
+  if (!step) return null;
+  return (
+    <BodyPortal>
+      <div
+        className="notify-consent"
+        role="dialog"
+        aria-live="polite"
+        aria-label={step === "cookies" ? "Cookies" : "Notifications"}
+      >
+        <span className="notify-consent-icon" aria-hidden="true">
+          {step === "cookies" ? <Cookie /> : <BellRing />}
+        </span>
+        <div>
+          <strong>{step === "cookies" ? "We use cookies" : "Turn on notifications?"}</strong>
+          <p>
+            {step === "cookies"
+              ? "Only the sign-in cookies that keep you logged in for 7 days on this device. No ads, no tracking."
+              : "Get an alert with a sound when a task is assigned, approved or paid, even when this tab is in the background."}
+          </p>
+          <div className="notify-consent-actions">
+            {step === "cookies" ? (
+              <button type="button" className="primary" onClick={nextAfterCookies}>
+                Accept
+              </button>
+            ) : (
+              <>
+                <button type="button" className="primary" onClick={() => void allowAlerts()}>
+                  Allow
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    writeRaw(ASKED_KEY, String(Date.now()));
+                    setStep(null);
+                  }}
+                >
+                  Not now
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </BodyPortal>
+  );
+}
+
+function writeRaw(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Not remembered; the card may show again.
   }
 }
 
@@ -145,13 +296,15 @@ export function NotificationBell() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
+    unlockAudioOnce();
     const unsubscribe = subscribeRealtime((event) => {
       if (event.type === "notification") {
         const item = event.data as unknown as AppNotification;
         setItems((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 8));
         setUnread((count) => count + 1);
         if (readPref(SOUND_KEY)) playChime();
-        const onDesktop = document.hidden && readPref(DESKTOP_KEY) && showDesktop(item, () => go(item));
+        const away = document.hidden || !document.hasFocus();
+        const onDesktop = away && readPref(DESKTOP_KEY) && showDesktop(item, () => go(item));
         if (!onDesktop) {
           setToasts((current) => [...current.slice(-2), item]);
           window.setTimeout(() => setToasts((current) => current.filter((entry) => entry.id !== item.id)), 6000);
@@ -197,6 +350,7 @@ export function NotificationBell() {
 
   return (
     <div className="notify-bell" ref={root}>
+      <PermissionPrompts />
       <button
         type="button"
         aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
@@ -255,25 +409,27 @@ export function NotificationBell() {
         </div>
       )}
       {toasts.length > 0 && (
-        <div className="notify-toasts" aria-live="polite">
-          {toasts.map((item) => (
-            <div key={item.id} className="notify-toast">
-              <BellRing aria-hidden="true" />
-              <button type="button" onClick={() => go(item)}>
-                <strong>{item.title}</strong>
-                {item.body && <small>{item.body}</small>}
-              </button>
-              <button
-                type="button"
-                className="close"
-                aria-label="Dismiss"
-                onClick={() => setToasts((current) => current.filter((entry) => entry.id !== item.id))}
-              >
-                <X aria-hidden="true" />
-              </button>
-            </div>
-          ))}
-        </div>
+        <BodyPortal>
+          <div className="notify-toasts" aria-live="polite">
+            {toasts.map((item) => (
+              <div key={item.id} className="notify-toast">
+                <BellRing aria-hidden="true" />
+                <button type="button" onClick={() => go(item)}>
+                  <strong>{item.title}</strong>
+                  {item.body && <small>{item.body}</small>}
+                </button>
+                <button
+                  type="button"
+                  className="close"
+                  aria-label="Dismiss"
+                  onClick={() => setToasts((current) => current.filter((entry) => entry.id !== item.id))}
+                >
+                  <X aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </BodyPortal>
       )}
     </div>
   );

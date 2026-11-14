@@ -9,6 +9,7 @@ Money visibility (docs/ProductionManagementPlan.md, section 4):
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -52,6 +53,7 @@ from app.schemas.production import (
     ManagerPayoutRequest,
     ManagerPayoutResponse,
     ManagerPayoutUpdate,
+    ManagerWallet,
     NamedRef,
     PaymentListFilters,
     PeriodQuery,
@@ -71,6 +73,8 @@ from app.schemas.production import (
     TaskCounts,
     TeamReportResponse,
     TeamReportRow,
+    WalletLine,
+    WalletPeriod,
     WorkerTaskFilters,
     WorkspaceDashboardResponse,
 )
@@ -80,6 +84,7 @@ from app.services.permission_service import validate_user_action_access
 from app.services.production_rules import (
     BILLABLE_STATUSES,
     SalaryRate,
+    budget_cycles,
     budget_position,
     last_month_starts,
     money,
@@ -87,6 +92,7 @@ from app.services.production_rules import (
     resolve_period,
     salary_cost_in_range,
     salary_due_by_month,
+    wallet_timeline,
 )
 from app.services.task_events import money_text
 from app.services.task_service import WORKER_ROLES, TaskService
@@ -211,6 +217,67 @@ class FinanceService:
 
     # -- earnings shared by admin and the person themselves ---------------------------------
 
+    @staticmethod
+    def _wallet(tz: str, tasks: list[Any], payouts: list[PayoutRow]) -> ManagerWallet:
+        """Top-ups (payouts) minus commission on approved work, with one period per top-up."""
+        try:
+            zone = ZoneInfo(tz)
+        except Exception:  # noqa: BLE001
+            zone = ZoneInfo("UTC")
+
+        def local(moment: datetime) -> date:
+            aware = moment if moment.tzinfo else moment.replace(tzinfo=ZoneInfo("UTC"))
+            return aware.astimezone(zone).date()
+
+        commissions = [
+            (
+                local(task.approved_at),
+                f"TSK-{task.number:04d} · {task.title}",
+                money(task.commission),
+            )
+            for task in tasks
+            if task.status in BILLABLE_STATUSES
+            and task.approved_at is not None
+            and money(task.commission) > 0
+        ]
+        top_ups = [
+            (payout.paid_on, payout.note or "Top-up", money(payout.amount)) for payout in payouts
+        ]
+        topped = sum((amount for _, _, amount in top_ups), ZERO)
+        earned = sum((amount for _, _, amount in commissions), ZERO)
+        cycles = budget_cycles(
+            [(day, "TOP_UP", amount) for day, _, amount in top_ups],
+            [(day, amount) for day, _, amount in commissions],
+        )
+        lines = wallet_timeline(top_ups, commissions)
+        return ManagerWallet(
+            topped_up=money(topped),
+            earned=money(earned),
+            balance=money(topped - earned),
+            periods=[
+                WalletPeriod(
+                    index=cycle.index,
+                    start=cycle.start,
+                    end=cycle.end,
+                    topped_up=cycle.amount,
+                    earned=cycle.used,
+                    balance=cycle.remaining,
+                    items=cycle.items,
+                )
+                for cycle in cycles
+            ],
+            lines=[
+                WalletLine(
+                    day=line.day,
+                    kind=line.kind,
+                    title=line.title,
+                    amount=line.amount,
+                    balance=line.balance,
+                )
+                for line in reversed(lines[-200:])
+            ],
+        )
+
     def manager_earnings(self, company_id: UUID, manager_id: UUID) -> ManagerEarningsResponse:
         tz, today = self._zone(company_id)
         currency = self.repository.company_currency(company_id)
@@ -248,6 +315,7 @@ class FinanceService:
                 for task in tasks
             ],
             payouts=[self._payout(payout) for payout in payouts],
+            wallet=self._wallet(tz, tasks, payouts),
         )
 
     def employee_salary(self, company_id: UUID, user_id: UUID) -> EmployeeSalaryResponse:
@@ -695,7 +763,7 @@ class FinanceService:
             company_id,
             [request.manager_user_id],
             "payout.paid",
-            "Payout received",
+            "Top-up received",
             f"{money_text(payout.amount, payout.currency)} paid on {payout.paid_on:%d %b %Y}.",
             "/earnings",
             {"payout_id": str(payout_id)},

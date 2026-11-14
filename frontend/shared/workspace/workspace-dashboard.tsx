@@ -6,7 +6,7 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlarmClock, CheckCheck, ClipboardList, Eye, HandCoins, Hourglass, Wallet } from "lucide-react";
+import { AlarmClock, CheckCheck, ClipboardList, HandCoins, Hourglass, Wallet } from "lucide-react";
 import {
   DashHeader,
   DashLoading,
@@ -23,6 +23,7 @@ import { STATUS_LABELS, api, errorText, formatDate, money as formatMoney } from 
 import { MoneyPrivacy, PrivacyToggle, usePrivateMoney } from "../production/privacy";
 import type { EmployeeSalary, ManagerEarnings, Paged, TaskStatus } from "../production/types";
 import type { WorkerTask, WorkspaceDashboard } from "./types";
+import { useLiveRefresh } from "../realtime/realtime";
 
 type Role = "MANAGER" | "EMPLOYEE";
 type Me = { user: { name: string }; company: { name: string } | null };
@@ -81,6 +82,8 @@ function WorkspaceDashboardContent({ role }: { role: Role }) {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useLiveRefresh(["task.", "payout.", "salary."], () => void load());
 
   const months = useMemo(() => lastMonths(6), []);
   const thisMonth = months[months.length - 1];
@@ -149,8 +152,13 @@ function WorkspaceDashboardContent({ role }: { role: Role }) {
               The Admin approves these
             </Tile>
             {role === "MANAGER" ? (
-              <Tile title="Monitoring" value={String(dash.counts.monitoring)} icon={<Eye />}>
-                Tasks you keep an eye on
+              <Tile
+                title={Number(earnings?.wallet?.balance ?? 0) < 0 ? "Due to you" : "Advance left"}
+                value={money(Math.abs(Number(earnings?.wallet?.balance ?? 0)), dash.currency)}
+                icon={<Wallet />}
+                tone={Number(earnings?.wallet?.balance ?? 0) < 0 ? "negative" : undefined}
+              >
+                {earnings?.wallet ? `Topped up ${money(earnings.wallet.topped_up, dash.currency)}` : "No top-ups yet"}
               </Tile>
             ) : (
               <Tile

@@ -63,7 +63,9 @@ export async function backendError(response: Response): Promise<NextResponse> {
 }
 
 export async function setSession(response: NextResponse, accessToken: string, refreshToken: string): Promise<void> {
-  response.cookies.set(authConfig.accessCookie, accessToken, cookieOptions(30 * 60));
+  // The cookie lives as long as the refresh token (7 days); an expired token inside it is renewed
+  // on the next request, so people stay signed in instead of being logged out after 30 minutes.
+  response.cookies.set(authConfig.accessCookie, accessToken, cookieOptions(7 * 24 * 60 * 60));
   response.cookies.set(authConfig.refreshCookie, refreshToken, cookieOptions(7 * 24 * 60 * 60));
 }
 

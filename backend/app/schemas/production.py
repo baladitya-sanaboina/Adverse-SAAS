@@ -376,6 +376,34 @@ class CommissionTaskLine(BaseModel):
     approved_at: datetime | None
 
 
+class WalletPeriod(BaseModel):
+    index: int
+    start: date
+    end: date | None
+    topped_up: Money
+    earned: Money
+    balance: Money
+    items: int
+
+
+class WalletLine(BaseModel):
+    day: date
+    kind: Literal["TOP_UP", "COMMISSION"]
+    title: str
+    amount: Money
+    balance: Money
+
+
+class ManagerWallet(BaseModel):
+    """Advance model (owner decision 2026-11-14): top-ups minus commission earned."""
+
+    topped_up: Money
+    earned: Money
+    balance: Money
+    periods: list[WalletPeriod]
+    lines: list[WalletLine]
+
+
 class ManagerEarningsResponse(BaseModel):
     currency: str
     earned: Money
@@ -385,6 +413,7 @@ class ManagerEarningsResponse(BaseModel):
     current_month_earned: Money
     tasks: list[CommissionTaskLine]
     payouts: list["ManagerPayoutResponse"]
+    wallet: ManagerWallet | None = None
 
 
 class SalaryMonthLine(BaseModel):

@@ -18,6 +18,7 @@ from app.services.production_rules import (
     salary_due_by_month,
     status_timestamp_updates,
     task_margin,
+    wallet_timeline,
 )
 
 NOW = datetime(2026, 11, 13, 10, 0, tzinfo=timezone.utc)
@@ -262,6 +263,31 @@ class ClientLedgerTest(unittest.TestCase):
 
     def test_no_budget_no_cycles(self) -> None:
         self.assertEqual(budget_cycles([], [(date(2026, 1, 1), Decimal("5"))]), [])
+
+
+class ManagerWalletTest(unittest.TestCase):
+    def test_balance_after_each_event_and_owed_when_negative(self) -> None:
+        events = wallet_timeline(
+            [
+                (date(2026, 11, 1), "Advance", Decimal("10000")),
+                (date(2026, 11, 20), "Top-up", Decimal("12000")),
+            ],
+            [
+                (date(2026, 11, 1), "TSK-0001", Decimal("300")),
+                (date(2026, 11, 10), "TSK-0002", Decimal("9900")),
+                (date(2026, 11, 21), "TSK-0003", Decimal("500")),
+            ],
+        )
+        self.assertEqual(
+            [(e.kind, e.balance) for e in events],
+            [
+                ("TOP_UP", Decimal("10000.00")),
+                ("COMMISSION", Decimal("9700.00")),
+                ("COMMISSION", Decimal("-200.00")),
+                ("TOP_UP", Decimal("11800.00")),
+                ("COMMISSION", Decimal("11300.00")),
+            ],
+        )
 
 
 if __name__ == "__main__":
