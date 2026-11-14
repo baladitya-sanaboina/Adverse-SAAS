@@ -130,7 +130,7 @@ export function TaskManagementPage() {
   const [quick, setQuick] = useState<QuickFilter>("all");
 
   useEffect(() => {
-    // Links from the dashboard: ?mode=create, ?task=<id> (open it) or ?status=<STATUS> (filter).
+    // Links from the dashboard and client page: ?mode=create, ?task=<id> (open it), ?status=<STATUS> or ?client=<id> (filter).
     const fromUrl = window.setTimeout(() => {
       const params = new URLSearchParams(window.location.search);
       const taskId = params.get("task");
@@ -138,6 +138,9 @@ export function TaskManagementPage() {
       if (params.get("mode") === "create") setSheet({ mode: "create" });
       else if (taskId && TASK_ID.test(taskId)) setSheet({ mode: "detail", id: taskId });
       if (statusFilter && statusFilter in STATUS_LABELS) setStatus(statusFilter);
+      // ?client=<id>: from the client details page, show only that client's tasks.
+      const clientFilter = params.get("client");
+      if (clientFilter && TASK_ID.test(clientFilter)) setClient(clientFilter);
       try {
         const saved = window.localStorage.getItem(VIEW_STORAGE_KEY);
         if (saved === "board" || saved === "list") setView(saved);

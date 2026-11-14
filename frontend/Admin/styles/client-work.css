@@ -1,0 +1,452 @@
+/*
+ * Client details → Client work (Admin). The section shell comes from .client-pricing in
+ * client-management.css; this file only adds the inside. Theme tokens and the app's status colours.
+ */
+
+.client-work {
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+}
+
+.client-work > header .client-detail-actions a {
+  text-decoration: none;
+}
+
+.client-work-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 16px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.client-work-state svg {
+  width: 15px;
+}
+
+/* Four summary cards, same look as the client info cards above. */
+.client-work-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 11px;
+  padding: 16px;
+}
+
+.client-work-summary article {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.client-work-summary span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-weight: 600;
+}
+
+.client-work-summary span svg {
+  width: 13px;
+  color: #0876ed;
+}
+
+.client-work-summary strong {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-work-summary small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 500;
+}
+
+.client-work-summary article.due strong {
+  color: #b74858;
+}
+
+.client-work .good {
+  color: #287150;
+}
+
+/* Per-service counts. */
+.client-work-services {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.client-work-services article {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.client-work-services strong {
+  color: var(--foreground);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.client-work-services span {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.client-work-services em {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--foreground);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* Filters and search. */
+.client-work-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.client-work-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.client-work-filters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--foreground);
+  background: var(--surface);
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.client-work-filters button em {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface-muted);
+  font-size: 0.56rem;
+  font-style: normal;
+  text-align: center;
+}
+
+.client-work-filters button.active {
+  border-color: #0876ed;
+  color: #0876ed;
+  background: color-mix(in srgb, #0876ed 8%, var(--surface));
+}
+
+.client-work-filters button.active em {
+  color: #fff;
+  background: #0876ed;
+}
+
+.client-work-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 220px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.client-work-search svg {
+  width: 14px;
+  color: var(--muted);
+}
+
+.client-work-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--foreground);
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.64rem;
+}
+
+.client-work-search:focus-within {
+  border-color: #0876ed;
+}
+
+/* Video table. */
+.client-work-table {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+
+.client-work-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 2fr) minmax(120px, 1fr) 110px minmax(130px, 1fr) 110px;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--border);
+  color: var(--foreground);
+  font-size: 0.64rem;
+  text-decoration: none;
+}
+
+.client-work-row:first-child {
+  border-top: 0;
+}
+
+.client-work-row.head {
+  padding-block: 9px;
+  color: var(--muted);
+  background: var(--surface-muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+a.client-work-row:hover {
+  background: var(--surface-muted);
+}
+
+.client-work-row > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.client-work-row .video strong {
+  overflow: hidden;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-work-row small {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 500;
+}
+
+.client-work-row .amount {
+  font-weight: 700;
+  text-align: right;
+}
+
+.client-work-row.head > span:last-child {
+  text-align: right;
+}
+
+.client-work-row .late {
+  color: #b74858;
+  font-weight: 700;
+}
+
+.client-work-status {
+  justify-self: start;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #0876ed;
+  background: color-mix(in srgb, #0876ed 10%, transparent);
+  font-size: 0.58rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.client-work-status.active {
+  color: #287150;
+  background: color-mix(in srgb, #287150 12%, transparent);
+}
+
+.client-work-status.inactive {
+  color: #b74858;
+  background: color-mix(in srgb, #b74858 10%, transparent);
+}
+
+/* Budget, payments and invoices. */
+.client-work-money {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+}
+
+.client-work-money article {
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+.client-work-money article + article {
+  border-left: 1px solid var(--border);
+}
+
+.client-work-money h4 {
+  margin: 0 0 8px;
+  color: #0876ed;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.client-work-money ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.client-work-money li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.client-work-money li:last-child {
+  border-bottom: 0;
+}
+
+.client-work-money li > span {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.client-work-money strong {
+  color: var(--foreground);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.client-work-money small,
+.client-work-money p {
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.client-work-money p {
+  margin: 0;
+}
+
+.client-work-money a {
+  color: #0876ed;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.client-work-money em {
+  flex: 0 0 auto;
+  color: var(--foreground);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* Dark mode: the app's lighter status tones. */
+.dark .client-work-summary span svg,
+.dark .client-work-money h4,
+.dark .client-work-money a,
+.dark .client-work-filters button.active {
+  color: #8cc8ff;
+}
+
+.dark .client-work-filters button.active {
+  border-color: #0876ed;
+}
+
+.dark .client-work .good,
+.dark .client-work-status.active {
+  color: #86d3a9;
+}
+
+.dark .client-work-summary article.due strong,
+.dark .client-work-row .late,
+.dark .client-work-status.inactive {
+  color: #f0a6af;
+}
+
+.dark .client-work-status {
+  color: #8cc8ff;
+}
+
+@media (max-width: 980px) {
+  .client-work-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .client-work-money {
+    grid-template-columns: 1fr;
+  }
+
+  .client-work-money article + article {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .client-work-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .client-work-search {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .client-work-row.head {
+    display: none;
+  }
+
+  /* Each video becomes a small card on phones. */
+  .client-work-row {
+    grid-template-columns: 1fr auto;
+    gap: 6px 12px;
+  }
+
+  .client-work-row .video {
+    grid-column: 1 / -1;
+  }
+
+  .client-work-row .amount {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}

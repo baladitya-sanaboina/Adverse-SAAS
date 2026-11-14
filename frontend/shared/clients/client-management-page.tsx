@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -233,7 +233,14 @@ const validationErrorsFrom = (value: unknown) => {
   }, {});
 };
 
-export function ClientManagementPage({ initialClientId }: { initialClientId?: string }) {
+export function ClientManagementPage({
+  initialClientId,
+  renderWork,
+}: {
+  initialClientId?: string;
+  /** Admin app only: the client's videos and money, shown under the client info. */
+  renderWork?: (clientId: string) => ReactNode;
+}) {
   const router = useRouter();
   const [result, setResult] = useState<ClientList | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -348,13 +355,15 @@ export function ClientManagementPage({ initialClientId }: { initialClientId?: st
     setPricingLoading(true);
     setPricingError("");
     try {
-      const response = await fetch(`/api/company/pricing/clients/${clientId}?include_history=true`, { cache: "no-store" });
+      const response = await fetch(`/api/company/pricing/clients/${clientId}?include_history=true`, {
+        cache: "no-store",
+      });
       const data = (await response.json()) as PricingOverview | { detail?: string };
       if (!response.ok) throw new Error(messageFrom(data, "Unable to load client pricing."));
       setClientPricing(data as PricingOverview);
       setSelectedPricingItem((current) => {
         const items = (data as PricingOverview).items;
-        return current ? items.find((item) => item.service_id === current.service_id) ?? null : null;
+        return current ? (items.find((item) => item.service_id === current.service_id) ?? null) : null;
       });
     } catch (reason) {
       setPricingError(reason instanceof Error ? reason.message : "Unable to load client pricing.");
@@ -1115,6 +1124,7 @@ export function ClientManagementPage({ initialClientId }: { initialClientId?: st
                           </article>
                         ))}
                       </div>
+                      {renderWork?.(selected.id)}
                       {canViewPricing && (
                         <section className="client-pricing">
                           <header>
@@ -1194,9 +1204,7 @@ export function ClientManagementPage({ initialClientId }: { initialClientId?: st
                                 <div className="client-pricing-detail">
                                   <header>
                                     <div>
-                                      <span>
-                                        {pricingEditorMode === "edit" ? "Update pricing" : "Pricing history"}
-                                      </span>
+                                      <span>{pricingEditorMode === "edit" ? "Update pricing" : "Pricing history"}</span>
                                       <h4>{selectedPricingItem.service_name}</h4>
                                       <p>{selectedPricingItem.service_description}</p>
                                     </div>
@@ -1212,7 +1220,9 @@ export function ClientManagementPage({ initialClientId }: { initialClientId?: st
                                       Close
                                     </button>
                                   </header>
-                                  {pricingFormError && <div className="management-form-message">{pricingFormError}</div>}
+                                  {pricingFormError && (
+                                    <div className="management-form-message">{pricingFormError}</div>
+                                  )}
                                   {pricingEditorMode === "edit" ? (
                                     <form className="management-form" onSubmit={(event) => event.preventDefault()}>
                                       <label className="management-field">
@@ -1344,7 +1354,9 @@ export function ClientManagementPage({ initialClientId }: { initialClientId?: st
                             <div className="client-history-state">
                               <CircleDollarSign />
                               <strong>No pricing rows available</strong>
-                              <span>Create services in settings first, then configure client-specific pricing here.</span>
+                              <span>
+                                Create services in settings first, then configure client-specific pricing here.
+                              </span>
                             </div>
                           )}
                         </section>
