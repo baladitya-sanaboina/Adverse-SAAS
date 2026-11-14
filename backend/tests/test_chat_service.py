@@ -343,5 +343,25 @@ class ChatRulesTest(unittest.TestCase):
         notifications.read_chat.assert_called_once_with(COMPANY, CLIENT.id, chat.id)
 
 
+class ChatRoutesTest(unittest.TestCase):
+    def test_every_chat_route_the_apps_call_exists(self) -> None:
+        import main
+
+        paths = set(main.app.openapi()["paths"])
+        for path in (
+            "/chat/unread",
+            "/chat/people",
+            "/chat/status",
+            "/chat/conversations",
+            "/chat/direct",
+            "/chat/groups",
+            "/chat/rooms",
+            "/chat/search",
+            "/chat/messages/{message_id}/reactions",
+            "/chat/conversations/{conversation_id}/read",
+        ):
+            self.assertIn(path, paths)
+
+
 if __name__ == "__main__":
     unittest.main()

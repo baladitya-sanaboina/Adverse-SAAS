@@ -46,6 +46,12 @@ def people(context: AuthenticatedContext) -> PeopleResponse:
     return chat_service.people(context)
 
 
+@router.get("/unread", summary="My unread chat messages", responses=ERRORS)
+def unread(context: AuthenticatedContext) -> dict[str, int]:
+    """For the red count on the floating chat button."""
+    return {"unread_total": chat_service.unread(context)}
+
+
 @router.put(
     "/status", response_model=PeopleResponse, summary="Set my chat status", responses=ERRORS
 )

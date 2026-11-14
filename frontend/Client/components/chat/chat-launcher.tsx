@@ -17,18 +17,24 @@ export function ChatLauncher() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/chat/unread", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body: { unread_total?: number } | null) => {
-        if (active && body) setUnread(Number(body.unread_total ?? 0));
-      })
-      .catch(() => undefined);
+    const load = () =>
+      void fetch("/api/chat/unread", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((body: { unread_total?: number } | null) => {
+          if (active && body) setUnread(Number(body.unread_total ?? 0));
+        })
+        .catch(() => undefined);
+    load();
     const unsubscribe = subscribeRealtime((event) => {
       if (event.type === "chat.message" && !(event.data as { own?: boolean }).own) setUnread((count) => count + 1);
+      // Chats read elsewhere (another tab or device) lower the count.
+      if (event.type === "notification.read") load();
     });
+    window.addEventListener("focus", load);
     return () => {
       active = false;
       unsubscribe();
+      window.removeEventListener("focus", load);
     };
   }, []);
 
