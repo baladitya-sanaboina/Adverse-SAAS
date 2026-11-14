@@ -1,0 +1,225 @@
+"""Calls and meetings (owner request 2026-11-14), without a database or Redis."""
+
+import unittest
+from datetime import datetime, timedelta, timezone
+from typing import Any
+from unittest.mock import patch
+from uuid import UUID, uuid4
+
+from app.repositories.call_repository import CallRow, MeetingRow, SeatRow
+from app.schemas.chat import (
+    CallStartRequest,
+    DirectRequest,
+    MeetingRequest,
+    RoomRequest,
+    SignalRequest,
+)
+from app.services.authentication_service import AuthenticationError
+from app.services.call_service import CallService
+from app.services.chat_service import ChatService
+from tests.test_chat_service import (
+    ADMIN,
+    CLIENT,
+    CLIENT_ID,
+    EMPLOYEE,
+    MANAGER,
+    PEOPLE,
+    FakeRepository,
+    context,
+)
+
+NOW = datetime(2026, 11, 14, 10, 0)
+
+
+class FakeCalls:
+    def __init__(self) -> None:
+        self.calls: dict[UUID, CallRow] = {}
+        self.seats_: dict[UUID, dict[UUID, bool]] = {}  # call -> user -> in call now
+        self.meetings_: dict[UUID, MeetingRow] = {}
+
+    def get(self, call_id: UUID) -> CallRow | None:
+        return self.calls.get(call_id)
+
+    def active(self, conversation_id: UUID) -> CallRow | None:
+        return next(
+            (
+                c
+                for c in self.calls.values()
+                if c.conversation_id == conversation_id and not c.ended_at
+            ),
+            None,
+        )
+
+    def start(self, company_id, conversation_id, user_id, kind):  # type: ignore[no-untyped-def]
+        running = self.active(conversation_id)
+        if running:
+            return running.id, False
+        call = CallRow(uuid4(), conversation_id, kind, user_id, NOW, None)
+        self.calls[call.id] = call
+        self.seats_[call.id] = {}
+        return call.id, True
+
+    def join(self, call_id: UUID, user_id: UUID) -> None:
+        self.seats_[call_id][user_id] = True
+
+    def leave(self, call_id: UUID, user_id: UUID) -> None:
+        self.seats_[call_id][user_id] = False
+
+    def ping(self, call_id: UUID, user_id: UUID) -> bool:
+        return self.seats_[call_id].get(user_id, False)
+
+    def prune(self, call_id: UUID) -> None:
+        pass
+
+    def seats(self, call_id: UUID) -> list[SeatRow]:
+        return [
+            SeatRow(u, PEOPLE[u].name, PEOPLE[u].role, None, NOW)
+            for u, here in self.seats_[call_id].items()
+            if here
+        ]
+
+    def ever_joined(self, call_id: UUID) -> set[UUID]:
+        return set(self.seats_[call_id])
+
+    def end(self, call_id: UUID) -> bool:
+        call = self.calls[call_id]
+        if call.ended_at:
+            return False
+        self.calls[call_id] = CallRow(
+            call.id,
+            call.conversation_id,
+            call.kind,
+            call.started_by_id,
+            call.started_at,
+            NOW + timedelta(minutes=12),
+        )
+        self.seats_[call_id] = {u: False for u in self.seats_[call_id]}
+        return True
+
+    def create_meeting(self, company_id, conversation_id, user_id, title, notes, starts_at, duration, kind):  # type: ignore[no-untyped-def]
+        meeting = MeetingRow(
+            uuid4(),
+            conversation_id,
+            "GROUP",
+            "Team",
+            None,
+            title,
+            notes,
+            starts_at,
+            duration,
+            kind,
+            user_id,
+            PEOPLE[user_id].name,
+            None,
+        )
+        self.meetings_[meeting.id] = meeting
+        return meeting.id
+
+    def meeting(self, company_id: UUID, meeting_id: UUID) -> MeetingRow | None:
+        return self.meetings_.get(meeting_id)
+
+    def cancel_meeting(self, meeting_id: UUID) -> None:
+        self.meetings_.pop(meeting_id, None)
+
+
+class FakeFinance:
+    def company_timezone(self, company_id: UUID) -> str:
+        return "Asia/Kolkata"
+
+
+@patch("app.services.call_service.notification_service")
+@patch("app.services.call_service.realtime")
+@patch("app.services.chat_service.notification_service")
+@patch("app.services.chat_service.realtime")
+class CallRulesTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.chat_repo = FakeRepository()
+        self.chat = ChatService(self.chat_repo, storage=object())  # type: ignore[arg-type]
+        self.calls = FakeCalls()
+        self.service = CallService(self.chat, self.calls, FakeFinance())  # type: ignore[arg-type]
+
+    def room(self, chat_realtime: Any) -> Any:
+        chat_realtime.online.return_value = set()
+        return self.chat.room(
+            context(ADMIN),
+            RoomRequest(client_id=CLIENT_ID, title="Reels", member_ids=[EMPLOYEE.id]),
+        )
+
+    def test_starting_rings_the_others_and_writes_into_the_chat(
+        self, chat_rt: Any, _: Any, call_rt: Any, __: Any
+    ) -> None:
+        room = self.room(chat_rt)
+        call = self.service.start(context(EMPLOYEE), room.id, CallStartRequest(kind="VIDEO"))
+        self.assertEqual([p.id for p in call.participants], [EMPLOYEE.id])
+        rings = [c for c in call_rt.publish.call_args_list if c.args[1] == "call.ring"]
+        self.assertEqual(set(rings[0].args[0]), {ADMIN.id, CLIENT.id})
+        self.assertIn("Video call started", next(iter(self.chat_repo.messages_.values())).body)
+        again = self.service.start(context(ADMIN), room.id, CallStartRequest(kind="AUDIO"))
+        self.assertEqual(again.id, call.id)  # a second press joins the same call
+        self.assertEqual({p.id for p in again.participants}, {EMPLOYEE.id, ADMIN.id})
+
+    def test_people_outside_the_chat_cannot_call_or_join(
+        self, chat_rt: Any, _: Any, __: Any, ___: Any
+    ) -> None:
+        room = self.room(chat_rt)
+        with self.assertRaises(AuthenticationError):
+            self.service.start(context(MANAGER), room.id, CallStartRequest())
+        call = self.service.start(context(EMPLOYEE), room.id, CallStartRequest())
+        with self.assertRaises(AuthenticationError):
+            self.service.join(context(MANAGER), call.id)
+
+    def test_signals_only_between_people_in_the_call(
+        self, chat_rt: Any, _: Any, call_rt: Any, __: Any
+    ) -> None:
+        room = self.room(chat_rt)
+        call = self.service.start(context(EMPLOYEE), room.id, CallStartRequest())
+        offer = SignalRequest(to_user_id=CLIENT.id, kind="offer", data={"sdp": "x"})
+        with self.assertRaises(AuthenticationError):
+            self.service.signal(context(EMPLOYEE), call.id, offer)  # the client has not joined
+        self.service.join(context(CLIENT), call.id)
+        self.service.signal(context(EMPLOYEE), call.id, offer)
+        sent = call_rt.publish.call_args
+        self.assertEqual((sent.args[0], sent.args[1]), ([CLIENT.id], "call.signal"))
+
+    def test_last_one_out_ends_the_call_and_others_get_missed_call(
+        self, chat_rt: Any, _: Any, __: Any, notes: Any
+    ) -> None:
+        room = self.room(chat_rt)
+        call = self.service.start(context(EMPLOYEE), room.id, CallStartRequest(kind="AUDIO"))
+        self.service.join(context(CLIENT), call.id)
+        self.service.leave(context(CLIENT), call.id)
+        self.assertIsNone(self.calls.calls[call.id].ended_at)
+        self.service.leave(context(EMPLOYEE), call.id)
+        self.assertIsNotNone(self.calls.calls[call.id].ended_at)
+        bodies = [m.body for m in self.chat_repo.messages_.values()]
+        self.assertTrue(any(b.startswith("📞 Call ended · 12 min") for b in bodies), bodies)
+        missed = notes.notify.call_args
+        self.assertEqual((missed.args[1], missed.args[2]), ([ADMIN.id], "chat.missed_call"))
+
+    def test_meetings(self, chat_rt: Any, _: Any, __: Any, notes: Any) -> None:
+        chat_rt.online.return_value = set()
+        chat = self.chat.direct(context(MANAGER), DirectRequest(user_id=EMPLOYEE.id))
+        soon = datetime.now(timezone.utc) + timedelta(days=1)
+        with self.assertRaises(AuthenticationError):
+            self.service.schedule(
+                context(MANAGER),
+                chat.id,
+                MeetingRequest(title="Late", starts_at=soon - timedelta(days=3)),
+            )
+        meeting = self.service.schedule(
+            context(MANAGER),
+            chat.id,
+            MeetingRequest(title="Review", starts_at=soon, duration_minutes=45),
+        )
+        self.assertEqual(meeting.ends_at - meeting.starts_at, timedelta(minutes=45))
+        self.assertEqual(notes.notify.call_args.args[2], "chat.meeting")
+        with self.assertRaises(AuthenticationError) as denied:
+            self.service.cancel(context(EMPLOYEE), meeting.id)
+        self.assertEqual(denied.exception.status_code, 403)
+        self.service.cancel(context(MANAGER), meeting.id)
+        with self.assertRaises(ValueError):
+            MeetingRequest(title="No zone", starts_at=datetime(2026, 12, 1, 10, 0))
+
+
+if __name__ == "__main__":
+    unittest.main()

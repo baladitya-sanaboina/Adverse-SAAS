@@ -17,12 +17,14 @@ from app.schemas.calendar import (
     CalendarEntryUpdate,
     CalendarListResponse,
     CalendarTaskLink,
+    StaffCalendarResponse,
 )
 from app.schemas.registration import ErrorResponse
 from app.services.calendar_service import calendar_service
 
 router = APIRouter(prefix="/company/calendar", tags=["content-calendar"])
 client_router = APIRouter(prefix="/client-portal/calendar", tags=["client-portal"])
+staff_router = APIRouter(prefix="/workspace/calendar", tags=["workspace"])
 
 ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorResponse, "description": "Not signed in."},
@@ -166,3 +168,15 @@ def _script_routes(target: APIRouter) -> None:
 
 _script_routes(router)
 _script_routes(client_router)
+
+
+# -- managers and employees (owner request 2026-11-14) ---------------------------------------
+
+
+@staff_router.get(
+    "", response_model=StaffCalendarResponse, summary="My tasks and content plan", responses=ERRORS
+)
+def staff_calendar(
+    context: AuthenticatedContext, start: date = Query(...), end: date = Query(...)
+) -> StaffCalendarResponse:
+    return calendar_service.staff_calendar(context, start, end)

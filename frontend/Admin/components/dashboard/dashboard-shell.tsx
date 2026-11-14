@@ -1,5 +1,6 @@
 "use client";
 
+import { CallManager } from "@loopless-shared/chat/call-manager";
 import { ChatLauncher } from "@loopless-shared/chat/chat-launcher";
 import Link from "next/link";
 import Image from "next/image";
@@ -423,6 +424,7 @@ export function DashboardShell({ children, roleLabel }: { children: ReactNode; r
         <AppFooter role={displayRole} />
       </div>
       {!chatMode && <ChatLauncher />}
+      <CallManager />
     </div>
   );
 }

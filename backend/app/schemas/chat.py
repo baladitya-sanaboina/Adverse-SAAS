@@ -1,5 +1,6 @@
 """Chat shapes (Phase 14)."""
 
+import json
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -170,3 +171,94 @@ class ReactionRequest(BaseModel):
         if value not in REACTIONS:
             raise ValueError("Pick one of the offered reactions.")
         return value
+
+
+# -- calls and meetings (owner request 2026-11-14) -------------------------------------------
+
+CallKind = Literal["AUDIO", "VIDEO"]
+
+
+class CallParticipantResponse(BaseModel):
+    id: UUID
+    name: str
+    role: ChatRole
+    image: str | None
+    joined_at: datetime
+
+
+class CallResponse(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    kind: CallKind
+    started_by_id: UUID
+    started_at: datetime
+    ended_at: datetime | None
+    participants: list[CallParticipantResponse]
+
+
+class ActiveCallResponse(BaseModel):
+    call: CallResponse | None
+
+
+class CallStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: CallKind = "VIDEO"
+
+
+class SignalRequest(BaseModel):
+    """WebRTC offer, answer or ICE candidate for one other person in the call."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    to_user_id: UUID
+    kind: Literal["offer", "answer", "ice"]
+    data: dict[str, object]
+
+    @field_validator("data")
+    @classmethod
+    def small(cls, value: dict[str, object]) -> dict[str, object]:
+        if len(json.dumps(value, default=str)) > 20_000:
+            raise ValueError("Signal too large.")
+        return value
+
+
+class MeetingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=160)
+    notes: str = Field(default="", max_length=1000)
+    starts_at: datetime
+    duration_minutes: int = Field(default=30, ge=5, le=480)
+    kind: CallKind = "VIDEO"
+
+    @field_validator("title", "notes")
+    @classmethod
+    def strip(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("starts_at")
+    @classmethod
+    def with_zone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("Send the start time with its time zone.")
+        return value
+
+
+class MeetingResponse(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    conversation_type: ConversationType
+    conversation_title: str
+    title: str
+    notes: str
+    starts_at: datetime
+    ends_at: datetime
+    duration_minutes: int
+    kind: CallKind
+    created_by_id: UUID
+    created_by_name: str
+
+
+class MeetingListResponse(BaseModel):
+    items: list[MeetingResponse]

@@ -27,6 +27,7 @@ import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog"
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { useLiveRefresh } from "../realtime/realtime";
 import { CalendarSheet } from "./calendar-sheet";
+import { MeetingCard, localDay, meetingTime, useMeetings } from "./meetings";
 import "../styles/content-calendar.css";
 
 type Role = "ADMIN" | "CLIENT";
@@ -167,6 +168,20 @@ export function ContentCalendarPage({ role }: { role: Role }) {
   const grid = useMemo(() => monthGrid(month), [month]);
   const start = iso(grid[0]);
   const end = iso(grid[grid.length - 1]);
+  // Meetings from chats show on the calendar too (owner request 2026-11-14).
+  const meetings = useMeetings(start, end);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const clock = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(clock);
+  }, []);
+  const meetingsByDay = useMemo(() => {
+    const map = new Map<string, typeof meetings>();
+    meetings.forEach((meeting) =>
+      map.set(localDay(meeting.starts_at), [...(map.get(localDay(meeting.starts_at)) ?? []), meeting]),
+    );
+    return map;
+  }, [meetings]);
 
   const load = useCallback(async () => {
     setError("");
@@ -474,9 +489,24 @@ export function ContentCalendarPage({ role }: { role: Role }) {
                         onClick={() => setSelectedDay(key)}
                       >
                         {day.getDate()}
-                        {items.length > 0 && <i aria-hidden="true" className="cal-day-dot" />}
+                        {(items.length > 0 || meetingsByDay.has(key)) && (
+                          <i aria-hidden="true" className="cal-day-dot" />
+                        )}
                       </button>
                       <div className="cal-day-items">
+                        {(meetingsByDay.get(key) ?? []).slice(0, 1).map((meeting) => (
+                          <button
+                            key={meeting.id}
+                            type="button"
+                            className="cal-chip meeting"
+                            onClick={() => setSelectedDay(key)}
+                            title={meeting.title}
+                          >
+                            <strong>
+                              {meetingTime(meeting)} {meeting.title}
+                            </strong>
+                          </button>
+                        ))}
                         {items.slice(0, 3).map((entry) => (
                           <button
                             key={entry.id}
@@ -525,6 +555,15 @@ export function ContentCalendarPage({ role }: { role: Role }) {
                     <Plus />
                   </button>
                 </header>
+                {(meetingsByDay.get(selectedDay) ?? []).length > 0 && (
+                  <ul>
+                    {(meetingsByDay.get(selectedDay) ?? []).map((meeting) => (
+                      <li key={meeting.id}>
+                        <MeetingCard meeting={meeting} now={now} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {dayEntries.length === 0 ? (
                   <p className="cal-empty">Nothing planned. Add an idea for this day.</p>
                 ) : (

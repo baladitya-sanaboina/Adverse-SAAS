@@ -1236,3 +1236,127 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Tasks, content plan and meetings on the calendars (owner request 2026-11-14). */
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.cal-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cal-legend span::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: #0876ed;
+  content: "";
+}
+
+.cal-legend .content::before {
+  background: #287150;
+}
+
+.cal-legend .meeting::before {
+  background: #7c4dff;
+}
+
+.cal-chip.meeting {
+  border-left-color: #7c4dff;
+  background: color-mix(in srgb, #7c4dff 11%, var(--surface));
+}
+
+.cal-chip.content {
+  border-left-color: #287150;
+  background: color-mix(in srgb, #287150 10%, var(--surface));
+}
+
+.cal-card.meeting {
+  border-color: color-mix(in srgb, #7c4dff 35%, var(--border));
+}
+
+.cal-card-title.static {
+  cursor: default;
+}
+
+.cal-card-title small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cal-card-title small svg {
+  width: 13px;
+  height: 13px;
+}
+
+a.cal-card-title {
+  text-decoration: none;
+}
+
+.cal-join {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: #2fa66a;
+  font-family: inherit;
+  font-size: 0.6rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cal-join:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cal-join svg {
+  width: 13px;
+  height: 13px;
+}
+
+.cal-flag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+  font-size: 0.56rem;
+  font-weight: 700;
+}
+
+.cal-flag.on {
+  color: #287150;
+  box-shadow: inset 0 0 0 1px #287150;
+}
+
+.cal-agenda-hint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.56rem;
+}
+
+.cal-agenda-hint svg {
+  width: 12px;
+  height: 12px;
+}
+
+.dark .cal-flag.on {
+  color: #86d3a9;
+  box-shadow: inset 0 0 0 1px #86d3a9;
+}

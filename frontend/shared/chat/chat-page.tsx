@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import {
   ArrowDown,
   ArrowLeft,
+  CalendarPlus,
   Check,
   CheckCheck,
   ChevronUp,
@@ -27,6 +28,7 @@ import {
   MessageSquare,
   Paperclip,
   Pencil,
+  Phone,
   RefreshCw,
   Reply,
   Search,
@@ -35,11 +37,13 @@ import {
   SmilePlus,
   Trash2,
   UsersRound,
+  Video,
   X,
 } from "lucide-react";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { subscribeRealtime } from "../realtime/realtime";
+import { joinCall, startCall } from "./call-manager";
 import {
   REACTIONS,
   ROLE_LABELS,
@@ -970,6 +974,10 @@ function Thread({
   const [unseen, setUnseen] = useState(0);
   const [divider, setDivider] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
+  const [activeCall, setActiveCall] = useState<CallInfo | null>(null);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [scheduling, setScheduling] = useState(false);
+  const [clockNow, setClockNow] = useState(() => Date.now());
   // Where my reading stopped when the chat was opened: the "New messages" line goes there.
   const [readMark] = useState(() => {
     const mine = chat.members.find((member) => member.id === me.id);
@@ -1045,6 +1053,41 @@ function Thread({
       }),
     [chat.id, me.id, markRead],
   );
+
+  const loadMeetings = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ conversation_id: chat.id, start: new Date().toISOString() });
+      setMeetings((await chatApi<{ items: Meeting[] }>(`/meetings?${params}`)).items);
+    } catch {
+      setMeetings([]);
+    }
+  }, [chat.id]);
+
+  // Meetings' Join button opens 10 minutes before the start: keep a clock for it.
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // A call running in this chat, and meetings scheduled here.
+  useEffect(() => {
+    let alive = true;
+    void chatApi<{ call: CallInfo | null }>(`/conversations/${chat.id}/call`)
+      .then((result) => alive && setActiveCall(result.call))
+      .catch(() => undefined);
+    const timer = window.setTimeout(() => void loadMeetings(), 0);
+    const unsubscribe = subscribeRealtime((event) => {
+      const data = event.data as { conversation_id?: string; call?: CallInfo };
+      if (data.conversation_id !== chat.id) return;
+      if (event.type === "call.update" && data.call) setActiveCall(data.call.ended_at ? null : data.call);
+      if (event.type === "meeting.update") void loadMeetings();
+    });
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [chat.id, loadMeetings]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1194,6 +1237,33 @@ function Thread({
           )}
           <button
             type="button"
+            className="chat-icon-button"
+            aria-label="Voice call"
+            title="Voice call"
+            onClick={() => startCall(chat.id, "AUDIO", chat.title)}
+          >
+            <Phone />
+          </button>
+          <button
+            type="button"
+            className="chat-icon-button"
+            aria-label="Video call"
+            title="Video call"
+            onClick={() => startCall(chat.id, "VIDEO", chat.title)}
+          >
+            <Video />
+          </button>
+          <button
+            type="button"
+            className="chat-icon-button"
+            aria-label="Schedule a meeting"
+            title="Schedule a meeting"
+            onClick={() => setScheduling(true)}
+          >
+            <CalendarPlus />
+          </button>
+          <button
+            type="button"
             className={`chat-icon-button${info ? " active" : ""}`}
             aria-label="Chat details"
             aria-pressed={info}
@@ -1203,6 +1273,19 @@ function Thread({
             <Info />
           </button>
         </header>
+
+        {activeCall && !activeCall.participants.some((seat) => seat.id === me.id) && (
+          <div className="chat-call-banner" role="status">
+            {activeCall.kind === "VIDEO" ? <Video /> : <Phone />}
+            <span>
+              {activeCall.kind === "VIDEO" ? "Video call" : "Call"} in progress ·{" "}
+              {activeCall.participants.map((seat) => seat.name.split(" ")[0]).join(", ")}
+            </span>
+            <button type="button" onClick={() => joinCall(activeCall.id, chat.id, activeCall.kind, chat.title)}>
+              Join
+            </button>
+          </div>
+        )}
 
         <div
           className="chat-messages"
@@ -1502,6 +1585,65 @@ function Thread({
             )}
           </section>
           <section>
+            <h3>Meetings · {meetings.length}</h3>
+            {meetings.length === 0 ? (
+              <p className="chat-info-empty">No meetings planned. Use the calendar button above to schedule one.</p>
+            ) : (
+              <ul className="chat-info-meetings">
+                {meetings.map((meeting) => {
+                  const start = new Date(meeting.starts_at).getTime();
+                  const open = clockNow >= start - 10 * 60_000 && clockNow <= new Date(meeting.ends_at).getTime();
+                  return (
+                    <li key={meeting.id}>
+                      <strong>{meeting.title}</strong>
+                      <small>
+                        {new Date(meeting.starts_at).toLocaleString("en-IN", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}{" "}
+                        · {meeting.duration_minutes} min · {meeting.kind === "VIDEO" ? "Video" : "Voice"}
+                      </small>
+                      {meeting.notes && <small>{meeting.notes}</small>}
+                      <div>
+                        <button
+                          type="button"
+                          className="join"
+                          disabled={!open}
+                          title={open ? "Join now" : "Opens 10 minutes before the start"}
+                          onClick={() =>
+                            activeCall
+                              ? joinCall(activeCall.id, chat.id, activeCall.kind, chat.title)
+                              : startCall(chat.id, meeting.kind, chat.title)
+                          }
+                        >
+                          Join
+                        </button>
+                        {(meeting.created_by_id === me.id || role === "ADMIN") && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await chatApi(`/meetings/${meeting.id}`, { method: "DELETE" });
+                                void loadMeetings();
+                              } catch (reason) {
+                                onError(reason instanceof Error ? reason.message : "Could not cancel.");
+                              }
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+          <section>
             <h3>Shared files · {shared.length}</h3>
             {shared.length === 0 ? (
               <p className="chat-info-empty">Photos and files sent here show up in this list.</p>
@@ -1537,6 +1679,18 @@ function Thread({
             )}
           </section>
         </aside>
+      )}
+
+      {scheduling && (
+        <ScheduleDialog
+          chatId={chat.id}
+          onClose={() => setScheduling(false)}
+          onSaved={() => {
+            setScheduling(false);
+            setInfo(true);
+            void loadMeetings();
+          }}
+        />
       )}
 
       <ConfirmationDialog
@@ -1730,5 +1884,154 @@ function Composer({
         </button>
       </div>
     </div>
+  );
+}
+
+type CallInfo = {
+  id: string;
+  conversation_id: string;
+  kind: "AUDIO" | "VIDEO";
+  started_at: string;
+  ended_at: string | null;
+  participants: { id: string; name: string }[];
+};
+
+type Meeting = {
+  id: string;
+  conversation_id: string;
+  title: string;
+  notes: string;
+  starts_at: string;
+  ends_at: string;
+  duration_minutes: number;
+  kind: "AUDIO" | "VIDEO";
+  created_by_id: string;
+};
+
+function ScheduleDialog({ chatId, onClose, onSaved }: { chatId: string; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState(() => {
+    const soon = new Date(Date.now() + 60 * 60_000);
+    soon.setMinutes(soon.getMinutes() < 30 ? 30 : 60, 0, 0);
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return {
+      title: "",
+      date: `${soon.getFullYear()}-${pad(soon.getMonth() + 1)}-${pad(soon.getDate())}`,
+      time: `${pad(soon.getHours())}:${pad(soon.getMinutes())}`,
+      duration: "30",
+      kind: "VIDEO" as "AUDIO" | "VIDEO",
+      notes: "",
+    };
+  });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!form.title.trim()) return setMessage("Give the meeting a name.");
+    const starts = new Date(`${form.date}T${form.time}`);
+    if (Number.isNaN(starts.getTime())) return setMessage("Pick a date and time.");
+    setBusy(true);
+    setMessage("");
+    try {
+      await chatApi(
+        `/conversations/${chatId}/meetings`,
+        jsonBody("POST", {
+          title: form.title,
+          notes: form.notes,
+          starts_at: starts.toISOString(),
+          duration_minutes: Number(form.duration),
+          kind: form.kind,
+        }),
+      );
+      onSaved();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Could not schedule the meeting.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ChatDialog title="Schedule a meeting" onClose={onClose} busy={busy}>
+      <form className="chat-form" onSubmit={submit} noValidate>
+        {message && (
+          <div className="chat-form-message" role="alert">
+            {message}
+          </div>
+        )}
+        <label className="chat-field">
+          <span>Meeting name</span>
+          <input
+            value={form.title}
+            maxLength={160}
+            placeholder="e.g. Diwali campaign review"
+            onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+          />
+        </label>
+        <div className="chat-form-row">
+          <label className="chat-field">
+            <span>Date</span>
+            <input
+              type="date"
+              value={form.date}
+              onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
+            />
+          </label>
+          <label className="chat-field">
+            <span>Time</span>
+            <input
+              type="time"
+              value={form.time}
+              onChange={(event) => setForm((current) => ({ ...current, time: event.target.value }))}
+            />
+          </label>
+          <div className="chat-field">
+            <span>Length</span>
+            <LooplessSelect
+              value={form.duration}
+              onValueChange={(value) => setForm((current) => ({ ...current, duration: value }))}
+              ariaLabel="Meeting length"
+              options={["15", "30", "45", "60", "90", "120"].map((value) => ({ value, label: `${value} min` }))}
+            />
+          </div>
+        </div>
+        <div className="chat-field">
+          <span>Type</span>
+          <div className="chat-kind-chips">
+            {(["VIDEO", "AUDIO"] as const).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                className={form.kind === kind ? "on" : undefined}
+                aria-pressed={form.kind === kind}
+                onClick={() => setForm((current) => ({ ...current, kind }))}
+              >
+                {kind === "VIDEO" ? <Video /> : <Phone />}
+                {kind === "VIDEO" ? "Video" : "Voice"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="chat-field">
+          <span>Agenda (optional)</span>
+          <input
+            value={form.notes}
+            maxLength={1000}
+            placeholder="What to discuss"
+            onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
+          />
+        </label>
+        <p className="chat-info-empty">Everyone in this chat gets a notification and sees it on their calendar.</p>
+        <footer>
+          <button type="button" className="chat-btn" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" className="chat-btn primary" disabled={busy}>
+            {busy && <RefreshCw className="spin" />}
+            Schedule
+          </button>
+        </footer>
+      </form>
+    </ChatDialog>
   );
 }

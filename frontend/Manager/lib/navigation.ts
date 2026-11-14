@@ -1,4 +1,5 @@
 import {
+  CalendarDays,
   ChartNoAxesCombined,
   ClipboardList,
   Contact,
@@ -15,6 +16,7 @@ export const navigationItems = [
   { href: "/tasks", label: "My Tasks", icon: ClipboardList, module: "TASKS" },
   { href: "/earnings", label: "My Earnings", icon: HandCoins, module: "TASKS" },
   { href: "/sheets", label: "Payment Sheets", icon: NotebookTabs, module: "TASKS" },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/chat", label: "Chat", icon: MessagesSquare },
   { href: "/employees", label: "Team", icon: UsersRound, module: "EMPLOYEES", feature: "EMPLOYEE_MANAGEMENT" },
   { href: "/clients", label: "Clients", icon: Contact, module: "CLIENTS", feature: "CLIENT_MANAGEMENT" },

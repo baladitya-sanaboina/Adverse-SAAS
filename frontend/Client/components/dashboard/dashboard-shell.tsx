@@ -1,5 +1,6 @@
 "use client";
 
+import { CallManager } from "@/components/chat/call-manager";
 import { ChatLauncher } from "@/components/chat/chat-launcher";
 import Link from "next/link";
 import Image from "next/image";
@@ -404,6 +405,7 @@ export function DashboardShell({ children, roleLabel }: { children: ReactNode; r
         <AppFooter role={displayRole} />
       </div>
       {!chatMode && <ChatLauncher />}
+      <CallManager />
     </div>
   );
 }

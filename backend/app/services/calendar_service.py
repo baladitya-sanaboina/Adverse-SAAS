@@ -29,6 +29,8 @@ from app.schemas.calendar import (
     CalendarListResponse,
     CalendarScriptRef,
     CalendarTaskRef,
+    StaffCalendarResponse,
+    StaffCalendarTask,
 )
 from app.schemas.production import NamedRef
 from app.services.authentication_service import AuthenticationError
@@ -405,6 +407,41 @@ class CalendarService:
             self.storage.path_for(row.script_storage_path).unlink(missing_ok=True)
         except Exception:  # noqa: BLE001 - a missing old file must not fail the request
             logger.warning("Could not remove an old calendar script", exc_info=True)
+
+    # -- staff calendar ---------------------------------------------------------------------
+
+    def staff_calendar(self, context: AuthContext, start: date, end: date) -> StaffCalendarResponse:
+        """Managers and employees: their own tasks by due date and the content entries those
+        tasks came from. Never prices or other people's work."""
+        if (
+            context.role not in ("COMPANY_MANAGER", "COMPANY_EMPLOYEE")
+            or context.company_id is None
+        ):
+            raise AuthenticationError(
+                403, "STAFF_ONLY", "This calendar is for managers and employees."
+            )
+        self._check_range(start, end)
+        if (end - start).days > 92:
+            raise AuthenticationError(422, "RANGE_TOO_LONG", "Ask for at most three months.")
+        company_id = context.company_id
+        return StaffCalendarResponse(
+            tasks=[
+                StaffCalendarTask(
+                    id=row[0],
+                    code=f"TSK-{row[1]:04d}",
+                    title=row[2],
+                    status=row[3],
+                    due_date=row[4],
+                    client_name=row[5],
+                    my_role=row[6],
+                )
+                for row in self.repository.staff_tasks(company_id, context.user_id, start, end)
+            ],
+            entries=[
+                entry_response(row)
+                for row in self.repository.staff_entries(company_id, context.user_id, start, end)
+            ],
+        )
 
 
 calendar_service = CalendarService()

@@ -1,7 +1,7 @@
 """Content calendar shapes (Phase 13)."""
 
 from datetime import date, datetime
-from typing import Self
+from typing import Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -124,3 +124,20 @@ class CalendarTaskLink(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     task_id: UUID | None
+
+
+class StaffCalendarTask(BaseModel):
+    id: UUID
+    code: str
+    title: str
+    status: TaskStatus
+    due_date: date
+    client_name: str
+    my_role: Literal["ASSIGNEE", "MONITOR"]
+
+
+class StaffCalendarResponse(BaseModel):
+    """A manager's or employee's calendar: their tasks and the content plan behind them."""
+
+    tasks: list[StaffCalendarTask]
+    entries: list[CalendarEntryResponse]

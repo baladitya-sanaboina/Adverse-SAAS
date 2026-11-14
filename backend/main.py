@@ -14,6 +14,7 @@ from app.api.audit_logs import router as audit_logs_router
 from app.api.authentication import router as authentication_router
 from app.api.calendar import client_router as client_calendar_router
 from app.api.calendar import router as calendar_router
+from app.api.calendar import staff_router as staff_calendar_router
 from app.api.chat import router as chat_router
 from app.api.clients import router as clients_router
 from app.api.company_dashboard import router as company_dashboard_router
@@ -290,6 +291,7 @@ app.include_router(client_billing_router, prefix=settings.api_prefix)
 app.include_router(finance_router, prefix=settings.api_prefix)
 app.include_router(calendar_router, prefix=settings.api_prefix)
 app.include_router(client_calendar_router, prefix=settings.api_prefix)
+app.include_router(staff_calendar_router, prefix=settings.api_prefix)
 app.include_router(chat_router, prefix=settings.api_prefix)
 app.include_router(crm_router, prefix=settings.api_prefix)
 app.include_router(audit_logs_router, prefix=settings.api_prefix)

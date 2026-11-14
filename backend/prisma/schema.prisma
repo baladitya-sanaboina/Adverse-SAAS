@@ -516,6 +516,9 @@ model User {
   chatMemberships         ChatMember[]
   chatMessagesSent        ChatMessage[]            @relation("ChatMessageSender")
   chatStatus              ChatStatus?
+  chatCallsStarted        ChatCall[]               @relation("ChatCallStarter")
+  chatCallSeats           ChatCallParticipant[]
+  chatMeetingsMade        ChatMeeting[]            @relation("ChatMeetingCreator")
   chatReactions           ChatReaction[]
   taskFilesUploaded       TaskFile[]               @relation("TaskFileUploader")
   clientBudgetEntries     ClientBudgetEntry[]      @relation("ClientBudgetActor")
@@ -1557,6 +1560,8 @@ model ChatConversation {
   createdBy     User                 @relation("ChatConversationCreator", fields: [createdById], references: [id], onDelete: Restrict)
   members       ChatMember[]
   messages      ChatMessage[]
+  calls         ChatCall[]
+  meetings      ChatMeeting[]
 
   @@unique([companyId, directKey])
   @@index([companyId, lastMessageAt])
@@ -1646,4 +1651,63 @@ model ChatReaction {
   @@unique([messageId, userId, emoji])
   @@index([messageId])
   @@map("chat_reactions")
+}
+
+enum ChatCallKind {
+  AUDIO
+  VIDEO
+}
+
+/// Audio and video calls in a chat (owner request 2026-11-14: "like Google Meet / Zoom").
+/// Media goes browser to browser (WebRTC); the server only signals and keeps this record.
+model ChatCall {
+  id             String                @id @default(uuid()) @db.Uuid
+  companyId      String                @map("company_id") @db.Uuid
+  conversationId String                @map("conversation_id") @db.Uuid
+  kind           ChatCallKind
+  startedById    String                @map("started_by_id") @db.Uuid
+  startedAt      DateTime              @default(now()) @map("started_at")
+  endedAt        DateTime?             @map("ended_at")
+  conversation   ChatConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  startedBy      User                  @relation("ChatCallStarter", fields: [startedById], references: [id], onDelete: Cascade)
+  participants   ChatCallParticipant[]
+
+  @@index([conversationId, endedAt])
+  @@map("chat_calls")
+}
+
+model ChatCallParticipant {
+  id         String    @id @default(uuid()) @db.Uuid
+  callId     String    @map("call_id") @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  joinedAt   DateTime  @default(now()) @map("joined_at")
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at")
+  leftAt     DateTime? @map("left_at")
+  call       ChatCall  @relation(fields: [callId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([callId, userId])
+  @@map("chat_call_participants")
+}
+
+/// A meeting scheduled in a chat; everyone in the chat sees it on their calendar and joins the
+/// chat's call from it.
+model ChatMeeting {
+  id              String           @id @default(uuid()) @db.Uuid
+  companyId       String           @map("company_id") @db.Uuid
+  conversationId  String           @map("conversation_id") @db.Uuid
+  title           String           @db.VarChar(160)
+  notes           String           @default("") @db.VarChar(1000)
+  startsAt        DateTime         @map("starts_at")
+  durationMinutes Int              @default(30) @map("duration_minutes")
+  kind            ChatCallKind     @default(VIDEO)
+  createdById     String           @map("created_by_id") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at")
+  cancelledAt     DateTime?        @map("cancelled_at")
+  conversation    ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdBy       User             @relation("ChatMeetingCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([companyId, startsAt])
+  @@index([conversationId, startsAt])
+  @@map("chat_meetings")
 }

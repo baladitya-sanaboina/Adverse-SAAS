@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
@@ -187,3 +188,40 @@ class CalendarRepository:
             )
             row = cursor.fetchone()
             return row[0] if row else None
+
+    # -- staff calendar (owner request 2026-11-14: a calendar in every role) -------------------
+
+    def staff_tasks(
+        self, company_id: UUID, user_id: UUID, start: date, end: date
+    ) -> builtins.list[tuple[Any, ...]]:
+        """My tasks (assigned or monitoring) due in the range: no prices."""
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT t.id, t.number, t.title, t.status::text, t.due_date, c.name,
+                  CASE WHEN t.assignee_user_id = %(user)s THEN 'ASSIGNEE' ELSE 'MONITOR' END
+                FROM tasks t JOIN clients c ON c.id = t.client_id
+                WHERE t.company_id = %(company)s
+                  AND (t.assignee_user_id = %(user)s OR t.monitor_user_id = %(user)s)
+                  AND t.status::text <> 'CANCELLED'
+                  AND t.due_date BETWEEN %(start)s AND %(end)s
+                ORDER BY t.due_date, t.number
+                """,
+                {"company": company_id, "user": user_id, "start": start, "end": end},
+            )
+            return list(cursor.fetchall())
+
+    def staff_entries(
+        self, company_id: UUID, user_id: UUID, start: date, end: date
+    ) -> builtins.list[CalendarEntryRow]:
+        """Content calendar entries whose ticket is mine (assigned or monitoring)."""
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                _SELECT
+                + """ WHERE e.company_id = %(company)s
+                  AND e.entry_date BETWEEN %(start)s AND %(end)s
+                  AND (t.assignee_user_id = %(user)s OR t.monitor_user_id = %(user)s)
+                ORDER BY e.entry_date, e.created_at""",
+                {"company": company_id, "user": user_id, "start": start, "end": end},
+            )
+            return [_row(row) for row in cursor.fetchall()]
