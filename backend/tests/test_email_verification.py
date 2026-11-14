@@ -69,7 +69,9 @@ class EmailVerificationTests(unittest.TestCase):
     def test_send_stores_only_hash_and_delivers_code(self):
         code = self.issue_code()
         self.assertEqual(self.sender.email, "pending@example.com")
-        self.assertEqual(self.repository.token_hash, verification_otp_hash(self.repository.user.id, code))
+        self.assertEqual(
+            self.repository.token_hash, verification_otp_hash(self.repository.user.id, code)
+        )
         self.assertNotEqual(self.repository.token_hash, code)
         self.assertRegex(code, r"^\d{6}$")
 

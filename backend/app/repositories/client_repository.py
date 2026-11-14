@@ -142,7 +142,9 @@ class ClientRepository:
         clauses = ["clients.company_id=%s"]
         values: list[object] = [company_id]
         if filters.search:
-            clauses.append("(clients.name ILIKE %s OR clients.code ILIKE %s OR clients.email ILIKE %s)")
+            clauses.append(
+                "(clients.name ILIKE %s OR clients.code ILIKE %s OR clients.email ILIKE %s)"
+            )
             pattern = f"%{filters.search}%"
             values.extend((pattern, pattern, pattern))
         if filters.status is not None:

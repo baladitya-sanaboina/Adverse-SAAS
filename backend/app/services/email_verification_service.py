@@ -109,7 +109,9 @@ class EmailVerificationService:
             raise AuthenticationError(403, "USER_INACTIVE", "User account cannot be verified.")
         if not self.repository.activate_user(record.id, record.user_id):
             raise AuthenticationError(
-                400, "INVALID_VERIFICATION_TOKEN", "Verification code or link is invalid or expired."
+                400,
+                "INVALID_VERIFICATION_TOKEN",
+                "Verification code or link is invalid or expired.",
             )
         return VerifyEmailResponse()
 

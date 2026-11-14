@@ -99,7 +99,7 @@ class RegistrationRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     'SELECT id, name, code, status::text, subscription_plan FROM "companies" '
-                    'WHERE UPPER(code) = UPPER(%s)',
+                    "WHERE UPPER(code) = UPPER(%s)",
                     (code,),
                 )
                 record = cursor.fetchone()
@@ -177,7 +177,10 @@ class RegistrationRepository:
                         "VALUES (%s, 'USER_CREATED', %s, %s, %s, %s, NOW())",
                         (uuid4(), audit_actor_id, user_id, company_id, role_code),
                     )
-                    if role_code in {"COMPANY_EMPLOYEE", "COMPANY_MANAGER"} and company_id is not None:
+                    if (
+                        role_code in {"COMPANY_EMPLOYEE", "COMPANY_MANAGER"}
+                        and company_id is not None
+                    ):
                         employee_code_prefix = "MGR" if role_code == "COMPANY_MANAGER" else "EMP"
                         cursor.execute(
                             "INSERT INTO employees("

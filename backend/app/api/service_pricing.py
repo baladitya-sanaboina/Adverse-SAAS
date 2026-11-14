@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Response, status
@@ -14,8 +14,8 @@ from app.schemas.service_pricing import (
     CompanyServiceUpdate,
     PricingChangeRequest,
     PricingOverviewResponse,
-    ServiceStatus,
     ServicePricingRecordResponse,
+    ServiceStatus,
 )
 from app.services.service_pricing_service import service_pricing_service
 
@@ -112,9 +112,7 @@ def get_manager_pricing(
     context: AuthenticatedContext,
     include_history: bool = Query(False),
 ) -> PricingOverviewResponse:
-    return service_pricing_service.get_manager_pricing(
-        context, manager_user_id, include_history
-    )
+    return service_pricing_service.get_manager_pricing(context, manager_user_id, include_history)
 
 
 @router.put(

@@ -54,9 +54,9 @@ class SignupRequest(BaseModel):
 
 
 class SignupResponse(BaseModel):
-    message: Literal["Verification code sent. Complete OTP verification to activate your account."] = (
+    message: Literal[
         "Verification code sent. Complete OTP verification to activate your account."
-    )
+    ] = "Verification code sent. Complete OTP verification to activate your account."
     email: EmailStr
     role: SignupRole
     company_code: str | None = None

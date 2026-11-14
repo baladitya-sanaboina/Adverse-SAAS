@@ -1,6 +1,7 @@
 import json
 import logging
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID, uuid4
 
 from app.core.settings import settings
@@ -77,7 +78,9 @@ class DevelopmentTestCredentialsService:
                     )
                     ready = cursor.fetchone()
                     if not ready or not ready[0]:
-                        logger.info("Skipping development test credentials bootstrap; auth tables are not ready.")
+                        logger.info(
+                            "Skipping development test credentials bootstrap; auth tables are not ready."
+                        )
                         return
 
                     role_ids = self._role_ids(cursor)
@@ -105,19 +108,21 @@ class DevelopmentTestCredentialsService:
                             account=account,
                             password_hash=password_hash,
                         )
-            logger.info("Development test credentials ensured for Admin, Manager, Employee, and Client.")
+            logger.info(
+                "Development test credentials ensured for Admin, Manager, Employee, and Client."
+            )
         except Exception as error:
             logger.warning("Failed to ensure development test credentials: %s", error)
 
     @staticmethod
-    def _role_ids(cursor) -> dict[str, UUID]:
+    def _role_ids(cursor: Any) -> dict[str, UUID]:
         cursor.execute(
             "SELECT code, id FROM roles WHERE code = ANY(%s)",
             ([account.role_code for account in _TEST_ACCOUNTS],),
         )
         return {str(code): role_id for code, role_id in cursor.fetchall()}
 
-    def _resolve_company(self, cursor) -> tuple[UUID, str, str]:
+    def _resolve_company(self, cursor: Any) -> tuple[UUID, str, str]:
         cursor.execute(
             "SELECT c.id, COALESCE(NULLIF(c.timezone, ''), 'UTC'), "
             "COALESCE(NULLIF(c.language, ''), 'en') "
@@ -134,7 +139,7 @@ class DevelopmentTestCredentialsService:
             return company_id, str(timezone), str(language)
         return self._create_company(cursor)
 
-    def _create_company(self, cursor) -> tuple[UUID, str, str]:
+    def _create_company(self, cursor: Any) -> tuple[UUID, str, str]:
         cursor.execute(
             "SELECT id, name FROM subscription_plans WHERE code = 'STARTER' AND status = 'ACTIVE' LIMIT 1"
         )
@@ -216,7 +221,7 @@ class DevelopmentTestCredentialsService:
 
     @staticmethod
     def _upsert_account(
-        cursor,
+        cursor: Any,
         *,
         company_id: UUID,
         role_id: UUID,
@@ -309,7 +314,7 @@ class DevelopmentTestCredentialsService:
 
     @staticmethod
     def _sync_employee_profile(
-        cursor,
+        cursor: Any,
         *,
         company_id: UUID,
         user_id: UUID,
@@ -351,7 +356,7 @@ class DevelopmentTestCredentialsService:
 
     @staticmethod
     def _sync_client_profile(
-        cursor,
+        cursor: Any,
         *,
         company_id: UUID,
         user_id: UUID,

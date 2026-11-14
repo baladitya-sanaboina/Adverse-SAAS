@@ -1,9 +1,8 @@
-import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
 from psycopg.errors import UniqueViolation
@@ -260,7 +259,9 @@ class ServicePricingRepository:
             row = cursor.fetchone()
             return self._service_record(row) if row else None
 
-    def create_service(self, company_id: UUID, actor_id: UUID, values: dict[str, object]) -> CompanyServiceRecord:
+    def create_service(
+        self, company_id: UUID, actor_id: UUID, values: dict[str, object]
+    ) -> CompanyServiceRecord:
         columns = ["id", "company_id", *values.keys(), "created_at", "updated_at"]
         params = [uuid4(), company_id, *values.values()]
         placeholders = ["%s"] * (2 + len(values)) + ["NOW()", "NOW()"]
@@ -270,7 +271,10 @@ class ServicePricingRepository:
                     f"INSERT INTO company_services({','.join(columns)}) VALUES({','.join(placeholders)}) RETURNING id",
                     params,
                 )
-                service_id = cursor.fetchone()[0]
+                created = cursor.fetchone()
+                if created is None:
+                    raise RuntimeError("The service insert returned no id.")
+                service_id = created[0]
                 self._audit(
                     cursor,
                     actor_id,
@@ -459,7 +463,9 @@ class ServicePricingRepository:
                 raise ServicePricingConflict("service_inactive")
             self._require_subject(cursor, company_id, scope, subject_id)
             currency = self._company_currency(cursor, company_id)
-            effective_from = values.get("effective_from") or datetime.now(timezone.utc)
+            effective_from = cast(
+                datetime, values.get("effective_from") or datetime.now(timezone.utc)
+            )
             pricing_model = values.get("pricing_model") or (
                 service_row[1] if scope == "CLIENT" else service_row[2]
             )

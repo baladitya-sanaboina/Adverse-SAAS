@@ -228,7 +228,10 @@ class ServicePricingServiceTests(unittest.TestCase):
             self.context, CompanyServiceListFilters(search="Reel", page=1, page_size=20)
         )
         self.assertEqual(listed.total, 1)
-        self.assertEqual(self.repository.list_filters, CompanyServiceListFilters(search="Reel", page=1, page_size=20))
+        self.assertEqual(
+            self.repository.list_filters,
+            CompanyServiceListFilters(search="Reel", page=1, page_size=20),
+        )
         created = self.service.create_service(
             self.context,
             CompanyServiceCreate(
@@ -239,22 +242,27 @@ class ServicePricingServiceTests(unittest.TestCase):
             ),
         )
         self.assertEqual(created.code, "SOCIAL_CLIPS")
-        self.assertEqual(self.repository.created_values, {
-            "name": "Social Clips",
-            "description": "Quick cutdowns",
-            "client_pricing_model": "PER_VIDEO",
-            "manager_pricing_model": "COMMISSION_PER_DELIVERABLE",
-            "status": "ACTIVE",
-            "sort_order": 0,
-            "code": "SOCIAL_CLIPS",
-        })
+        self.assertEqual(
+            self.repository.created_values,
+            {
+                "name": "Social Clips",
+                "description": "Quick cutdowns",
+                "client_pricing_model": "PER_VIDEO",
+                "manager_pricing_model": "COMMISSION_PER_DELIVERABLE",
+                "status": "ACTIVE",
+                "sort_order": 0,
+                "code": "SOCIAL_CLIPS",
+            },
+        )
         updated = self.service.update_service(
             self.context,
             self.repository.service_id,
             CompanyServiceUpdate(status="INACTIVE", description="Paused"),
         )
         self.assertEqual(updated.status, "INACTIVE")
-        self.assertEqual(self.repository.updated_values, {"description": "Paused", "status": "INACTIVE"})
+        self.assertEqual(
+            self.repository.updated_values, {"description": "Paused", "status": "INACTIVE"}
+        )
         detail = self.service.get_service(self.context, self.repository.service_id)
         self.assertEqual(detail.code, "REEL")
         self.service.delete_service(self.context, self.repository.service_id)

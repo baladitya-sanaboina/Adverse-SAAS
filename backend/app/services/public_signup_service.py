@@ -44,10 +44,10 @@ class PublicSignupService:
             return SignupResponse(email=user.email, role=request.role, company_code=company.code)
 
         company_code = request.company_code.strip().upper() if request.company_code else ""
-        company = self.repository.find_company_by_code(company_code)
-        if company is None:
+        existing = self.repository.find_company_by_code(company_code)
+        if existing is None:
             raise AuthenticationError(404, "COMPANY_NOT_FOUND", "Company code was not found.")
-        if company.status != CompanyStatus.ACTIVE.value:
+        if existing.status != CompanyStatus.ACTIVE.value:
             raise AuthenticationError(403, "COMPANY_INACTIVE", "Company is not active.")
 
         role_code = {
@@ -63,24 +63,32 @@ class PublicSignupService:
                 email=normalized_email,
                 password_hash=password_hash,
                 role_code=role_code,
-                company_id=company.id,
+                company_id=existing.id,
             )
         except RegistrationConflict as error:
             self._raise_conflict(error)
 
         self.verification_service.start_for_created_user(user.email)
-        return SignupResponse(email=user.email, role=request.role, company_code=company.code)
+        return SignupResponse(email=user.email, role=request.role, company_code=existing.code)
 
     @staticmethod
     def _raise_conflict(error: RegistrationConflict) -> None:
         constraint = error.constraint_name or ""
         if constraint == "users_email_key":
-            raise AuthenticationError(409, "EMAIL_EXISTS", "Email address is already registered.") from error
+            raise AuthenticationError(
+                409, "EMAIL_EXISTS", "Email address is already registered."
+            ) from error
         if constraint == "companies_code_key":
-            raise AuthenticationError(409, "COMPANY_CODE_EXISTS", "Company code is already in use.") from error
+            raise AuthenticationError(
+                409, "COMPANY_CODE_EXISTS", "Company code is already in use."
+            ) from error
         if constraint == "companies_name_key":
-            raise AuthenticationError(409, "COMPANY_NAME_EXISTS", "Company name is already in use.") from error
-        raise AuthenticationError(409, "REGISTRATION_CONFLICT", "Unable to complete signup.") from error
+            raise AuthenticationError(
+                409, "COMPANY_NAME_EXISTS", "Company name is already in use."
+            ) from error
+        raise AuthenticationError(
+            409, "REGISTRATION_CONFLICT", "Unable to complete signup."
+        ) from error
 
     def is_ready(self) -> bool:
         return self.repository.foundation_is_ready()

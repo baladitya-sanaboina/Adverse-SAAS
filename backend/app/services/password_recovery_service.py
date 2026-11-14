@@ -65,11 +65,17 @@ class PasswordRecoveryService:
         if request.token:
             record = self.repository.find_reset_token(reset_token_hash(request.token))
         else:
-            user = self.repository.find_user_by_email(str(request.email).lower()) if request.email else None
+            user = (
+                self.repository.find_user_by_email(str(request.email).lower())
+                if request.email
+                else None
+            )
             if user is None:
                 record = None
             else:
-                record = self.repository.find_reset_token(reset_otp_hash(user.id, request.otp or ""))
+                record = self.repository.find_reset_token(
+                    reset_otp_hash(user.id, request.otp or "")
+                )
         if record is None:
             raise AuthenticationError(
                 400, "INVALID_RESET_TOKEN", "Password reset code or link is invalid."

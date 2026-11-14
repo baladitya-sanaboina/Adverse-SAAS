@@ -48,7 +48,9 @@ ERRORS: dict[int | str, dict[str, Any]] = {
 )
 def signup(request: SignupRequest) -> SignupResponse:
     if not settings.public_signup_enabled:
-        raise AuthenticationError(403, "PUBLIC_SIGNUP_DISABLED", "Sign up is currently unavailable.")
+        raise AuthenticationError(
+            403, "PUBLIC_SIGNUP_DISABLED", "Sign up is currently unavailable."
+        )
 
     return public_signup_service.signup(request)
 

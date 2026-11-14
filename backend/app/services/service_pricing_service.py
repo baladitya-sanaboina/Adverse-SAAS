@@ -3,13 +3,13 @@ from uuid import UUID
 from app.repositories.service_pricing_repository import (
     CompanyServiceRecord,
     PricingOverviewItemRecord,
-    PricingSubjectRecord,
     ServiceCatalogConflict,
     ServiceCatalogReferenceError,
     ServiceDeleteBlocked,
     ServicePricingConflict,
     ServicePricingRecord,
     ServicePricingRepository,
+    ServicePricingScope,
 )
 from app.schemas.authentication import AuthContext
 from app.schemas.service_pricing import (
@@ -89,7 +89,9 @@ class ServicePricingService:
             raise AuthenticationError(404, "SERVICE_NOT_FOUND", "Service was not found.")
         return CompanyServiceDetailResponse(**record.__dict__)
 
-    def create_service(self, context: AuthContext, request: CompanyServiceCreate) -> CompanyServiceResponse:
+    def create_service(
+        self, context: AuthContext, request: CompanyServiceCreate
+    ) -> CompanyServiceResponse:
         company_id = self._authorize(context, "MANAGE")
         payload = request.model_dump()
         payload["code"] = self.repository.service_code(request.name)
@@ -111,7 +113,9 @@ class ServicePricingService:
         company_id = self._authorize(context, "MANAGE")
         payload = request.model_dump(exclude_unset=True)
         try:
-            record = self.repository.update_service(company_id, context.user_id, service_id, payload)
+            record = self.repository.update_service(
+                company_id, context.user_id, service_id, payload
+            )
         except ServiceCatalogConflict as error:
             code = "SERVICE_NAME_EXISTS" if error.field == "name" else "SERVICE_CODE_EXISTS"
             detail = (
@@ -151,7 +155,9 @@ class ServicePricingService:
         request: PricingChangeRequest,
     ) -> ServicePricingRecordResponse:
         company_id = self._authorize(context, "MANAGE")
-        return self._set_pricing(company_id, context.user_id, "CLIENT", client_id, service_id, request)
+        return self._set_pricing(
+            company_id, context.user_id, "CLIENT", client_id, service_id, request
+        )
 
     def get_manager_pricing(
         self, context: AuthContext, manager_user_id: UUID, include_history: bool
@@ -162,7 +168,7 @@ class ServicePricingService:
     def get_pricing_overview_for_subject(
         self,
         company_id: UUID,
-        scope: str,
+        scope: ServicePricingScope,
         subject_id: UUID,
         *,
         include_history: bool,
@@ -185,7 +191,7 @@ class ServicePricingService:
         self,
         company_id: UUID,
         actor_id: UUID,
-        scope: str,
+        scope: ServicePricingScope,
         subject_id: UUID,
         service_id: UUID,
         request: PricingChangeRequest,
@@ -197,9 +203,13 @@ class ServicePricingService:
             )
         except ServiceCatalogReferenceError as error:
             if error.reference == "service":
-                raise AuthenticationError(404, "SERVICE_NOT_FOUND", "Service was not found.") from error
+                raise AuthenticationError(
+                    404, "SERVICE_NOT_FOUND", "Service was not found."
+                ) from error
             if error.reference == "client":
-                raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.") from error
+                raise AuthenticationError(
+                    404, "CLIENT_NOT_FOUND", "Client was not found."
+                ) from error
             raise AuthenticationError(404, "MANAGER_NOT_FOUND", "Manager was not found.") from error
         except ServicePricingConflict as error:
             if error.reason == "service_inactive":
@@ -218,7 +228,7 @@ class ServicePricingService:
     def _pricing_overview(
         self,
         company_id: UUID,
-        scope: str,
+        scope: ServicePricingScope,
         subject_id: UUID,
         include_history: bool,
     ) -> PricingOverviewResponse:
@@ -228,7 +238,11 @@ class ServicePricingService:
             label = "Client" if scope == "CLIENT" else "Manager"
             raise AuthenticationError(404, code, f"{label} was not found.")
         items = self.repository.list_pricing_overview(company_id, scope, subject_id)
-        history = self.repository.list_pricing_history(company_id, scope, subject_id) if include_history else ()
+        history = (
+            self.repository.list_pricing_history(company_id, scope, subject_id)
+            if include_history
+            else ()
+        )
         history_by_service: dict[UUID, list[ServicePricingRecordResponse]] = {}
         for entry in history:
             if entry.service_id is None:
