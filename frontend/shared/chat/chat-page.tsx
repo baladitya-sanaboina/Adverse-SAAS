@@ -26,6 +26,7 @@ import {
   Link2,
   Inbox,
   MessageCirclePlus,
+  Mail,
   MessageSquare,
   Paperclip,
   Pencil,
@@ -63,7 +64,9 @@ import {
   type Conversation,
 } from "./chat-types";
 import { STATUS_EVENT, announceStatus } from "./topbar-status";
+import { MailPane } from "./mail-pane";
 import "../styles/chat.css";
+import "../styles/mail.css";
 import { OrbitLoader } from "../branding/orbit-loader";
 
 type Folder = "INBOX" | "CLIENTS" | "TEAM" | "DIRECT";
@@ -106,6 +109,11 @@ export function ChatPage({ role }: { role: ChatRole }) {
   const [chats, setChats] = useState<Conversation[] | null>(null);
   const [error, setError] = useState("");
   const [folder, setFolder] = useState<Folder>("INBOX");
+  // Internal mailbox (owner request 2026-11-15): Chat has a Mail folder too.
+  const [mode, setMode] = useState<"chat" | "mail">("chat");
+  const [mailOpen, setMailOpen] = useState<string | null>(null);
+  const [mailReading, setMailReading] = useState(false);
+  const [mailUnread, setMailUnread] = useState(0);
   const [tab, setTab] = useState<Tab>("ALL");
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<ChatMessage[]>([]);
@@ -134,6 +142,23 @@ export function ChatPage({ role }: { role: ChatRole }) {
     }
   }, []);
 
+  // Unread mail on the Mail folder (internal mailbox, 2026-11-15).
+  useEffect(() => {
+    const refresh = () =>
+      void fetch("/api/mail/unread", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data: { total?: number } | null) => data && setMailUnread(data.total ?? 0))
+        .catch(() => undefined);
+    const first = window.setTimeout(refresh, 0);
+    const off = subscribeRealtime((event) => {
+      if (event.type === "mail.new" || event.type === "mail.read") refresh();
+    });
+    return () => {
+      window.clearTimeout(first);
+      off();
+    };
+  }, []);
+
   // My status changed in the top bar: show it in the status menu here too.
   useEffect(() => {
     const changed = (event: Event) => {
@@ -151,6 +176,12 @@ export function ChatPage({ role }: { role: ChatRole }) {
       wantedChat.current = new URLSearchParams(window.location.search).get("c");
     }
     const timer = window.setTimeout(() => {
+      // ?mail=<id> (from a mail notification) opens the Mail folder on that mail.
+      const mail = new URLSearchParams(window.location.search).get("mail");
+      if (mail) {
+        setMode("mail");
+        setMailOpen(mail);
+      }
       void loadChats();
       void loadPeople();
       if (wantedChat.current) {
@@ -291,22 +322,38 @@ export function ChatPage({ role }: { role: ChatRole }) {
             </button>
           </div>
         )}
-        <section className={`chat-app${active ? " thread-open" : ""}${isStaff ? "" : " client"}`} aria-label="Chat">
+        <section
+          className={`chat-app${(mode === "chat" ? active : mailReading) ? " thread-open" : ""}${isStaff ? "" : " client"}`}
+          aria-label="Chat"
+        >
           {isStaff && (
             <nav className="chat-folders" aria-label="Chat folders">
               {folders.map(({ key, label, icon: Icon }) => (
                 <button
                   key={key}
                   type="button"
-                  className={folder === key ? "active" : undefined}
-                  aria-pressed={folder === key}
-                  onClick={() => setFolder(key)}
+                  className={mode === "chat" && folder === key ? "active" : undefined}
+                  aria-pressed={mode === "chat" && folder === key}
+                  onClick={() => {
+                    setMode("chat");
+                    setFolder(key);
+                  }}
                 >
                   <Icon aria-hidden="true" />
                   <span>{label}</span>
                   {counts[key] > 0 && <em>{counts[key]}</em>}
                 </button>
               ))}
+              <button
+                type="button"
+                className={mode === "mail" ? "active" : undefined}
+                aria-pressed={mode === "mail"}
+                onClick={() => setMode("mail")}
+              >
+                <Mail aria-hidden="true" />
+                <span>Mail</span>
+                {mailUnread > 0 && <em>{mailUnread}</em>}
+              </button>
               {me && (
                 <div className="chat-me">
                   <Avatar person={{ ...me, status: me.status }} size={34} />
@@ -319,163 +366,198 @@ export function ChatPage({ role }: { role: ChatRole }) {
             </nav>
           )}
 
-          <div className="chat-list">
-            <header>
-              <h2>{isStaff ? folders.find((item) => item.key === folder)?.label : "Messages"}</h2>
-              <NewChatMenu role={role} onPick={(kind) => setDialog({ kind })} />
-            </header>
-            <label className="chat-search">
-              <Search aria-hidden="true" />
-              <input
-                value={query}
-                placeholder="Search chats and messages"
-                aria-label="Search chats and messages"
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
-            <div className="chat-tabs" role="tablist" aria-label="Filter chats">
-              {(["ALL", "UNREAD", "MINE"] as const).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === key}
-                  className={tab === key ? "active" : undefined}
-                  onClick={() => setTab(key)}
-                >
-                  {key === "ALL" ? "All" : key === "UNREAD" ? "Unread" : "Mine"}
-                </button>
-              ))}
+          {!isStaff && (
+            <div className="chat-mode-switch" role="tablist" aria-label="Chats or mail">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "chat"}
+                className={mode === "chat" ? "active" : undefined}
+                onClick={() => setMode("chat")}
+              >
+                <MessageSquare aria-hidden="true" /> Chats
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === "mail"}
+                className={mode === "mail" ? "active" : undefined}
+                onClick={() => setMode("mail")}
+              >
+                <Mail aria-hidden="true" /> Mail
+                {mailUnread > 0 && <em>{mailUnread}</em>}
+              </button>
             </div>
-            <div className="chat-list-body">
-              {error ? (
-                <div className="chat-empty">
-                  {error}
-                  <button type="button" className="chat-btn" onClick={() => void loadChats()}>
-                    <RefreshCw /> Retry
-                  </button>
+          )}
+          {mode === "mail" && me ? (
+            <MailPane
+              meId={me.id}
+              role={role}
+              openId={mailOpen}
+              onOpenChange={setMailReading}
+              onUnread={setMailUnread}
+            />
+          ) : (
+            <>
+              <div className="chat-list">
+                <header>
+                  <h2>{isStaff ? folders.find((item) => item.key === folder)?.label : "Messages"}</h2>
+                  <NewChatMenu role={role} onPick={(kind) => setDialog({ kind })} />
+                </header>
+                <label className="chat-search">
+                  <Search aria-hidden="true" />
+                  <input
+                    value={query}
+                    placeholder="Search chats and messages"
+                    aria-label="Search chats and messages"
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </label>
+                <div className="chat-tabs" role="tablist" aria-label="Filter chats">
+                  {(["ALL", "UNREAD", "MINE"] as const).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="tab"
+                      aria-selected={tab === key}
+                      className={tab === key ? "active" : undefined}
+                      onClick={() => setTab(key)}
+                    >
+                      {key === "ALL" ? "All" : key === "UNREAD" ? "Unread" : "Mine"}
+                    </button>
+                  ))}
                 </div>
-              ) : chats === null ? (
-                <div className="chat-empty">
-                  <OrbitLoader size={48} label="Loading chats" />
-                </div>
-              ) : visible.length === 0 && found.length === 0 ? (
-                <div className="chat-empty">
-                  {query
-                    ? "Nothing found."
-                    : role === "CLIENT"
-                      ? "Your agency will add you to a room. You can also message the admin."
-                      : "No chats here yet. Start one with the + button."}
-                </div>
-              ) : (
-                <ul className="chat-items">
-                  {visible.map((chat) => {
-                    const other = chat.type === "DIRECT" ? chat.members.find((m) => m.id !== me?.id) : undefined;
-                    return (
-                      <li key={chat.id}>
-                        <button
-                          type="button"
-                          className={`chat-item${chat.id === activeId ? " active" : ""}${chat.unread ? " unread" : ""}`}
-                          onClick={() => setActiveId(chat.id)}
-                        >
-                          {other ? (
-                            <Avatar person={other} />
-                          ) : (
-                            <span className={`chat-avatar group ${chat.type.toLowerCase()}`}>
-                              {chat.type === "CLIENT" ? <Contact /> : <UsersRound />}
-                            </span>
-                          )}
-                          <span className="chat-item-text">
-                            <span className="chat-item-top">
-                              <strong>{chat.title}</strong>
-                              {chat.last_message && <small>{listTime(chat.last_message.created_at)}</small>}
-                            </span>
-                            <span className="chat-item-bottom">
-                              <span>
-                                {chat.type === "CLIENT" && chat.client_name && chat.title !== chat.client_name
-                                  ? `${chat.client_name} · `
-                                  : ""}
-                                {chat.last_message
-                                  ? `${chat.last_message.sender_id === me?.id ? "You" : chat.last_message.sender_name.split(" ")[0]}: ${chat.last_message.preview}`
-                                  : chat.type === "DIRECT" && other
-                                    ? `${ROLE_LABELS[other.role]} · ${STATUS_LABELS[other.status]}`
-                                    : `${chat.members.length} people`}
-                              </span>
-                              {chat.unread > 0 && <em>{chat.unread}</em>}
-                            </span>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                  {found.length > 0 && (
-                    <>
-                      <li className="chat-found-label">Messages</li>
-                      {found.map((message) => {
-                        const chat = chats.find((item) => item.id === message.conversation_id);
+                <div className="chat-list-body">
+                  {error ? (
+                    <div className="chat-empty">
+                      {error}
+                      <button type="button" className="chat-btn" onClick={() => void loadChats()}>
+                        <RefreshCw /> Retry
+                      </button>
+                    </div>
+                  ) : chats === null ? (
+                    <div className="chat-empty">
+                      <OrbitLoader size={48} label="Loading chats" />
+                    </div>
+                  ) : visible.length === 0 && found.length === 0 ? (
+                    <div className="chat-empty">
+                      {query
+                        ? "Nothing found."
+                        : role === "CLIENT"
+                          ? "Your agency will add you to a room. You can also message the admin."
+                          : "No chats here yet. Start one with the + button."}
+                    </div>
+                  ) : (
+                    <ul className="chat-items">
+                      {visible.map((chat) => {
+                        const other = chat.type === "DIRECT" ? chat.members.find((m) => m.id !== me?.id) : undefined;
                         return (
-                          <li key={message.id}>
+                          <li key={chat.id}>
                             <button
                               type="button"
-                              className="chat-item found"
-                              onClick={() => {
-                                setFocus({ chat: message.conversation_id, message: message.id });
-                                setActiveId(message.conversation_id);
-                              }}
+                              className={`chat-item${chat.id === activeId ? " active" : ""}${chat.unread ? " unread" : ""}`}
+                              onClick={() => setActiveId(chat.id)}
                             >
-                              <Avatar person={message.sender} size={30} />
+                              {other ? (
+                                <Avatar person={other} />
+                              ) : (
+                                <span className={`chat-avatar group ${chat.type.toLowerCase()}`}>
+                                  {chat.type === "CLIENT" ? <Contact /> : <UsersRound />}
+                                </span>
+                              )}
                               <span className="chat-item-text">
                                 <span className="chat-item-top">
-                                  <strong>{chat?.title ?? "Chat"}</strong>
-                                  <small>{listTime(message.created_at)}</small>
+                                  <strong>{chat.title}</strong>
+                                  {chat.last_message && <small>{listTime(chat.last_message.created_at)}</small>}
                                 </span>
                                 <span className="chat-item-bottom">
                                   <span>
-                                    {message.sender.name.split(" ")[0]}: {message.body}
+                                    {chat.type === "CLIENT" && chat.client_name && chat.title !== chat.client_name
+                                      ? `${chat.client_name} · `
+                                      : ""}
+                                    {chat.last_message
+                                      ? `${chat.last_message.sender_id === me?.id ? "You" : chat.last_message.sender_name.split(" ")[0]}: ${chat.last_message.preview}`
+                                      : chat.type === "DIRECT" && other
+                                        ? `${ROLE_LABELS[other.role]} · ${STATUS_LABELS[other.status]}`
+                                        : `${chat.members.length} people`}
                                   </span>
+                                  {chat.unread > 0 && <em>{chat.unread}</em>}
                                 </span>
                               </span>
                             </button>
                           </li>
                         );
                       })}
-                    </>
+                      {found.length > 0 && (
+                        <>
+                          <li className="chat-found-label">Messages</li>
+                          {found.map((message) => {
+                            const chat = chats.find((item) => item.id === message.conversation_id);
+                            return (
+                              <li key={message.id}>
+                                <button
+                                  type="button"
+                                  className="chat-item found"
+                                  onClick={() => {
+                                    setFocus({ chat: message.conversation_id, message: message.id });
+                                    setActiveId(message.conversation_id);
+                                  }}
+                                >
+                                  <Avatar person={message.sender} size={30} />
+                                  <span className="chat-item-text">
+                                    <span className="chat-item-top">
+                                      <strong>{chat?.title ?? "Chat"}</strong>
+                                      <small>{listTime(message.created_at)}</small>
+                                    </span>
+                                    <span className="chat-item-bottom">
+                                      <span>
+                                        {message.sender.name.split(" ")[0]}: {message.body}
+                                      </span>
+                                    </span>
+                                  </span>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </>
+                      )}
+                    </ul>
                   )}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          <div className="chat-thread">
-            {active && me ? (
-              <Thread
-                key={active.id}
-                chat={active}
-                me={me}
-                role={role}
-                onBack={() => setActiveId(null)}
-                onRead={() =>
-                  setChats((current) =>
-                    (current ?? []).map((item) => (item.id === active.id ? { ...item, unread: 0 } : item)),
-                  )
-                }
-                onEditPeople={() => setDialog({ kind: "people", chat: active })}
-                focusId={focus?.chat === active.id ? focus.message : null}
-                onFocused={() => setFocus(null)}
-                onError={setNotice}
-              />
-            ) : (
-              <div className="chat-thread-empty">
-                <MessageSquare aria-hidden="true" />
-                <strong>Pick a chat</strong>
-                <span>
-                  {role === "CLIENT"
-                    ? "Your rooms and your chat with the admin are on the left."
-                    : "Or start a new one with the + button."}
-                </span>
+                </div>
               </div>
-            )}
-          </div>
+
+              <div className="chat-thread">
+                {active && me ? (
+                  <Thread
+                    key={active.id}
+                    chat={active}
+                    me={me}
+                    role={role}
+                    onBack={() => setActiveId(null)}
+                    onRead={() =>
+                      setChats((current) =>
+                        (current ?? []).map((item) => (item.id === active.id ? { ...item, unread: 0 } : item)),
+                      )
+                    }
+                    onEditPeople={() => setDialog({ kind: "people", chat: active })}
+                    focusId={focus?.chat === active.id ? focus.message : null}
+                    onFocused={() => setFocus(null)}
+                    onError={setNotice}
+                  />
+                ) : (
+                  <div className="chat-thread-empty">
+                    <MessageSquare aria-hidden="true" />
+                    <strong>Pick a chat</strong>
+                    <span>
+                      {role === "CLIENT"
+                        ? "Your rooms and your chat with the admin are on the left."
+                        : "Or start a new one with the + button."}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </section>
       </div>
 
