@@ -57,3 +57,4 @@ redis-data/
 # UI screenshot baselines (local only, large binaries)
 /qa/ui-baseline/
 /qa/ui-after/
+/qa/backups/
