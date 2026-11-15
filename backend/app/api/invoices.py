@@ -27,6 +27,8 @@ from app.schemas.invoices import (
     InvoiceUpdateRequest,
     PackageCreateRequest,
     PackageEndRequest,
+    SheetEmailRequest,
+    SheetEmailResponse,
     SheetInvoiceRequest,
 )
 from app.schemas.registration import ErrorResponse
@@ -112,6 +114,16 @@ def create_sheet_invoice(
     context: AuthenticatedContext, request: SheetInvoiceRequest
 ) -> InvoiceDetailResponse:
     return invoice_service.create_for_sheet(context, request)
+
+
+@router.post(
+    "/sheet-email",
+    response_model=SheetEmailResponse,
+    summary="Email a payment sheet statement (client: email; manager: internal mail)",
+    responses=ERRORS,
+)
+def email_sheet(context: AuthenticatedContext, request: SheetEmailRequest) -> SheetEmailResponse:
+    return invoice_service.email_sheet(context, request)
 
 
 @router.get(

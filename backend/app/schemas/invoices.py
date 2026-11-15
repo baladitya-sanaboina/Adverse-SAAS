@@ -283,3 +283,18 @@ class BillingSettingsResponse(BaseModel):
     gstin: str
     company_gstin: str
     packages: list[PackageResponse]
+
+
+class SheetEmailRequest(BaseModel):
+    """Email one payment sheet's statement (owner request 2026-11-15)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["MANAGER", "CLIENT"]
+    owner_id: UUID
+    index: int = Field(ge=1)
+
+
+class SheetEmailResponse(BaseModel):
+    sent_to: str
+    message: str

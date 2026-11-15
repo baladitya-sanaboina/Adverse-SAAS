@@ -40,6 +40,8 @@ from app.schemas.invoices import (
     PackageEndRequest,
     PackageResponse,
     PaymentSheet,
+    SheetEmailRequest,
+    SheetEmailResponse,
     SheetInvoiceRequest,
     SheetOwner,
     SheetsOverviewResponse,
@@ -573,6 +575,93 @@ class InvoiceService:
         start, end = self._sheet_period(sheet, today)
         invoice_id = self._make(company_id, request.client_id, context.user_id, start, end, "SHEET")
         return self._detail(company_id, invoice_id)
+
+    def email_sheet(self, context: AuthContext, request: SheetEmailRequest) -> SheetEmailResponse:
+        """The admin's 'Email statement' button. A client gets an email (and a bell notice);
+        a manager gets it in their internal mailbox (staff stay inside the app)."""
+        overview = self.sheets_overview(context)
+        company_id = context.company_id
+        assert company_id is not None
+        owners = overview.clients if request.kind == "CLIENT" else overview.managers
+        owner = next((item for item in owners if item.id == request.owner_id), None)
+        sheet = (
+            next((item for item in owner.sheets if item.index == request.index), None)
+            if owner
+            else None
+        )
+        if owner is None or sheet is None:
+            raise AuthenticationError(404, "SHEET_NOT_FOUND", "That payment sheet was not found.")
+        currency = overview.currency
+        from app.services.finance_service import finance_service
+        from app.services.task_events import money_text
+
+        period = (
+            f"{sheet.start:%d %b %Y} – {sheet.end:%d %b %Y}"
+            if sheet.end
+            else f"{sheet.start:%d %b %Y} – now"
+        )
+        rows = [
+            ("Sheet", f"Sheet {sheet.index} · {'closed' if sheet.end else 'open'}"),
+            ("Period", period),
+            ("Carried in", money_text(Decimal(sheet.carried_in), currency)),
+            ("Paid in", money_text(Decimal(sheet.paid), currency)),
+            (
+                "Used",
+                f"{money_text(Decimal(sheet.used), currency)} · {sheet.items} {'video' if request.kind == 'CLIENT' else 'task'}{'' if sheet.items == 1 else 's'}",
+            ),
+            ("Balance", money_text(Decimal(sheet.left), currency)),
+        ]
+        if request.kind == "MANAGER":
+            from app.services.mail_service import mail_service
+
+            body = "\n".join(
+                [
+                    f"Your payment sheet {sheet.index} ({period}).",
+                    "",
+                    *[f"{label}: {value}" for label, value in rows],
+                    "",
+                    *[
+                        f"{line.day:%d %b}  {line.label}  {money_text(Decimal(line.amount), currency)}"
+                        f"  → {money_text(Decimal(line.balance), currency)}"
+                        for line in sheet.lines
+                    ],
+                ]
+            )
+            mail_service.system(
+                company_id,
+                [owner.id],
+                f"Payment sheet {sheet.index} statement",
+                body,
+                "/sheets",
+                "PAYMENT",
+                notify=True,
+            )
+            return SheetEmailResponse(
+                sent_to=owner.name, message=f"Sent to {owner.name}'s mailbox."
+            )
+        from app.services.outbound_mail import app_url, deliver
+
+        email = self.repository.client_login_email(company_id, owner.id)
+        if not email:
+            raise AuthenticationError(
+                422, "NO_CLIENT_EMAIL", "This client has no email address. Add one on their page."
+            )
+        deliver(
+            company_id,
+            to_email=email,
+            user_id=notification_service.client_user(company_id, owner.id),
+            subject=f"Payment sheet {sheet.index} statement · {owner.name}",
+            title=f"Payment sheet {sheet.index}",
+            lines=[f"Hello {owner.name}, here is the statement for {period}."],
+            rows=rows,
+            table=finance_service._sheet_table(sheet.lines, currency),
+            action_label="Open billing",
+            action_url=app_url("CLIENT", "/billing"),
+            company_name=self.repository.company_profile(company_id).name,
+            notify_type="sheet.statement",
+            notify_link="/billing",
+        )
+        return SheetEmailResponse(sent_to=email, message=f"Emailed to {email}.")
 
     # -- GST and monthly packages per client (owner requests 2026-11-15) ----------------------
 

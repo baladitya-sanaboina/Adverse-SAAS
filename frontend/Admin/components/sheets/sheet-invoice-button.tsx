@@ -6,7 +6,7 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, ReceiptText } from "lucide-react";
+import { FileText, Mail, ReceiptText } from "lucide-react";
 import type { Sheet } from "@loopless-shared/production/payment-sheets";
 import { api, errorText } from "@/lib/production/client";
 
@@ -54,6 +54,40 @@ export function SheetInvoiceButton({
       onClick={() => void generate()}
     >
       <ReceiptText aria-hidden="true" /> {busy ? "Making invoice…" : "Generate invoice"}
+    </button>
+  );
+}
+
+/** "Email statement" (owner request 2026-11-15): a client gets an email; a manager gets internal mail. */
+export function SheetEmailButton({
+  sheet,
+  kind,
+  ownerId,
+  onDone,
+}: {
+  sheet: Sheet;
+  kind: "MANAGER" | "CLIENT";
+  ownerId: string;
+  onDone?: (message: string, failed?: boolean) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  async function send() {
+    setBusy(true);
+    try {
+      const result = await api<{ message: string }>("/api/company/invoices/sheet-email", {
+        method: "POST",
+        json: { kind, owner_id: ownerId, index: sheet.index },
+      });
+      onDone?.(`Sheet ${sheet.index}: ${result.message}`);
+    } catch (reason) {
+      onDone?.(errorText(reason, "Could not send the statement."), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button type="button" className="secondary" disabled={busy} onClick={() => void send()}>
+      <Mail aria-hidden="true" /> {busy ? "Sending…" : kind === "CLIENT" ? "Email statement" : "Send to their mailbox"}
     </button>
   );
 }

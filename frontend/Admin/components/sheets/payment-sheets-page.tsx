@@ -12,7 +12,7 @@ import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { api, errorText, formatDate, money } from "@/lib/production/client";
 import { PaymentSheets } from "@loopless-shared/production/payment-sheets";
 import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
-import { SheetInvoiceButton } from "./sheet-invoice-button";
+import { SheetEmailButton, SheetInvoiceButton } from "./sheet-invoice-button";
 import { STATUS_TEXT, ownerLine, type SheetOwner, type SheetsOverview } from "./sheet-types";
 import "@/styles/organization.css";
 import "@/styles/production.css";
@@ -24,6 +24,7 @@ type Tab = "MANAGER" | "CLIENT";
 export function PaymentSheetsPage() {
   const [data, setData] = useState<SheetsOverview | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [tab, setTab] = useState<Tab>("MANAGER");
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -92,6 +93,14 @@ export function PaymentSheetsPage() {
             ))}
           </nav>
 
+          {notice && (
+            <p className="sheets-notice" role="status">
+              {notice}
+              <button type="button" aria-label="Dismiss" onClick={() => setNotice("")}>
+                ×
+              </button>
+            </p>
+          )}
           {error ? (
             <div className="organization-state">
               <h3>{error}</h3>
@@ -200,11 +209,19 @@ export function PaymentSheetsPage() {
                     date={formatDate}
                     itemWord={current.kind === "MANAGER" ? "task" : "video"}
                     empty="No sheets yet."
-                    sheetAction={
-                      current.kind === "CLIENT"
-                        ? (sheet) => <SheetInvoiceButton sheet={sheet} clientId={current.id} onError={setError} />
-                        : undefined
-                    }
+                    sheetAction={(sheet) => (
+                      <>
+                        {current.kind === "CLIENT" && (
+                          <SheetInvoiceButton sheet={sheet} clientId={current.id} onError={setNotice} />
+                        )}
+                        <SheetEmailButton
+                          sheet={sheet}
+                          kind={current.kind}
+                          ownerId={current.id}
+                          onDone={(message) => setNotice(message)}
+                        />
+                      </>
+                    )}
                   />
                 </section>
               )}
