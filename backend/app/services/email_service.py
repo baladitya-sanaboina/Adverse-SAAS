@@ -178,7 +178,13 @@ class EmailService:
         from app.services.development_test_credentials_service import TEST_ACCOUNT_EMAILS
 
         found = getaddresses(message.get_all("To", []) + message.get_all("Cc", []))
-        return [address for _, address in found if address.lower() not in TEST_ACCOUNT_EMAILS]
+        # Reserved test domains never deliver anywhere; skip them instead of bouncing.
+        reserved = ("@example.com", "@example.org", "@example.net", ".test", ".invalid", ".example")
+        return [
+            address
+            for _, address in found
+            if address.lower() not in TEST_ACCOUNT_EMAILS and not address.lower().endswith(reserved)
+        ]
 
     @staticmethod
     def _first_time(key: str | None) -> bool:

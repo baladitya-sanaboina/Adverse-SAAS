@@ -34,6 +34,8 @@ from app.api.invoices import router as invoices_router
 from app.api.mail import router as mail_router
 from app.api.notifications import realtime_router
 from app.api.notifications import router as notifications_router
+from app.api.onboarding import public_router as public_onboarding_router
+from app.api.onboarding import router as onboarding_router
 from app.api.organization import router as organization_router
 from app.api.platform_dashboard import router as platform_dashboard_router
 from app.api.platform_settings import router as platform_settings_router
@@ -301,6 +303,8 @@ app.include_router(client_calendar_router, prefix=settings.api_prefix)
 app.include_router(staff_calendar_router, prefix=settings.api_prefix)
 app.include_router(chat_router, prefix=settings.api_prefix)
 app.include_router(mail_router, prefix=settings.api_prefix)
+app.include_router(onboarding_router, prefix=settings.api_prefix)
+app.include_router(public_onboarding_router, prefix=settings.api_prefix)
 app.include_router(crm_router, prefix=settings.api_prefix)
 app.include_router(audit_logs_router, prefix=settings.api_prefix)
 # Public logos and profile pictures. The folder only appears after the first upload, and a
@@ -313,6 +317,7 @@ app.add_middleware(
     exempt_path_prefixes={
         "/storage/profile-images/",
         "/storage/company-branding/",
+        f"{settings.api_prefix}/public/onboarding/",
         f"{settings.api_prefix}/platform/developers",
         f"{settings.api_prefix}/platform/companies",
         f"{settings.api_prefix}/platform/subscription-plans",

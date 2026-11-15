@@ -4,6 +4,7 @@ import {
   ChartNoAxesCombined,
   ClipboardList,
   Contact,
+  FileSignature,
   Gauge,
   MessagesSquare,
   NotebookTabs,
@@ -32,6 +33,8 @@ export const navigationItems = [
   { href: "/sheets", label: "Payment Sheets", icon: NotebookTabs, module: "FINANCE" },
   { href: "/invoices", label: "Invoices", icon: ReceiptText, module: "FINANCE" },
   { href: "/reports", label: "Reports", icon: ChartColumn, module: "REPORTS" },
+  // Onboarding documents (owner request 2026-11-15): Admin only; the API refuses other roles.
+  { href: "/documents", label: "Documents", icon: FileSignature },
   { href: "/crm", label: "CRM", icon: ChartNoAxesCombined, module: "CRM", feature: "CRM" },
   { href: "/profile", label: "My Profile", icon: UserRound },
   { href: "/settings", label: "Settings", icon: Settings },

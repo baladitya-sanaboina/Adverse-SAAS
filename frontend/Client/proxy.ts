@@ -13,6 +13,6 @@ export const config = {
   // Every signed-in page (security checklist, 2026-11-15). Left open: the sign-in pages,
   // invitations, meet links (/call shows its own sign-in), the API, Next's files and static files.
   matcher: [
-    "/((?!$|login|register|forgot-password|reset-password|verify-email|invitations|call|api|_next|.*\\.[A-Za-z0-9]+$).*)",
+    "/((?!$|login|register|forgot-password|reset-password|verify-email|invitations|call|onboarding|api|_next|.*\\.[A-Za-z0-9]+$).*)",
   ],
 };

@@ -112,6 +112,8 @@ model Company {
   invoices            Invoice[]
   clientPackages      ClientPackage[]
   mailMessages        MailMessage[]
+  documentTemplates   DocumentTemplate[]
+  onboardingPackets   OnboardingPacket[]
   calendarEntries     ContentCalendarEntry[]
   chatConversations   ChatConversation[]
   chatMessages        ChatMessage[]
@@ -516,6 +518,9 @@ model User {
   clientPackagesCreated   ClientPackage[]          @relation("ClientPackageCreator")
   mailSent                MailMessage[]            @relation("MailSender")
   mailReceived            MailRecipient[]
+  templatesUpdated        DocumentTemplate[]       @relation("TemplateEditor")
+  onboardingPackets       OnboardingPacket[]       @relation("PacketRecipient")
+  onboardingSent          OnboardingPacket[]       @relation("PacketSender")
   calendarEntriesCreated  ContentCalendarEntry[]   @relation("CalendarEntryCreator")
   chatConversationsMade   ChatConversation[]       @relation("ChatConversationCreator")
   chatMemberships         ChatMember[]
@@ -622,6 +627,7 @@ model Client {
   payments              ClientPayment[]
   invoices              Invoice[]
   packages              ClientPackage[]
+  onboardingPackets     OnboardingPacket[]
   calendarEntries       ContentCalendarEntry[]
   chatRooms             ChatConversation[]
   leads                 Lead[]
@@ -1834,4 +1840,55 @@ model MailAttachment {
 
   @@index([messageId])
   @@map("mail_attachments")
+}
+
+
+/// Editable text of onboarding documents (owner request 2026-11-15); defaults live in code.
+model DocumentTemplate {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  kind        String   @db.VarChar(40)
+  subject     String   @db.VarChar(200)
+  body        String
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @default(now()) @map("updated_at")
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  updatedBy   User?    @relation("TemplateEditor", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, kind])
+  @@map("document_templates")
+}
+
+/// Documents sent to a new client or employee, opened by a private link (owner request 2026-11-15).
+model OnboardingPacket {
+  id             String    @id @default(uuid()) @db.Uuid
+  companyId      String    @map("company_id") @db.Uuid
+  audience       String    @db.VarChar(20)
+  clientId       String?   @map("client_id") @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid
+  recipientName  String    @map("recipient_name") @db.VarChar(160)
+  recipientEmail String    @map("recipient_email") @db.VarChar(254)
+  documents      Json      @default("[]")
+  fields         Json      @default("{}")
+  tokenHash      String    @unique @map("token_hash") @db.VarChar(64)
+  status         String    @default("SENT") @db.VarChar(20)
+  expiresAt      DateTime  @map("expires_at")
+  formData       Json      @default("{}") @map("form_data")
+  signedName     String?   @map("signed_name") @db.VarChar(160)
+  signedAt       DateTime? @map("signed_at")
+  signedIp       String?   @map("signed_ip") @db.VarChar(64)
+  signedAgent    String?   @map("signed_agent") @db.VarChar(300)
+  openedAt       DateTime? @map("opened_at")
+  sentCount      Int       @default(1) @map("sent_count")
+  createdById    String?   @map("created_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @map("updated_at")
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client         Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user           User?     @relation("PacketRecipient", fields: [userId], references: [id], onDelete: SetNull)
+  createdBy      User?     @relation("PacketSender", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([companyId, audience, createdAt])
+  @@index([clientId])
+  @@map("onboarding_packets")
 }

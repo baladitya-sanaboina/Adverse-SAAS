@@ -14,6 +14,7 @@ import { PaymentsPage } from "@/components/payments/payments-page";
 import { PaymentSheetsPage } from "@/components/sheets/payment-sheets-page";
 import { ContentCalendarPage } from "@loopless-shared/calendar/content-calendar";
 import { ReportsPage } from "@/components/reports/reports-page";
+import { DocumentsPage } from "@/components/documents/documents-page";
 
 const errors: Record<string, string> = {
   "401": "Unauthorized",
@@ -37,6 +38,7 @@ export default async function SectionPage({ params }: { params: Promise<{ sectio
   if (section === "sheets") return <PaymentSheetsPage />;
   if (section === "invoices") return <InvoicesPage />;
   if (section === "reports") return <ReportsPage />;
+  if (section === "documents") return <DocumentsPage />;
   if (section === "profile") return <ProfilePage />;
   if (section === "settings") return <CompanySettingsPage />;
   const item = navigationItems.find(({ href }) => href === `/${section}`);
