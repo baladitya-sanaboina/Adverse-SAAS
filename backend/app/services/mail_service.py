@@ -25,6 +25,7 @@ from fastapi import UploadFile
 from app.core.settings import settings
 from app.repositories.chat_repository import ChatRepository
 from app.repositories.mail_repository import MailFileRow, MailRepository, MailRow, TicketRow
+from app.schemas.agenda import AgendaEvent
 from app.schemas.authentication import AuthContext
 from app.schemas.mail import (
     MailAction,
@@ -292,15 +293,24 @@ class MailService:
         ticket = self.repository.ticket_for_threads(company_id, [first.thread_id]).get(
             first.thread_id
         )
-        from app.services.agenda_service import agenda_service
-
         return MailThreadResponse(
             thread_id=first.thread_id,
             subject=rows[0].subject if rows else first.subject,
             items=self._items(rows, me),
             ticket=self._ticket(ticket, me, role == "ADMIN") if ticket else None,
-            event=agenda_service.event_for_thread(context, first.thread_id),
+            event=self._event(context, first.thread_id),
         )
+
+    @staticmethod
+    def _event(context: AuthContext, thread_id: UUID) -> AgendaEvent | None:
+        """The meeting planned from this conversation; a calendar problem never blocks mail."""
+        from app.services.agenda_service import agenda_service
+
+        try:
+            return agenda_service.event_for_thread(context, thread_id)
+        except Exception:  # noqa: BLE001
+            logger.warning("Calendar lookup for a mail failed", exc_info=True)
+            return None
 
     def act(
         self, context: AuthContext, thread_ids: builtins.list[UUID], action: MailAction
