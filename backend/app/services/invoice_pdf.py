@@ -312,7 +312,9 @@ def render_invoice_pdf(
     if tax > 0:
         rate = f"{Decimal(invoice.tax_rate).normalize():f}"
         total_rows.insert(2, [f"GST @ {rate}%", amount_text(tax, money)])
-        total_rows.insert(3, ["Total with GST", amount_text(Decimal(invoice.subtotal) + tax, money)])
+        total_rows.insert(
+            3, ["Total with GST", amount_text(Decimal(invoice.subtotal) + tax, money)]
+        )
     if Decimal(invoice.budget_added) > 0:
         total_rows.insert(
             2, ["Budget added in this period", amount_text(invoice.budget_added, money)]

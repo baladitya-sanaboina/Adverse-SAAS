@@ -31,6 +31,7 @@ from app.api.health import router as health_router
 from app.api.invitations import router as invitations_router
 from app.api.invoices import client_router as client_billing_router
 from app.api.invoices import router as invoices_router
+from app.api.mail import router as mail_router
 from app.api.notifications import realtime_router
 from app.api.notifications import router as notifications_router
 from app.api.organization import router as organization_router
@@ -52,6 +53,7 @@ from app.database.connectivity import close_database_pool, open_database_pool
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.tenant import TenantContextMiddleware
+from app.services import reminder_service
 from app.services.authentication_service import AuthenticationError
 from app.services.development_test_credentials_service import (
     development_test_credentials_service,
@@ -77,9 +79,12 @@ class SensitiveQueryFilter(logging.Filter):
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     open_database_pool()
     development_test_credentials_service.ensure()
+    if settings.environment != "test":
+        reminder_service.start()
     try:
         yield
     finally:
+        reminder_service.stop()
         close_database_pool()
 
 
@@ -295,6 +300,7 @@ app.include_router(calendar_router, prefix=settings.api_prefix)
 app.include_router(client_calendar_router, prefix=settings.api_prefix)
 app.include_router(staff_calendar_router, prefix=settings.api_prefix)
 app.include_router(chat_router, prefix=settings.api_prefix)
+app.include_router(mail_router, prefix=settings.api_prefix)
 app.include_router(crm_router, prefix=settings.api_prefix)
 app.include_router(audit_logs_router, prefix=settings.api_prefix)
 # Public logos and profile pictures. The folder only appears after the first upload, and a

@@ -11,6 +11,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from app.repositories.task_repository import TaskRepository, TaskRow
+from app.services.mail_service import MailService, mail_service
 from app.services.notification_service import NotificationService, notification_service
 
 logger = logging.getLogger(__name__)
@@ -57,9 +58,36 @@ class TaskEvents:
         self,
         repository: TaskRepository | None = None,
         notifier: NotificationService | None = None,
+        mail: MailService | None = None,
     ):
         self.repository = repository or TaskRepository()
         self.notifier = notifier or notification_service
+        # Internal mail (owner request 2026-11-15); off when a test passes its own notifier.
+        self.mail = mail if mail is not None else (mail_service if notifier is None else None)
+
+    def _mail(
+        self,
+        company_id: UUID,
+        recipients: list[UUID | None],
+        subject: str,
+        lines: list[str],
+        row: TaskRow,
+        key: str,
+        actor_id: UUID | None = None,
+    ) -> None:
+        if self.mail is None:
+            return
+        people = [user_id for user_id in recipients if user_id and user_id != actor_id]
+        body = "\n".join(
+            [
+                *lines,
+                "",
+                f"Task: {row.code} · {row.title}",
+                f"Client: {row.client_name} · {row.service_name}",
+                f"Due: {row.due_date:%d %b %Y}" if row.due_date else "Due: no date set",
+            ]
+        )
+        self.mail.system(company_id, people, subject, body, _link(row), "TASK", once_key=key)
 
     def _row(self, company_id: UUID, task_id: UUID) -> TaskRow | None:
         try:
@@ -91,6 +119,26 @@ class TaskEvents:
                     _link(row),
                     {"task_id": str(row.id)},
                     exclude=actor_id,
+                )
+            if row.assignee_user_id and row.assignee_user_id != previous_assignee:
+                self._mail(
+                    company_id,
+                    [row.assignee_user_id],
+                    f"New task for you: {row.code} {row.title}",
+                    ["You have been given a new task. Open it to see the brief and files."],
+                    row,
+                    f"task-assigned:{row.id}",
+                    actor_id,
+                )
+            if row.monitor_user_id and row.monitor_user_id != previous_monitor:
+                self._mail(
+                    company_id,
+                    [row.monitor_user_id],
+                    f"You are monitoring {row.code} {row.title}",
+                    [f"Assigned to {row.assignee_name or 'nobody yet'}. You can move its status."],
+                    row,
+                    f"task-monitor:{row.id}",
+                    actor_id,
                 )
             if row.monitor_user_id and row.monitor_user_id != previous_monitor:
                 self.notifier.notify(
@@ -137,6 +185,30 @@ class TaskEvents:
                 {"task_id": str(row.id), "status": row.status, "from": previous_status},
                 exclude=actor_id,
             )
+            if row.status in {"SUBMITTED", "REVIEW"} and previous_status not in {
+                "SUBMITTED",
+                "REVIEW",
+            }:
+                # Work submitted: the admins and the task's manager (owner request 2026-11-15).
+                self._mail(
+                    company_id,
+                    [*self.notifier.admins(company_id), row.monitor_user_id],
+                    f"Work submitted: {row.code} {row.title}",
+                    [f"{row.assignee_name or 'The assignee'} sent this task for review."],
+                    row,
+                    f"task-submitted:{row.id}",
+                    actor_id,
+                )
+            elif row.status == "IN_PROGRESS" and previous_status in {"SUBMITTED", "REVIEW"}:
+                self._mail(
+                    company_id,
+                    [row.assignee_user_id],
+                    f"Changes requested: {row.code} {row.title}",
+                    ["Your work was sent back with changes. Open the task to see the comments."],
+                    row,
+                    f"task-changes:{row.id}",
+                    actor_id,
+                )
             if by_admin and row.status in BILLABLE and previous_status not in BILLABLE:
                 # Phase 15: the client hears that their video is ready (no price in the alert).
                 self.notifier.notify(
@@ -192,6 +264,16 @@ class TaskEvents:
             client_title = "80% of your budget is used"
             client_body = f"{left} left."
         data = {"client_id": str(row.client_id), "level": crossed}
+        if self.mail is not None:
+            self.mail.system(
+                company_id,
+                list(self.notifier.admins(company_id)),
+                admin_title,
+                f"{admin_body}\n\nClient: {row.client_name}",
+                f"/clients/{row.client_id}",
+                "BUDGET",
+                once_key=f"budget-{crossed}:{row.client_id}",
+            )
         self.notifier.notify(
             company_id,
             self.notifier.admins(company_id),
@@ -246,6 +328,16 @@ class TaskEvents:
             own_title = "80% of your advance is used"
             own_body = f"{left} left."
         data = {"manager_user_id": str(row.assignee_user_id), "level": crossed}
+        if self.mail is not None:
+            self.mail.system(
+                company_id,
+                list(self.notifier.admins(company_id)),
+                admin_title,
+                f"{admin_body}\n\nManager: {name}",
+                "/payments",
+                "ADVANCE",
+                once_key=f"advance-{crossed}:{row.assignee_user_id}",
+            )
         self.notifier.notify(
             company_id,
             self.notifier.admins(company_id),

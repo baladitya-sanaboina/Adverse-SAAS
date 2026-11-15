@@ -559,7 +559,52 @@ class CallService:
             exclude=context.user_id,
         )
         realtime.publish(audience, "meeting.update", {"conversation_id": str(conversation_id)})
+        self._meeting_mail(company_id, context.user_id, row, meeting, local, audience)
         return meeting
+
+    def _meeting_mail(
+        self,
+        company_id: UUID,
+        organiser: UUID,
+        row: ConversationRow,
+        meeting: MeetingResponse,
+        local: datetime,
+        audience: list[UUID],
+    ) -> None:
+        """Internal mail (owner request 2026-11-15): everyone in the chat, plus anyone in the
+        company @mentioned in the title or agenda (by their full name)."""
+        from app.services.mail_service import mail_service
+
+        text = f"{meeting.title}\n{meeting.notes or ''}".lower()
+        staff = self.chat.repository.people(
+            company_id, ("COMPANY_ADMIN", "COMPANY_MANAGER", "COMPANY_EMPLOYEE", "COMPANY_CLIENT")
+        )
+        mentioned = [person.id for person in staff if f"@{person.name.lower()}" in text]
+        organiser_ref = self.chat.repository.person(company_id, organiser)
+        when = f"{local:%A %d %B %Y, %I:%M %p} · {meeting.duration_minutes} min"
+        join = f"/call/{meeting.code}" if meeting.code else f"/chat?c={row.id}"
+        body = "\n".join(
+            [
+                f"{organiser_ref.name if organiser_ref else 'Someone'} scheduled a "
+                f"{'video' if meeting.kind == 'VIDEO' else 'voice'} meeting.",
+                "",
+                f"When: {when}",
+                f"Chat: {row.title or row.client_name or 'Direct chat'}",
+                *(["", "Agenda:", meeting.notes] if meeting.notes else []),
+                "",
+                "Join from the link below, the chat or your calendar.",
+            ]
+        )
+        recipients = [user for user in dict.fromkeys([*audience, *mentioned]) if user != organiser]
+        mail_service.system(
+            company_id,
+            recipients,
+            f"Meeting: {meeting.title} · {local:%d %b, %I:%M %p}",
+            body,
+            join,
+            "MEETING",
+            once_key=f"meeting:{meeting.id}",
+        )
 
     def meetings(
         self,

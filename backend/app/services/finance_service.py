@@ -7,6 +7,7 @@ Money visibility (docs/ProductionManagementPlan.md, section 4):
 - Client: only their own budget, charges and payments, as counts and totals (no task list).
 """
 
+import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -100,6 +101,7 @@ from app.services.production_rules import (
 from app.services.task_events import money_text
 from app.services.task_service import WORKER_ROLES, TaskService
 
+logger = logging.getLogger(__name__)
 ZERO = Decimal("0.00")
 
 
@@ -604,6 +606,7 @@ class FinanceService:
         from app.services.invoice_service import invoice_service
 
         invoice_service.ensure_sheet_invoices(company_id, request.client_id, context.user_id)
+        self._receipt_mail(company_id, request.client_id, payment)
         notification_service.notify(
             company_id,
             [notification_service.client_user(company_id, request.client_id)],
@@ -765,6 +768,28 @@ class FinanceService:
             "/salary",
             {"payment_id": str(payment_id)},
         )
+        # Salary goes outside the company: SMTP mail (owner decision 2026-11-15).
+        from app.services.outbound_mail import app_url, deliver
+
+        deliver(
+            company_id,
+            to_email=None,
+            user_id=request.user_id,
+            subject=f"Salary paid for {payment.period_month:%B %Y}",
+            title="Your salary has been paid",
+            lines=[f"Hello {payment.employee_name}, your salary has been paid. Thank you."],
+            rows=[
+                ("Amount", money_text(payment.amount, payment.currency)),
+                ("For", f"{payment.period_month:%B %Y}"),
+                ("Paid on", f"{payment.paid_on:%d %b %Y}"),
+                ("Method", PAYMENT_METHOD_TEXT.get(payment.method, payment.method)),
+                *([("Reference", payment.reference)] if payment.reference else []),
+            ],
+            action_label="Open My Salary",
+            action_url=app_url("EMPLOYEE", "/salary"),
+            company_name=self._company_name(company_id),
+            once_key=f"salary:{payment_id}",
+        )
         return payment
 
     def list_payouts(
@@ -799,7 +824,120 @@ class FinanceService:
             "/earnings",
             {"payout_id": str(payout_id)},
         )
+        self._top_up_mail(company_id, request.manager_user_id, payout)
         return payout
+
+    # -- mail about payments (owner decisions 2026-11-15) ------------------------------------
+
+    def _company_name(self, company_id: UUID) -> str:
+        from app.repositories.invoice_repository import InvoiceRepository
+
+        return InvoiceRepository().company_profile(company_id).name
+
+    @staticmethod
+    def _sheet_table(lines: list[Any], currency: str) -> list[list[str]]:
+        table = [["Date", "Details", "Paid in", "Used", "Balance"]]
+        for line in lines:
+            amount = Decimal(line.amount)
+            table.append(
+                [
+                    f"{line.day:%d %b %Y}",
+                    line.label,
+                    money_text(amount, currency) if amount > 0 else "",
+                    money_text(-amount, currency) if amount < 0 else "",
+                    money_text(Decimal(line.balance), currency),
+                ]
+            )
+        return table
+
+    def _receipt_mail(self, company_id: UUID, client_id: UUID, payment: Any) -> None:
+        """Payment received (SMTP to the client): a receipt, plus the statement of the sheet
+        this payment closed. Their bell already has the payment notice."""
+        try:
+            from app.repositories.invoice_repository import InvoiceRepository
+            from app.services.invoice_service import invoice_service
+            from app.services.outbound_mail import app_url, deliver
+
+            sheets = invoice_service._client_sheets(company_id, client_id)
+            closed = next(
+                (
+                    sheet
+                    for sheet in reversed(sheets)
+                    if sheet.end is not None and sheet.end < payment.received_on
+                ),
+                None,
+            )
+            lines = [
+                f"Hello {payment.client.name}, we received your payment. Thank you.",
+            ]
+            table: list[list[str]] = []
+            if closed is not None:
+                lines.append(
+                    f"Payment sheet {closed.index} ({closed.start:%d %b} – {closed.end:%d %b %Y}) is now "
+                    f"closed: {closed.items} videos, "
+                    f"{money_text(Decimal(closed.left), payment.currency)} carried into the new sheet."
+                )
+                table = self._sheet_table(closed.lines, payment.currency)
+            deliver(
+                company_id,
+                to_email=InvoiceRepository().client_login_email(company_id, client_id),
+                user_id=None,
+                subject=f"Payment received · {money_text(payment.amount, payment.currency)}",
+                title="Payment received",
+                lines=lines,
+                rows=[
+                    ("Amount", money_text(payment.amount, payment.currency)),
+                    ("Received on", f"{payment.received_on:%d %b %Y}"),
+                    ("Method", PAYMENT_METHOD_TEXT.get(payment.method, payment.method)),
+                    *([("Reference", payment.reference)] if payment.reference else []),
+                ],
+                table=table,
+                action_label="Open billing",
+                action_url=app_url("CLIENT", "/billing"),
+                company_name=self._company_name(company_id),
+                once_key=f"receipt:{payment.id}",
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("Payment receipt mail failed", exc_info=True)
+
+    def _top_up_mail(self, company_id: UUID, manager_id: UUID, payout: Any) -> None:
+        """Manager top-up: a statement in their internal mailbox (staff stay inside the app)."""
+        try:
+            from app.services.mail_service import mail_service
+
+            tz, _ = self._zone(company_id)
+            wallet = self._wallet(
+                tz,
+                self.repository.manager_commission_tasks(company_id, manager_id),
+                self.repository.list_payouts_for(company_id, manager_id),
+            )
+            closed = next((period for period in reversed(wallet.periods) if period.end), None)
+            text = [
+                f"You received a top-up of {money_text(payout.amount, payout.currency)} on "
+                f"{payout.paid_on:%d %b %Y}.",
+                f"Advance left now: {money_text(wallet.balance, payout.currency)}.",
+            ]
+            if closed is not None:
+                text += [
+                    "",
+                    f"Sheet {closed.index} ({closed.start:%d %b} – {closed.end:%d %b %Y}) is closed:",
+                    *[
+                        f"{line.day:%d %b}  {line.label}  {money_text(Decimal(line.amount), payout.currency)}"
+                        f"  → {money_text(Decimal(line.balance), payout.currency)}"
+                        for line in closed.lines
+                    ],
+                ]
+            mail_service.system(
+                company_id,
+                [manager_id],
+                f"Top-up received · {money_text(payout.amount, payout.currency)}",
+                "\n".join(text),
+                "/earnings",
+                "PAYMENT",
+                once_key=f"topup:{payout.id}",
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("Top-up mail failed", exc_info=True)
 
     # -- admin: dashboard and reports ------------------------------------------------------
 
