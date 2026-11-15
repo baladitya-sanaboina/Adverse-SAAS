@@ -1,0 +1,1338 @@
+// Copy of frontend/shared/chat/call-room.tsx (the Client app has no shared alias). Keep in sync.
+"use client";
+
+/*
+ * The call tab, /call/<code> (owner requests 2026-11-14: "like Google Meet", "call vere tab lo
+ * ravali", "sounds anni sariga ravali", "admit cheyataniki permission", "meet link fully
+ * functional").
+ *
+ * 1. Before joining: camera and microphone preview, devices, and who is already in the call.
+ *    The Join click also turns on sound for this tab (browsers block sound until a click).
+ * 2. Chat members join straight away. Anyone else in the company asks to join and waits until
+ *    the host or an admin in the call admits them (backend call_service).
+ * 3. In the call: audio and video go browser to browser (WebRTC, one connection per pair).
+ *    The server only says who is in the call and passes offers, answers and network candidates.
+ *    A small data channel per pair carries mic / camera / screen-share state for the tiles.
+ */
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  Hand,
+  Link2,
+  Mic,
+  MicOff,
+  MonitorUp,
+  PhoneOff,
+  Users,
+  Video,
+  VideoOff,
+  Volume2,
+  X,
+} from "lucide-react";
+import { LooplessSelect } from "@/components/foundation/loopless-select";
+import { subscribeRealtime } from "@/lib/realtime";
+import { chatApi, initials, jsonBody } from "./chat-types";
+import { audioContext, repeat, sounds, unlockSounds } from "./call-sounds";
+import "@/styles/call.css";
+
+type Kind = "AUDIO" | "VIDEO";
+type Role = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CLIENT";
+type Seat = { id: string; name: string; role: Role; image: string | null; joined_at: string };
+type Call = {
+  id: string;
+  conversation_id: string;
+  kind: Kind;
+  started_by_id: string;
+  started_at: string;
+  ended_at: string | null;
+  participants: Seat[];
+  code: string | null;
+};
+type MeetInfo = {
+  code: string;
+  title: string;
+  type: "DIRECT" | "GROUP" | "CLIENT";
+  member: boolean;
+  conversation_id: string | null;
+  kind: Kind;
+  live: boolean;
+  in_call: string[];
+  host_name: string | null;
+  call: Call | null;
+  admission: "WAITING" | "ADMITTED" | "DENIED" | null;
+  can_admit: boolean;
+};
+type Waiting = { id: string; name: string; role: Role; image: string | null; requested_at: string };
+type Me = { id: string; name: string; image: string | null };
+type PeerState = { mic: boolean; cam: boolean; sharing: boolean };
+type Phase = "loading" | "missing" | "prejoin" | "asking" | "denied" | "joining" | "incall" | "left" | "ended";
+type Device = { value: string; label: string };
+
+// Public STUN servers so two browsers can find each other. People behind strict office or mobile
+// networks also need a TURN relay (not set up yet).
+const ICE: RTCConfiguration = {
+  iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }],
+};
+const ROLE_LABEL: Record<Role, string> = { ADMIN: "Admin", MANAGER: "Manager", EMPLOYEE: "Employee", CLIENT: "Client" };
+
+// A reload (or the dev server refreshing the page) drops the call; this note lets the tab rejoin
+// by itself. Per tab only, so closing the tab forgets it.
+const REJOIN_MS = 120_000;
+function rememberCall(code: string): void {
+  try {
+    sessionStorage.setItem(`adverse-call:${code}`, String(Date.now()));
+  } catch {
+    // Storage blocked: the person rejoins with one click instead.
+  }
+}
+function forgetCall(code: string): void {
+  try {
+    sessionStorage.removeItem(`adverse-call:${code}`);
+  } catch {
+    // Nothing stored.
+  }
+}
+function recentlyInCall(code: string): boolean {
+  try {
+    const at = Number(sessionStorage.getItem(`adverse-call:${code}`));
+    return at > 0 && Date.now() - at < REJOIN_MS;
+  } catch {
+    return false;
+  }
+}
+
+function clockSince(start: number, now: number): string {
+  const seconds = Math.max(0, Math.floor((now - start) / 1000));
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return `${h ? `${h}:` : ""}${String(m).padStart(h ? 2 : 1, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function listNames(names: string[]): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+}
+
+/** Who is talking: a level meter on each stream, read four times a second. */
+function useSpeaking(streams: Record<string, MediaStream | null>, active: boolean): Set<string> {
+  const [speaking, setSpeaking] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    if (!active) return;
+    const audio = audioContext();
+    if (!audio) return;
+    const meters = Object.entries(streams).flatMap(([id, stream]) => {
+      if (!stream || stream.getAudioTracks().length === 0) return [];
+      try {
+        const source = audio.createMediaStreamSource(stream);
+        const analyser = audio.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+        return [{ id, source, analyser, data: new Uint8Array(analyser.fftSize) }];
+      } catch {
+        return [];
+      }
+    });
+    const timer = window.setInterval(() => {
+      const next = new Set<string>();
+      for (const meter of meters) {
+        meter.analyser.getByteTimeDomainData(meter.data);
+        let sum = 0;
+        for (const value of meter.data) {
+          const level = (value - 128) / 128;
+          sum += level * level;
+        }
+        if (Math.sqrt(sum / meter.data.length) > 0.035) next.add(meter.id);
+      }
+      setSpeaking((current) =>
+        current.size === next.size && [...next].every((id) => current.has(id)) ? current : next,
+      );
+    }, 250);
+    return () => {
+      window.clearInterval(timer);
+      meters.forEach((meter) => meter.source.disconnect());
+    };
+  }, [streams, active]);
+  return speaking;
+}
+
+function Avatar({ name, image, size = "md" }: { name: string; image?: string | null; size?: "md" | "lg" }) {
+  return (
+    <span className={`callroom-avatar ${size}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {image ? <img src={image} alt="" /> : initials(name)}
+    </span>
+  );
+}
+
+function Tile({
+  name,
+  image,
+  stream,
+  video,
+  mic,
+  mine,
+  screen,
+  speaking,
+  role,
+}: {
+  name: string;
+  image?: string | null;
+  stream: MediaStream | null;
+  video: boolean;
+  mic: boolean;
+  mine?: boolean;
+  screen?: boolean;
+  speaking?: boolean;
+  role?: string;
+}) {
+  return (
+    <figure className={`callroom-tile${speaking ? " speaking" : ""}${screen ? " screen" : ""}`}>
+      {video && stream ? (
+        <video
+          className={mine && !screen ? "mirror" : undefined}
+          autoPlay
+          playsInline
+          muted
+          ref={(element) => {
+            if (element && element.srcObject !== stream) element.srcObject = stream;
+          }}
+        />
+      ) : (
+        <Avatar name={name} image={image} size="lg" />
+      )}
+      <figcaption>
+        {!mic && <MicOff aria-label="Muted" />}
+        <span>{screen ? `${mine ? "You are" : `${name} is`} presenting` : mine ? `${name} (you)` : name}</span>
+        {role && !mine && !screen && <small>{role}</small>}
+      </figcaption>
+    </figure>
+  );
+}
+
+export function CallRoom({
+  code: initialCode,
+  conversationId,
+  kindHint,
+}: {
+  code: string;
+  conversationId?: string;
+  kindHint?: Kind;
+}) {
+  const [code, setCode] = useState(initialCode === "new" ? "" : initialCode.toLowerCase());
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [problem, setProblem] = useState("");
+  const [info, setInfo] = useState<MeetInfo | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
+  const [call, setCall] = useState<Call | null>(null);
+  const [local, setLocal] = useState<MediaStream | null>(null);
+  const [remote, setRemote] = useState<Record<string, MediaStream>>({});
+  const [peerState, setPeerState] = useState<Record<string, PeerState>>({});
+  const [micOn, setMicOn] = useState(true);
+  const [camOn, setCamOn] = useState(kindHint !== "AUDIO");
+  const [camBlocked, setCamBlocked] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [screen, setScreen] = useState<MediaStream | null>(null);
+  const [mics, setMics] = useState<Device[]>([]);
+  const [cams, setCams] = useState<Device[]>([]);
+  const [micId, setMicId] = useState("");
+  const [camId, setCamId] = useState("");
+  const [lobby, setLobby] = useState<Waiting[]>([]);
+  const [panel, setPanel] = useState(false);
+  const [notices, setNotices] = useState<{ id: number; text: string }[]>([]);
+  const [copied, setCopied] = useState(false);
+  const [elsewhere, setElsewhere] = useState(false);
+  const [soundOff, setSoundOff] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  const peers = useRef(new Map<string, RTCPeerConnection>());
+  const channels = useRef(new Map<string, RTCDataChannel>());
+  const queued = useRef(new Map<string, RTCIceCandidateInit[]>());
+  const localRef = useRef<MediaStream | null>(null);
+  const screenRef = useRef<MediaStream | null>(null);
+  const callRef = useRef<Call | null>(null);
+  const meRef = useRef<Me | null>(null);
+  const stateRef = useRef<PeerState>({ mic: true, cam: kindHint !== "AUDIO", sharing: false });
+  const phaseRef = useRef<Phase>("loading");
+  const seenRef = useRef<Set<string>>(new Set());
+  const noticeId = useRef(0);
+  const autoJoin = useRef(false);
+  const codeRef = useRef(code);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+  useEffect(() => {
+    callRef.current = call;
+  }, [call]);
+  useEffect(() => {
+    codeRef.current = code;
+  }, [code]);
+
+  const notify = useCallback((text: string) => {
+    noticeId.current += 1;
+    const id = noticeId.current;
+    setNotices((current) => [...current.slice(-2), { id, text }]);
+    window.setTimeout(() => setNotices((current) => current.filter((item) => item.id !== id)), 6000);
+  }, []);
+
+  // -- who am I, which chat, and what the link says -------------------------------------------
+
+  const loadInfo = useCallback(async (meetCode: string) => {
+    const next = await chatApi<MeetInfo>(`/meet/${meetCode}`);
+    setInfo(next);
+    return next;
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const people = await chatApi<{ me: Me }>("/people");
+        meRef.current = people.me;
+        if (!cancelled) setMe(people.me);
+        let meetCode = code;
+        if (!meetCode) {
+          if (!conversationId) throw new Error("This call link is not complete.");
+          meetCode = (await chatApi<{ code: string }>(`/conversations/${conversationId}/link`)).code;
+          window.history.replaceState(null, "", `/call/${meetCode}${kindHint ? `?kind=${kindHint}` : ""}`);
+          if (!cancelled) setCode(meetCode);
+        }
+        const next = await loadInfo(meetCode);
+        if (cancelled) return;
+        if (next.admission === "DENIED") setPhase("denied");
+        else {
+          autoJoin.current = next.live && (next.member || next.admission === "ADMITTED") && recentlyInCall(meetCode);
+          setPhase("prejoin");
+        }
+      } catch (reason) {
+        if (cancelled) return;
+        setProblem(reason instanceof Error ? reason.message : "This meeting link does not exist.");
+        setPhase("missing");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Runs once per link; `code` is set here only for /call/new.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (info) document.title = `${info.title} · Call`;
+  }, [info]);
+
+  // Keep the "who is in the call" line fresh while deciding to join.
+  useEffect(() => {
+    if (phase !== "prejoin" || !code) return;
+    const timer = window.setInterval(() => void loadInfo(code).catch(() => undefined), 5000);
+    return () => window.clearInterval(timer);
+  }, [phase, code, loadInfo]);
+
+  // -- camera and microphone ---------------------------------------------------------------
+
+  const callKind: Kind = call?.kind ?? (info?.live ? info.kind : (kindHint ?? "VIDEO"));
+  const wantsVideo = callKind === "VIDEO";
+
+  const refreshDevices = useCallback(async () => {
+    const devices = await navigator.mediaDevices?.enumerateDevices().catch(() => []);
+    const shape = (kind: MediaDeviceKind, fallback: string) =>
+      (devices ?? [])
+        .filter((device) => device.kind === kind && device.deviceId)
+        .map((device, index) => ({ value: device.deviceId, label: device.label || `${fallback} ${index + 1}` }));
+    setMics(shape("audioinput", "Microphone"));
+    setCams(shape("videoinput", "Camera"));
+  }, []);
+
+  const acquire = useCallback(
+    async (video: boolean, mic = micId, cam = camId) => {
+      const audio: MediaTrackConstraints | boolean = mic ? { deviceId: { exact: mic } } : true;
+      let stream: MediaStream | null = null;
+      let blocked = false;
+      if (video) {
+        stream = await navigator.mediaDevices
+          .getUserMedia({ audio, video: cam ? { deviceId: { exact: cam } } : true })
+          .catch(() => null);
+        blocked = stream === null;
+      }
+      if (!stream) stream = await navigator.mediaDevices.getUserMedia({ audio }).catch(() => null);
+      setCamBlocked(video && blocked);
+      if (stream) {
+        stream.getAudioTracks().forEach((track) => (track.enabled = stateRef.current.mic));
+        stream.getVideoTracks().forEach((track) => (track.enabled = stateRef.current.cam));
+        const audioId = stream.getAudioTracks()[0]?.getSettings().deviceId;
+        const videoId = stream.getVideoTracks()[0]?.getSettings().deviceId;
+        if (audioId) setMicId(audioId);
+        if (videoId) setCamId(videoId);
+      }
+      void refreshDevices();
+      return stream;
+    },
+    [micId, camId, refreshDevices],
+  );
+
+  // Preview on the join screen (the same stream is used in the call: one permission prompt).
+  useEffect(() => {
+    if (phase !== "prejoin" || localRef.current) return;
+    let cancelled = false;
+    void acquire(wantsVideo).then((stream) => {
+      if (cancelled) return stream?.getTracks().forEach((track) => track.stop());
+      localRef.current = stream;
+      setLocal(stream);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, wantsVideo, acquire]);
+
+  const stopLocal = useCallback(() => {
+    localRef.current?.getTracks().forEach((track) => track.stop());
+    screenRef.current?.getTracks().forEach((track) => track.stop());
+    localRef.current = null;
+    screenRef.current = null;
+    setLocal(null);
+    setScreen(null);
+    setSharing(false);
+    stateRef.current = { ...stateRef.current, sharing: false };
+  }, []);
+
+  // -- WebRTC --------------------------------------------------------------------------------
+
+  const broadcastState = useCallback(() => {
+    const text = JSON.stringify(stateRef.current);
+    channels.current.forEach((channel) => channel.readyState === "open" && channel.send(text));
+  }, []);
+
+  const signal = useCallback((to: string, kind: "offer" | "answer" | "ice", data: unknown) => {
+    const current = callRef.current;
+    if (!current) return;
+    void chatApi(`/calls/${current.id}/signal`, jsonBody("POST", { to_user_id: to, kind, data })).catch(
+      () => undefined,
+    );
+  }, []);
+
+  const watchChannel = useCallback((userId: string, channel: RTCDataChannel) => {
+    channels.current.set(userId, channel);
+    channel.onopen = () => channel.send(JSON.stringify(stateRef.current));
+    channel.onmessage = (event) => {
+      try {
+        const state = JSON.parse(String(event.data)) as PeerState;
+        setPeerState((current) => ({ ...current, [userId]: state }));
+      } catch {
+        // Not a state message.
+      }
+    };
+  }, []);
+
+  const dropPeer = useCallback((userId: string) => {
+    peers.current.get(userId)?.close();
+    peers.current.delete(userId);
+    channels.current.delete(userId);
+    queued.current.delete(userId);
+    setRemote((current) => {
+      if (!(userId in current)) return current;
+      const next = { ...current };
+      delete next[userId];
+      return next;
+    });
+  }, []);
+
+  const peerFor = useCallback(
+    (userId: string, initiator: boolean) => {
+      const existing = peers.current.get(userId);
+      if (existing) return existing;
+      const connection = new RTCPeerConnection(ICE);
+      const stream = localRef.current;
+      stream?.getTracks().forEach((track) => connection.addTrack(track, stream));
+      // While I share my screen, newcomers get the screen instead of the camera.
+      const screenTrack = screenRef.current?.getVideoTracks()[0];
+      if (screenTrack) {
+        const sender = connection.getSenders().find((item) => item.track?.kind === "video");
+        void sender?.replaceTrack(screenTrack);
+      }
+      if (initiator) watchChannel(userId, connection.createDataChannel("state"));
+      connection.ondatachannel = (event) => watchChannel(userId, event.channel);
+      connection.onicecandidate = (event) => event.candidate && signal(userId, "ice", event.candidate.toJSON());
+      connection.ontrack = (event) => {
+        const incoming = event.streams[0] ?? new MediaStream([event.track]);
+        setRemote((current) => ({ ...current, [userId]: incoming }));
+      };
+      connection.onconnectionstatechange = () => {
+        if (connection.connectionState === "failed")
+          notify("Could not connect to someone. Their network may block calls.");
+      };
+      peers.current.set(userId, connection);
+      return connection;
+    },
+    [notify, signal, watchChannel],
+  );
+
+  const teardown = useCallback(() => {
+    peers.current.forEach((connection) => connection.close());
+    peers.current.clear();
+    channels.current.clear();
+    queued.current.clear();
+    seenRef.current = new Set();
+    setRemote({});
+    setPeerState({});
+    setLobby([]);
+    setPanel(false);
+    setCall(null);
+    callRef.current = null;
+  }, []);
+
+  const enter = useCallback(
+    async (joined: Call) => {
+      const self = meRef.current;
+      setCall(joined);
+      callRef.current = joined;
+      seenRef.current = new Set(joined.participants.map((seat) => seat.id));
+      setPhase("incall");
+      if (codeRef.current) rememberCall(codeRef.current);
+      if (audioContext()?.state === "suspended") setSoundOff(true);
+      // Audio-only call: do not send the camera.
+      if (joined.kind === "AUDIO") {
+        localRef.current?.getVideoTracks().forEach((track) => {
+          track.stop();
+          localRef.current?.removeTrack(track);
+        });
+      }
+      // The newcomer calls everyone already there.
+      for (const seat of joined.participants) {
+        if (seat.id === self?.id) continue;
+        const connection = peerFor(seat.id, true);
+        const offer = await connection.createOffer();
+        await connection.setLocalDescription(offer);
+        signal(seat.id, "offer", offer);
+      }
+    },
+    [peerFor, signal],
+  );
+
+  // -- joining, asking, leaving --------------------------------------------------------------
+
+  const join = useCallback(async () => {
+    unlockSounds();
+    if (!info || !code) return;
+    setProblem("");
+    if (!localRef.current) {
+      const stream = await acquire(wantsVideo);
+      localRef.current = stream;
+      setLocal(stream);
+    }
+    if (!localRef.current) {
+      setProblem("Allow the microphone for this site in your browser, then try again.");
+      return;
+    }
+    setPhase("joining");
+    try {
+      if (info.member && info.conversation_id) {
+        const kind = info.live ? info.kind : (kindHint ?? "VIDEO");
+        await enter(await chatApi<Call>(`/conversations/${info.conversation_id}/calls`, jsonBody("POST", { kind })));
+      } else if (info.admission === "ADMITTED" && info.call) {
+        await enter(await chatApi<Call>(`/calls/${info.call.id}/join`, { method: "POST" }));
+      } else {
+        const next = await chatApi<MeetInfo>(`/meet/${code}/knock`, { method: "POST" });
+        setInfo(next);
+        if (next.admission === "ADMITTED" && next.call) {
+          sounds.admitted();
+          await enter(await chatApi<Call>(`/calls/${next.call.id}/join`, { method: "POST" }));
+        } else setPhase(next.admission === "DENIED" ? "denied" : "asking");
+      }
+    } catch (reason) {
+      setProblem(reason instanceof Error ? reason.message : "Could not join the call.");
+      setPhase("prejoin");
+      void loadInfo(code).catch(() => undefined);
+    }
+  }, [info, code, acquire, wantsVideo, kindHint, enter, loadInfo]);
+
+  const cancelAsk = useCallback(async () => {
+    if (code) await chatApi(`/meet/${code}/knock`, { method: "DELETE" }).catch(() => undefined);
+    setPhase("prejoin");
+  }, [code]);
+
+  const leave = useCallback(
+    async (next: Phase = "left") => {
+      const current = callRef.current;
+      teardown();
+      stopLocal();
+      sounds.end();
+      if (codeRef.current) forgetCall(codeRef.current);
+      setPhase(next);
+      if (current) await chatApi(`/calls/${current.id}/leave`, { method: "POST" }).catch(() => undefined);
+    },
+    [teardown, stopLocal],
+  );
+
+  const rejoin = useCallback(async () => {
+    if (!code) return;
+    setPhase("loading");
+    const next = await loadInfo(code).catch(() => null);
+    setPhase(next ? (next.admission === "DENIED" ? "denied" : "prejoin") : "missing");
+  }, [code, loadInfo]);
+
+  // While asking: say "still here" every few seconds and pick up the answer.
+  useEffect(() => {
+    if (phase !== "asking" || !code) return;
+    const check = async () => {
+      const next = await chatApi<MeetInfo>(`/meet/${code}/knock`, { method: "POST" }).catch(() => null);
+      if (!next || phaseRef.current !== "asking") return;
+      setInfo(next);
+      if (next.admission === "ADMITTED" && next.call) {
+        sounds.admitted();
+        setPhase("joining");
+        try {
+          await enter(await chatApi<Call>(`/calls/${next.call.id}/join`, { method: "POST" }));
+        } catch (reason) {
+          setProblem(reason instanceof Error ? reason.message : "Could not join the call.");
+          setPhase("prejoin");
+        }
+      } else if (next.admission === "DENIED") setPhase("denied");
+      else if (!next.live) {
+        setProblem("The call ended before you were let in.");
+        setPhase("prejoin");
+      }
+    };
+    const timer = window.setInterval(() => void check(), 8000);
+    const off = subscribeRealtime((event) => {
+      if (event.type === "call.admission") void check();
+    });
+    const bye = () => void fetch(`/api/chat/meet/${code}/knock`, { method: "DELETE", keepalive: true });
+    window.addEventListener("pagehide", bye);
+    return () => {
+      window.clearInterval(timer);
+      off();
+      window.removeEventListener("pagehide", bye);
+    };
+  }, [phase, code, enter]);
+
+  // -- in the call ---------------------------------------------------------------------------
+
+  const loadLobby = useCallback(async () => {
+    const current = callRef.current;
+    if (!current) return;
+    const result = await chatApi<{ items: Waiting[] }>(`/calls/${current.id}/lobby`).catch(() => null);
+    if (result) setLobby(result.items);
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "incall") return;
+    const first = window.setTimeout(() => void loadLobby(), 0);
+    const tick = window.setInterval(() => setNow(Date.now()), 1000);
+    const ping = window.setInterval(() => {
+      const current = callRef.current;
+      if (!current) return;
+      if (codeRef.current) rememberCall(codeRef.current);
+      void chatApi(`/calls/${current.id}/ping`, { method: "POST" }).catch(() => {
+        notify("You were disconnected from the call.");
+        void leave("left");
+      });
+    }, 10_000);
+    const lobbyTimer = window.setInterval(() => void loadLobby(), 15_000);
+    const bye = () => {
+      const current = callRef.current;
+      if (current) navigator.sendBeacon?.(`/api/chat/calls/${current.id}/leave`);
+    };
+    window.addEventListener("pagehide", bye);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(tick);
+      window.clearInterval(ping);
+      window.clearInterval(lobbyTimer);
+      window.removeEventListener("pagehide", bye);
+    };
+  }, [phase, loadLobby, leave, notify]);
+
+  // Live events: people joining and leaving, the lobby, WebRTC signals.
+  useEffect(
+    () =>
+      subscribeRealtime((event) => {
+        const data = event.data as Record<string, unknown>;
+        const current = callRef.current;
+        if (event.type === "call.update") {
+          const update = data.call as Call;
+          if (!current || current.id !== update.id) return;
+          if (update.ended_at) {
+            void leave("ended");
+            return;
+          }
+          const self = meRef.current?.id;
+          const here = new Set(update.participants.map((seat) => seat.id));
+          const before = seenRef.current;
+          const joined = update.participants.filter((seat) => seat.id !== self && !before.has(seat.id));
+          const gone = [...before].filter((id) => id !== self && !here.has(id));
+          if (joined.length) sounds.join();
+          else if (gone.length) sounds.leave();
+          joined.forEach((seat) => notify(`${seat.name} joined`));
+          gone.forEach((id) => {
+            const name = current.participants.find((seat) => seat.id === id)?.name;
+            if (name) notify(`${name} left`);
+          });
+          seenRef.current = here;
+          setCall(update);
+          [...peers.current.keys()].forEach((id) => !here.has(id) && dropPeer(id));
+        } else if (event.type === "call.knock") {
+          if (!current || data.call_id !== current.id) return;
+          sounds.knock();
+          void loadLobby();
+        } else if (event.type === "call.lobby") {
+          if (current && data.call_id === current.id) void loadLobby();
+        } else if (event.type === "call.declined") {
+          const declined = data as { call_id: string; name: string; direct: boolean };
+          if (current?.id !== declined.call_id) return;
+          notify(`${declined.name} declined the call.`);
+          if (declined.direct && current.participants.length <= 1) void leave("left");
+        } else if (event.type === "call.signal") {
+          const message = data as {
+            call_id: string;
+            from_user_id: string;
+            kind: "offer" | "answer" | "ice";
+            data: unknown;
+          };
+          if (!current || current.id !== message.call_id) return;
+          const from = message.from_user_id;
+          void (async () => {
+            const connection = peerFor(from, false);
+            if (message.kind === "offer") {
+              await connection.setRemoteDescription(message.data as RTCSessionDescriptionInit);
+              const answer = await connection.createAnswer();
+              await connection.setLocalDescription(answer);
+              signal(from, "answer", answer);
+            } else if (message.kind === "answer") {
+              await connection.setRemoteDescription(message.data as RTCSessionDescriptionInit);
+            } else if (connection.remoteDescription) {
+              await connection.addIceCandidate(message.data as RTCIceCandidateInit).catch(() => undefined);
+              return;
+            } else {
+              queued.current.set(from, [...(queued.current.get(from) ?? []), message.data as RTCIceCandidateInit]);
+              return;
+            }
+            for (const candidate of queued.current.get(from) ?? []) {
+              await connection.addIceCandidate(candidate).catch(() => undefined);
+            }
+            queued.current.delete(from);
+          })();
+        }
+      }),
+    [dropPeer, leave, loadLobby, notify, peerFor, signal],
+  );
+
+  // The caller hears ringback in a one-to-one call until the other person picks up.
+  const alone = phase === "incall" && (call?.participants.length ?? 0) <= 1;
+  const ringback = alone && info?.type === "DIRECT" && call?.started_by_id === me?.id;
+  useEffect(() => {
+    if (!ringback) return;
+    const stop = repeat(sounds.ringback, 4000);
+    const quit = window.setTimeout(stop, 45_000);
+    return () => {
+      stop();
+      window.clearTimeout(quit);
+    };
+  }, [ringback]);
+
+  // One tab per call: a second tab asks the first one to hand over.
+  useEffect(() => {
+    if (!code || typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel(`adverse-call-${code}`);
+    channel.onmessage = (event) => {
+      if (event.data === "who" && phaseRef.current === "incall") channel.postMessage("here");
+      else if (event.data === "here" && phaseRef.current === "prejoin") setElsewhere(true);
+      else if (event.data === "takeover" && phaseRef.current === "incall") {
+        notify("This call moved to another tab.");
+        void leave("left");
+      }
+    };
+    channel.postMessage("who");
+    return () => channel.close();
+  }, [code, leave, notify]);
+
+  // Back after a reload while in the call: join again by itself once the camera is ready.
+  useEffect(() => {
+    if (phase !== "prejoin" || !local || !autoJoin.current) return;
+    autoJoin.current = false;
+    const timer = window.setTimeout(() => void join(), 0);
+    return () => window.clearTimeout(timer);
+  }, [phase, local, join]);
+
+  // Browsers keep sound off after a reload until a click: the first click anywhere turns it on.
+  const turnSoundOn = useCallback(() => {
+    unlockSounds();
+    document.querySelectorAll("audio").forEach((element) => void element.play().catch(() => undefined));
+    setSoundOff(false);
+  }, []);
+  useEffect(() => {
+    if (!soundOff) return;
+    document.addEventListener("pointerdown", turnSoundOn, { once: true });
+    return () => document.removeEventListener("pointerdown", turnSoundOn);
+  }, [soundOff, turnSoundOn]);
+
+  // -- controls ------------------------------------------------------------------------------
+
+  function setState(next: Partial<PeerState>) {
+    stateRef.current = { ...stateRef.current, ...next };
+    broadcastState();
+  }
+
+  function toggleMic() {
+    const next = !micOn;
+    localRef.current?.getAudioTracks().forEach((track) => (track.enabled = next));
+    setMicOn(next);
+    setState({ mic: next });
+  }
+
+  function toggleCamera() {
+    const next = !camOn;
+    localRef.current?.getVideoTracks().forEach((track) => (track.enabled = next));
+    setCamOn(next);
+    setState({ cam: next });
+  }
+
+  function replaceVideo(track: MediaStreamTrack | null) {
+    peers.current.forEach((connection) => {
+      const sender = connection.getSenders().find((item) => item.track?.kind === "video" || item.track === null);
+      void sender?.replaceTrack(track);
+    });
+  }
+
+  async function toggleShare() {
+    if (sharing) {
+      screenRef.current?.getTracks().forEach((track) => track.stop());
+      screenRef.current = null;
+      setScreen(null);
+      replaceVideo(localRef.current?.getVideoTracks()[0] ?? null);
+      setSharing(false);
+      setState({ sharing: false });
+      return;
+    }
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const track = display.getVideoTracks()[0];
+      screenRef.current = display;
+      setScreen(display);
+      replaceVideo(track);
+      setSharing(true);
+      setState({ sharing: true });
+      track.onended = () => {
+        replaceVideo(localRef.current?.getVideoTracks()[0] ?? null);
+        screenRef.current = null;
+        setScreen(null);
+        setSharing(false);
+        setState({ sharing: false });
+      };
+    } catch {
+      // The person closed the screen picker.
+    }
+  }
+
+  async function switchDevice(kind: "audio" | "video", deviceId: string) {
+    if (kind === "audio") setMicId(deviceId);
+    else setCamId(deviceId);
+    const fresh = await navigator.mediaDevices
+      .getUserMedia(
+        kind === "audio" ? { audio: { deviceId: { exact: deviceId } } } : { video: { deviceId: { exact: deviceId } } },
+      )
+      .catch(() => null);
+    const track = fresh?.getTracks()[0];
+    const stream = localRef.current;
+    if (!track || !stream) return;
+    track.enabled = kind === "audio" ? stateRef.current.mic : stateRef.current.cam;
+    const old = kind === "audio" ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
+    if (old) {
+      stream.removeTrack(old);
+      old.stop();
+    }
+    stream.addTrack(track);
+    peers.current.forEach((connection) => {
+      const sender = connection
+        .getSenders()
+        .find((item) => item.track?.kind === kind || (item.track === null && kind === "video"));
+      if (kind === "video" && screenRef.current) return; // keep presenting; camera returns after
+      void sender?.replaceTrack(track);
+    });
+    const copy = new MediaStream(stream.getTracks());
+    localRef.current = copy;
+    setLocal(copy);
+  }
+
+  async function decide(person: Waiting, admit: boolean) {
+    const current = callRef.current;
+    if (!current) return;
+    setLobby((items) => items.filter((item) => item.id !== person.id));
+    try {
+      await chatApi(`/calls/${current.id}/lobby/${person.id}`, jsonBody("POST", { admit }));
+      notify(admit ? `${person.name} was let in` : `${person.name} was not let in`);
+    } catch (reason) {
+      notify(reason instanceof Error ? reason.message : "Could not answer the request.");
+      void loadLobby();
+    }
+  }
+
+  async function copyLink() {
+    if (!code) return;
+    await navigator.clipboard?.writeText(`${window.location.origin}/call/${code}`).catch(() => undefined);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
+
+  // -- view ----------------------------------------------------------------------------------
+
+  const others = useMemo(() => (call?.participants ?? []).filter((seat) => seat.id !== me?.id), [call, me]);
+  const meters = useMemo(() => {
+    const streams: Record<string, MediaStream | null> = { ...remote };
+    if (me) streams[me.id] = local;
+    return streams;
+  }, [remote, local, me]);
+  const speaking = useSpeaking(meters, phase === "incall");
+  const presenter = sharing ? me?.id : others.find((seat) => peerState[seat.id]?.sharing)?.id;
+  const started = call ? new Date(call.started_at).getTime() : now;
+  const hasCamera = Boolean(local?.getVideoTracks().length);
+  const linkText = code ? `${typeof window === "undefined" ? "" : window.location.host}/call/${code}` : "";
+
+  if (phase === "loading" || phase === "joining") {
+    return (
+      <main className="callroom center">
+        <span className="callroom-spinner" aria-hidden="true" />
+        <p>{phase === "joining" ? "Joining…" : "Opening the call…"}</p>
+      </main>
+    );
+  }
+
+  if (phase === "missing") {
+    return (
+      <main className="callroom center">
+        <h1>Can&apos;t open this call</h1>
+        <p>{problem || "Check the link and try again."}</p>
+        <Link className="callroom-button" href="/chat">
+          <ArrowLeft /> Go to chat
+        </Link>
+      </main>
+    );
+  }
+
+  if (phase === "left" || phase === "ended" || phase === "denied") {
+    const heading =
+      phase === "ended" ? "The call has ended" : phase === "denied" ? "You can't join this call" : "You left the call";
+    return (
+      <main className="callroom center">
+        <h1>{heading}</h1>
+        {phase === "denied" && <p>Someone in the call declined your request to join.</p>}
+        {info && <p className="muted">{info.title}</p>}
+        <div className="callroom-row">
+          {phase !== "denied" && (
+            <button type="button" className="callroom-button primary" onClick={() => void rejoin()}>
+              {phase === "ended" ? "Back to the link" : "Rejoin"}
+            </button>
+          )}
+          <Link className="callroom-button" href="/chat">
+            Go to chat
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (phase === "prejoin" || phase === "asking") {
+    const outsider = info && !info.member && info.admission !== "ADMITTED";
+    const waitingForHost = outsider && !info?.live;
+    const people = info?.in_call ?? [];
+    return (
+      <main className="callroom prejoin">
+        <Link className="callroom-back" href="/chat" aria-label="Back to chat">
+          <ArrowLeft />
+        </Link>
+        <section className="callroom-preview">
+          <div className="callroom-preview-video">
+            {wantsVideo && camOn && hasCamera ? (
+              <video
+                className="mirror"
+                autoPlay
+                playsInline
+                muted
+                ref={(element) => {
+                  if (element && element.srcObject !== local) element.srcObject = local;
+                }}
+              />
+            ) : (
+              <div className="callroom-preview-off">
+                <Avatar name={me?.name ?? "You"} image={me?.image} size="lg" />
+                <span>
+                  {!local
+                    ? "Allow camera and microphone to be seen and heard"
+                    : wantsVideo
+                      ? "Camera is off"
+                      : "Voice call"}
+                </span>
+              </div>
+            )}
+            <span className="callroom-preview-name">{me?.name}</span>
+            <div className="callroom-preview-controls">
+              <button
+                type="button"
+                className={`callroom-round${micOn ? "" : " off"}`}
+                aria-label={micOn ? "Turn microphone off" : "Turn microphone on"}
+                title={micOn ? "Turn microphone off" : "Turn microphone on"}
+                onClick={toggleMic}
+              >
+                {micOn ? <Mic /> : <MicOff />}
+              </button>
+              {wantsVideo && (
+                <button
+                  type="button"
+                  className={`callroom-round${camOn && !camBlocked ? "" : " off"}`}
+                  aria-label={camOn ? "Turn camera off" : "Turn camera on"}
+                  title={camBlocked ? "Camera not available" : camOn ? "Turn camera off" : "Turn camera on"}
+                  disabled={camBlocked}
+                  onClick={toggleCamera}
+                >
+                  {camOn && !camBlocked ? <Video /> : <VideoOff />}
+                </button>
+              )}
+            </div>
+          </div>
+          {(mics.length > 0 || (wantsVideo && cams.length > 0)) && (
+            <div className="callroom-devices">
+              {mics.length > 0 && (
+                <label>
+                  <Mic aria-hidden="true" />
+                  <LooplessSelect
+                    value={micId}
+                    options={mics}
+                    onValueChange={(value) => void switchDevice("audio", value)}
+                    ariaLabel="Microphone"
+                  />
+                </label>
+              )}
+              {wantsVideo && cams.length > 0 && (
+                <label>
+                  <Video aria-hidden="true" />
+                  <LooplessSelect
+                    value={camId}
+                    options={cams}
+                    onValueChange={(value) => void switchDevice("video", value)}
+                    ariaLabel="Camera"
+                  />
+                </label>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="callroom-ready">
+          {phase === "asking" ? (
+            <>
+              <h1>Asking to join…</h1>
+              <p>You&apos;ll join when someone in the call lets you in.</p>
+              <span className="callroom-spinner" aria-hidden="true" />
+              <button type="button" className="callroom-button" onClick={() => void cancelAsk()}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <h1>{waitingForHost ? "Waiting for the host" : outsider ? "Ask to join?" : "Ready to join?"}</h1>
+              <p className="callroom-title">{info?.title}</p>
+              <p className="muted">
+                {people.length
+                  ? `${listNames(people)} ${people.length === 1 ? "is" : "are"} in this call`
+                  : waitingForHost
+                    ? "The call has not started yet. This page checks every few seconds."
+                    : "No one else is here yet"}
+              </p>
+              {elsewhere && (
+                <p className="callroom-warning">
+                  You&apos;re already in this call in another tab.{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      new BroadcastChannel(`adverse-call-${code}`).postMessage("takeover");
+                      setElsewhere(false);
+                    }}
+                  >
+                    Use this tab instead
+                  </button>
+                </p>
+              )}
+              {problem && <p className="callroom-warning">{problem}</p>}
+              <div className="callroom-row">
+                <button
+                  type="button"
+                  className="callroom-button primary"
+                  disabled={Boolean(waitingForHost) || elsewhere}
+                  onClick={() => void join()}
+                >
+                  {outsider ? <Hand /> : null}
+                  {outsider ? "Ask to join" : info?.live ? "Join now" : "Start call"}
+                </button>
+                {info?.member && (
+                  <button type="button" className="callroom-button" onClick={() => void copyLink()}>
+                    {copied ? <Check /> : <Link2 />} {copied ? "Link copied" : "Copy link"}
+                  </button>
+                )}
+              </div>
+              {outsider && !waitingForHost && (
+                <p className="muted small">
+                  You&apos;re not in this chat, so {info?.host_name ?? "the host"} or an admin in the call needs to let
+                  you in.
+                </p>
+              )}
+            </>
+          )}
+        </section>
+      </main>
+    );
+  }
+
+  // In the call.
+  const tiles = [
+    ...(me
+      ? [
+          {
+            id: me.id,
+            name: me.name,
+            image: me.image,
+            role: "",
+            stream: sharing && screen ? screen : local,
+            video: sharing ? true : callKind === "VIDEO" && camOn && hasCamera,
+            mic: micOn,
+            mine: true,
+            screen: sharing,
+          },
+        ]
+      : []),
+    ...others.map((seat) => {
+      const state = peerState[seat.id];
+      return {
+        id: seat.id,
+        name: seat.name,
+        image: seat.image,
+        role: ROLE_LABEL[seat.role] ?? "",
+        stream: remote[seat.id] ?? null,
+        video: callKind === "VIDEO" && (state ? state.cam || state.sharing : true) && Boolean(remote[seat.id]),
+        mic: state ? state.mic : true,
+        mine: false,
+        screen: Boolean(state?.sharing),
+      };
+    }),
+  ];
+  const spotlight = presenter ? tiles.find((tile) => tile.id === presenter) : undefined;
+  const strip = spotlight ? tiles.filter((tile) => tile.id !== presenter) : tiles;
+  const columns = strip.length <= 1 ? 1 : strip.length <= 4 ? 2 : strip.length <= 9 ? 3 : 4;
+
+  return (
+    <main className={`callroom incall${panel ? " with-panel" : ""}`}>
+      {/* Everyone else's voice plays here. */}
+      {Object.entries(remote).map(([id, stream]) => (
+        <audio
+          key={id}
+          autoPlay
+          ref={(element) => {
+            if (element && element.srcObject !== stream) {
+              element.srcObject = stream;
+              void element.play().catch(() => setSoundOff(true));
+            }
+          }}
+        />
+      ))}
+
+      <div className="callroom-body">
+        <section className={`callroom-stage${spotlight ? " spotlight" : ""}`}>
+          {spotlight && (
+            <div className="callroom-main">
+              <Tile {...spotlight} speaking={speaking.has(spotlight.id)} />
+            </div>
+          )}
+          <div className={`callroom-grid cols-${spotlight ? "strip" : columns}`}>
+            {strip.map((tile) => (
+              <Tile key={tile.id} {...tile} screen={false} speaking={speaking.has(tile.id)} />
+            ))}
+            {others.length === 0 && !spotlight && (
+              <div className="callroom-alone">
+                <strong>{ringback ? `Calling ${info?.title ?? ""}…` : "You're the only one here"}</strong>
+                {code && (
+                  <>
+                    <span>Share this link with others you want in the call</span>
+                    <button type="button" className="callroom-linkbox" onClick={() => void copyLink()}>
+                      <span>{linkText}</span>
+                      {copied ? <Check /> : <Copy />}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {panel && (
+          <aside className="callroom-panel" aria-label="People">
+            <header>
+              <strong>People</strong>
+              <button type="button" className="callroom-icon" aria-label="Close" onClick={() => setPanel(false)}>
+                <X />
+              </button>
+            </header>
+            {code && (
+              <button type="button" className="callroom-linkbox" onClick={() => void copyLink()}>
+                <span>{linkText}</span>
+                {copied ? <Check /> : <Copy />}
+              </button>
+            )}
+            {lobby.length > 0 && (
+              <>
+                <h2>Waiting to join · {lobby.length}</h2>
+                <ul>
+                  {lobby.map((person) => (
+                    <li key={person.id}>
+                      <Avatar name={person.name} image={person.image} />
+                      <span>
+                        {person.name}
+                        <small>{ROLE_LABEL[person.role]}</small>
+                      </span>
+                      <button type="button" className="callroom-chip" onClick={() => void decide(person, false)}>
+                        Deny
+                      </button>
+                      <button type="button" className="callroom-chip primary" onClick={() => void decide(person, true)}>
+                        Admit
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <h2>In the call · {call?.participants.length ?? 0}</h2>
+            <ul>
+              {(call?.participants ?? []).map((seat) => {
+                const mine = seat.id === me?.id;
+                const mic = mine ? micOn : (peerState[seat.id]?.mic ?? true);
+                return (
+                  <li key={seat.id}>
+                    <Avatar name={seat.name} image={seat.image} />
+                    <span>
+                      {seat.name}
+                      {mine ? " (you)" : ""}
+                      <small>
+                        {ROLE_LABEL[seat.role]}
+                        {seat.id === call?.started_by_id ? " · Host" : ""}
+                      </small>
+                    </span>
+                    {mic ? <Mic aria-label="Microphone on" /> : <MicOff aria-label="Muted" className="off" />}
+                  </li>
+                );
+              })}
+            </ul>
+          </aside>
+        )}
+      </div>
+
+      {/* Someone is waiting: answer without opening the panel. */}
+      {lobby.length > 0 && !panel && (
+        <div className="callroom-knock" role="alertdialog" aria-label="Someone wants to join">
+          <Avatar name={lobby[0].name} image={lobby[0].image} />
+          <span>
+            <strong>{lobby[0].name}</strong> wants to join
+            {lobby.length > 1 ? ` (+${lobby.length - 1} more)` : ""}
+          </span>
+          <button type="button" className="callroom-chip" onClick={() => void decide(lobby[0], false)}>
+            Deny
+          </button>
+          <button type="button" className="callroom-chip primary" onClick={() => void decide(lobby[0], true)}>
+            Admit
+          </button>
+          {lobby.length > 1 && (
+            <button type="button" className="callroom-chip" onClick={() => setPanel(true)}>
+              View all
+            </button>
+          )}
+        </div>
+      )}
+
+      {soundOff && (
+        <button type="button" className="callroom-soundoff" onClick={turnSoundOn}>
+          <Volume2 /> Sound is off · click to turn it on
+        </button>
+      )}
+
+      <div className="callroom-notices" aria-live="polite">
+        {notices.map((item) => (
+          <p key={item.id}>{item.text}</p>
+        ))}
+      </div>
+
+      <footer className="callroom-bar">
+        <div className="callroom-bar-side">
+          <strong>{clockSince(started, now)}</strong>
+          <span className="callroom-bar-title">{info?.title}</span>
+        </div>
+        <div className="callroom-bar-main">
+          <button
+            type="button"
+            className={`callroom-round${micOn ? "" : " off"}`}
+            aria-label={micOn ? "Turn microphone off" : "Turn microphone on"}
+            title={micOn ? "Turn microphone off" : "Turn microphone on"}
+            onClick={toggleMic}
+          >
+            {micOn ? <Mic /> : <MicOff />}
+          </button>
+          {callKind === "VIDEO" && (
+            <>
+              <button
+                type="button"
+                className={`callroom-round${camOn && hasCamera ? "" : " off"}`}
+                aria-label={camOn ? "Turn camera off" : "Turn camera on"}
+                title={hasCamera ? (camOn ? "Turn camera off" : "Turn camera on") : "Camera not available"}
+                disabled={!hasCamera}
+                onClick={toggleCamera}
+              >
+                {camOn && hasCamera ? <Video /> : <VideoOff />}
+              </button>
+              <button
+                type="button"
+                className={`callroom-round${sharing ? " on" : ""}`}
+                aria-label={sharing ? "Stop presenting" : "Present your screen"}
+                title={sharing ? "Stop presenting" : "Present your screen"}
+                onClick={() => void toggleShare()}
+              >
+                <MonitorUp />
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className="callroom-round leave"
+            aria-label="Leave call"
+            title="Leave call"
+            onClick={() => void leave("left")}
+          >
+            <PhoneOff />
+          </button>
+        </div>
+        <div className="callroom-bar-side end">
+          <button
+            type="button"
+            className="callroom-icon"
+            aria-label="Copy meeting link"
+            title="Copy meeting link"
+            onClick={() => void copyLink()}
+          >
+            {copied ? <Check /> : <Link2 />}
+          </button>
+          <button
+            type="button"
+            className={`callroom-icon${panel ? " active" : ""}`}
+            aria-label="People"
+            title="People"
+            onClick={() => setPanel((open) => !open)}
+          >
+            <Users />
+            <span className="callroom-count">{call?.participants.length ?? 0}</span>
+            {lobby.length > 0 && <span className="callroom-badge">{lobby.length}</span>}
+          </button>
+        </div>
+      </footer>
+    </main>
+  );
+}

@@ -24,6 +24,7 @@ import {
   FileText,
   ImagePlus,
   Info,
+  Link2,
   Inbox,
   MessageCirclePlus,
   MessageSquare,
@@ -44,7 +45,7 @@ import {
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { subscribeRealtime } from "@/lib/realtime";
-import { joinCall, startCall } from "./call-manager";
+import { copyMeetLink, joinCall, startCall } from "./call-manager";
 import {
   REACTIONS,
   ROLE_LABELS,
@@ -1253,6 +1254,19 @@ function Thread({
             onClick={() => startCall(chat.id, "VIDEO", chat.title)}
           >
             <Video />
+          </button>
+          <button
+            type="button"
+            className="chat-icon-button"
+            aria-label="Copy meeting link"
+            title="Copy meeting link: anyone in the company can ask to join"
+            onClick={() =>
+              void copyMeetLink(chat.id)
+                .then((url) => onError(`Meeting link copied: ${url}`))
+                .catch((reason) => onError(reason instanceof Error ? reason.message : "Could not get the link."))
+            }
+          >
+            <Link2 />
           </button>
           <button
             type="button"

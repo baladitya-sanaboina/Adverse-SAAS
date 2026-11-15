@@ -5,9 +5,9 @@
  * role's calendar, with a Join button from 10 minutes before the start until the end.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Phone, Video } from "lucide-react";
+import { Check, Link2, Phone, Video } from "lucide-react";
 import { useLiveRefresh } from "../realtime/realtime";
-import { startCall } from "../chat/call-manager";
+import { meetUrl, openMeet, startCall } from "../chat/call-manager";
 
 export type CalendarMeeting = {
   id: string;
@@ -20,6 +20,7 @@ export type CalendarMeeting = {
   duration_minutes: number;
   kind: "AUDIO" | "VIDEO";
   created_by_name: string;
+  code: string | null;
 };
 
 export function localDay(value: string): string {
@@ -55,8 +56,10 @@ export function meetingTime(meeting: CalendarMeeting): string {
 }
 
 export function MeetingCard({ meeting, now }: { meeting: CalendarMeeting; now: number }) {
+  const [copied, setCopied] = useState(false);
   const open = now >= new Date(meeting.starts_at).getTime() - 10 * 60_000 && now <= new Date(meeting.ends_at).getTime();
   const Icon = meeting.kind === "VIDEO" ? Video : Phone;
+  const code = meeting.code;
   return (
     <article className="cal-card meeting">
       <div className="cal-card-title static">
@@ -73,10 +76,28 @@ export function MeetingCard({ meeting, now }: { meeting: CalendarMeeting; now: n
           className="cal-join"
           disabled={!open}
           title={open ? "Join now" : "Opens 10 minutes before the start"}
-          onClick={() => startCall(meeting.conversation_id, meeting.kind, meeting.conversation_title)}
+          onClick={() =>
+            code
+              ? openMeet(code, meeting.kind)
+              : startCall(meeting.conversation_id, meeting.kind, meeting.conversation_title)
+          }
         >
           <Icon aria-hidden="true" /> Join
         </button>
+        {code && (
+          <button
+            type="button"
+            className="cal-join"
+            title="Copy the meeting link to share"
+            onClick={() => {
+              void navigator.clipboard?.writeText(meetUrl(code)).catch(() => undefined);
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 2000);
+            }}
+          >
+            {copied ? <Check aria-hidden="true" /> : <Link2 aria-hidden="true" />} {copied ? "Copied" : "Link"}
+          </button>
+        )}
         <span>Set by {meeting.created_by_name}</span>
       </div>
     </article>

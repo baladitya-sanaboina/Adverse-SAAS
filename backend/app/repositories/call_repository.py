@@ -229,7 +229,8 @@ class CallRepository:
                 if cursor.fetchone() is None:
                     break
             cursor.execute(
-                "UPDATE chat_conversations SET meet_code = %s WHERE id = %s", (code, conversation_id)
+                "UPDATE chat_conversations SET meet_code = %s WHERE id = %s",
+                (code, conversation_id),
             )
             connection.commit()
         return code

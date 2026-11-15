@@ -37,6 +37,13 @@ function validateEmail(value: string): string {
   return "";
 }
 
+// After signing in from a meet link, go back to that call. Only /call/<code> paths are
+// followed, so the login page cannot be used to send people to another site.
+function afterLogin(): string {
+  const next = new URLSearchParams(window.location.search).get("next") ?? "";
+  return /^\/call\/[a-z-]{3,16}(\?kind=(AUDIO|VIDEO))?$/i.test(next) ? next : "/dashboard";
+}
+
 export function AuthCursor() {
   const cursor = useRef<HTMLDivElement>(null);
 
@@ -232,7 +239,7 @@ export default function LoginRegisterPage({ initialMode = "login" }: { initialMo
       if (mode === "login") {
         await authenticate(form.email.trim(), form.password);
         setSuccess(true);
-        window.setTimeout(() => router.replace("/dashboard"), 650);
+        window.setTimeout(() => router.replace(afterLogin()), 650);
       } else {
         const response = await fetch("/api/auth/signup", {
           method: "POST",

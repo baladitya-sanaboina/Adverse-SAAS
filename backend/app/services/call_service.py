@@ -347,9 +347,7 @@ class CallService:
             else None
         )
         seats = self.repository.seats(call.id) if call else []
-        host = (
-            self.chat.repository.person(company_id, call.started_by_id) if call else None
-        )
+        host = self.chat.repository.person(company_id, call.started_by_id) if call else None
         allowed = member or admission == "ADMITTED"
         return MeetInfoResponse(
             code=code.strip().lower(),
@@ -400,9 +398,7 @@ class CallService:
         if call is None:
             return
         self.repository.withdraw(call.id, context.user_id)
-        realtime.publish(
-            self._admitters(company_id, call), "call.lobby", {"call_id": str(call.id)}
-        )
+        realtime.publish(self._admitters(company_id, call), "call.lobby", {"call_id": str(call.id)})
 
     def lobby(self, context: AuthContext, call_id: UUID) -> LobbyResponse:
         _, role, _, call = self._live(call_id, context)
@@ -437,9 +433,7 @@ class CallService:
             "call.admission",
             {"call_id": str(call.id), "code": call.meet_code, "status": status},
         )
-        realtime.publish(
-            self._admitters(company_id, call), "call.lobby", {"call_id": str(call.id)}
-        )
+        realtime.publish(self._admitters(company_id, call), "call.lobby", {"call_id": str(call.id)})
 
     # -- meetings ------------------------------------------------------------------------------
 

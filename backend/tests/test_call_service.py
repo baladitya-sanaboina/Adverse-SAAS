@@ -21,13 +21,13 @@ from tests.test_chat_service import (
     ADMIN,
     CLIENT,
     CLIENT_ID,
+    COMPANY,
     EMPLOYEE,
     MANAGER,
     PEOPLE,
     FakeRepository,
     context,
 )
-from tests.test_chat_service import COMPANY
 
 NOW = datetime(2026, 11, 14, 10, 0)
 
@@ -265,7 +265,6 @@ class CallRulesTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             MeetingRequest(title="No zone", starts_at=datetime(2026, 12, 1, 10, 0))
 
-
     # -- meet links and the lobby (owner decisions 2026-11-14) ---------------------------------
 
     def test_member_opening_the_link_joins_straight_away(
@@ -307,7 +306,9 @@ class CallRulesTest(unittest.TestCase):
         self.assertEqual(waiting.admission, "WAITING")
         knock = next(c for c in call_rt.publish.call_args_list if c.args[1] == "call.knock")
         self.assertEqual(knock.args[0], [EMPLOYEE.id])  # host only: the client is not an admitter
-        self.assertEqual([p.id for p in self.service.lobby(context(EMPLOYEE), call.id).items], [MANAGER.id])
+        self.assertEqual(
+            [p.id for p in self.service.lobby(context(EMPLOYEE), call.id).items], [MANAGER.id]
+        )
         self.assertEqual(self.service.lobby(context(CLIENT), call.id).items, [])
         with self.assertRaises(AuthenticationError) as client_try:
             self.service.decide(context(CLIENT), call.id, MANAGER.id, True)
@@ -356,6 +357,7 @@ class CallRulesTest(unittest.TestCase):
         with self.assertRaises(AuthenticationError) as other:
             self.service.meet(outsider, code)
         self.assertEqual(other.exception.code, "MEET_NOT_FOUND")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import Path, APIRouter, File, Form, Query, Response, UploadFile
+from fastapi import APIRouter, File, Form, Path, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from app.middleware.authentication import AuthenticatedContext
@@ -15,9 +15,6 @@ from app.schemas.chat import (
     AdmissionRequest,
     CallResponse,
     CallStartRequest,
-    LobbyResponse,
-    MeetInfoResponse,
-    MeetLinkResponse,
     ChatMessageResponse,
     ChatMessagesResponse,
     ConversationListResponse,
@@ -25,9 +22,12 @@ from app.schemas.chat import (
     DirectRequest,
     GroupRequest,
     GroupUpdateRequest,
+    LobbyResponse,
+    MeetInfoResponse,
     MeetingListResponse,
     MeetingRequest,
     MeetingResponse,
+    MeetLinkResponse,
     MessageEditRequest,
     PeopleResponse,
     ReactionRequest,
