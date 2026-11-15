@@ -99,10 +99,8 @@ services:
       APP_VERSION: 0.37.0
       DATABASE_URL: postgresql://loopless:loopless@postgres:5432/loopless_dev
       REDIS_URL: redis://redis:6379/0
-      SMTP_HOST: mailpit
-      SMTP_PORT: 1025
-      SMTP_FROM_EMAIL: no-reply@loopless.local
-      SMTP_USE_TLS: "false"
+      # Mail goes through the SMTP server set in backend/.env (owner's Gmail, 2026-11-15).
+      # To catch mail locally instead, set SMTP_HOST=mailpit, SMTP_PORT=1025, SMTP_USE_TLS=false there.
     ports:
       - "8000:8000"
     volumes:

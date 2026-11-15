@@ -162,32 +162,86 @@ class VerificationEmailSender(Protocol):
 
 
 class EmailService:
-    def _send(self, message: EmailMessage) -> None:
+    """Outgoing mail (owner decisions 2026-11-15): only mail that leaves the company goes by
+    SMTP; work inside the company uses the in-app mailbox. Seeded test logins never get real
+    mail, and the same mail about the same thing is not repeated within a short window."""
+
+    @staticmethod
+    def _sender() -> str:
+        address = settings.smtp_from_email or settings.smtp_username
+        return f"{settings.smtp_from_name} <{address}>" if settings.smtp_from_name else address
+
+    @staticmethod
+    def _real_recipients(message: EmailMessage) -> list[str]:
+        from email.utils import getaddresses
+
+        from app.services.development_test_credentials_service import TEST_ACCOUNT_EMAILS
+
+        found = getaddresses(message.get_all("To", []) + message.get_all("Cc", []))
+        return [address for _, address in found if address.lower() not in TEST_ACCOUNT_EMAILS]
+
+    @staticmethod
+    def _first_time(key: str | None) -> bool:
+        """False when this mail was already sent within the repeat window."""
+        if not key or settings.mail_repeat_window_minutes <= 0:
+            return True
+        try:
+            from app.services.realtime import _redis
+
+            return bool(
+                _redis().set(
+                    f"mail:once:{key}", "1", nx=True, ex=settings.mail_repeat_window_minutes * 60
+                )
+            )
+        except Exception:  # noqa: BLE001 - without Redis, send rather than lose the mail
+            return True
+
+    def _send(self, message: EmailMessage, *, once_key: str | None = None) -> None:
+        recipients = self._real_recipients(message)
+        if not recipients:
+            logger.info(
+                "Mail '%s' not sent: only test accounts were addressed.", message["Subject"]
+            )
+            return
+        if not self._first_time(once_key):
+            logger.info("Mail '%s' skipped: already sent recently.", message["Subject"])
+            return
+        if "From" in message:
+            message.replace_header("From", self._sender())
+        else:
+            message["From"] = self._sender()
         host, port = settings.smtp_host, settings.smtp_port
         username, password = settings.smtp_username, settings.smtp_password.get_secret_value()
         encryption = "STARTTLS" if settings.smtp_use_tls else "NONE"
-        try:
-            from app.repositories.platform_settings_repository import PlatformSettingsRepository
-            from app.services.platform_settings_service import platform_settings_service
+        if not username:
+            # No account in backend/.env: use the platform's SMTP settings, if any.
+            try:
+                from app.repositories.platform_settings_repository import (
+                    PlatformSettingsRepository,
+                )
+                from app.services.platform_settings_service import platform_settings_service
 
-            platform = PlatformSettingsRepository().get()
-            host, port = platform.smtp_host, platform.smtp_port
-            username = platform.smtp_username
-            password = platform_settings_service.decrypt_password(platform.smtp_password_encrypted)
-            encryption = platform.smtp_encryption
-            if "From" in message:
+                platform = PlatformSettingsRepository().get()
+                host, port = platform.smtp_host, platform.smtp_port
+                username = platform.smtp_username
+                password = platform_settings_service.decrypt_password(
+                    platform.smtp_password_encrypted
+                )
+                encryption = platform.smtp_encryption
                 message.replace_header(
                     "From", f"{platform.smtp_sender_name} <{platform.smtp_sender_email}>"
                 )
-        except Exception:
-            logger.warning("Using environment SMTP configuration; platform settings unavailable.")
+            except Exception:
+                logger.warning(
+                    "Using environment SMTP configuration; platform settings unavailable."
+                )
         client_type = smtplib.SMTP_SSL if encryption == "SSL" else smtplib.SMTP
-        with client_type(host, port, timeout=10) as client:
+        with client_type(host, port, timeout=15) as client:
             if encryption == "STARTTLS":
                 client.starttls()
             if username:
                 client.login(username, password)
-            client.send_message(message)
+            client.send_message(message, to_addrs=recipients)
 
     def is_ready(self) -> bool:
         if not settings.smtp_host:

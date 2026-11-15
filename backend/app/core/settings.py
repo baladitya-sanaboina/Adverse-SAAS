@@ -40,7 +40,11 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: SecretStr = SecretStr("")
     smtp_from_email: str = ""
+    smtp_from_name: str = "Adverse"
     smtp_use_tls: bool = True
+    # The same mail about the same thing is not sent again within this window (owner request
+    # 2026-11-15: a task submitted, sent back and submitted again mails once).
+    mail_repeat_window_minutes: int = Field(default=30, ge=0, le=1440)
 
     cors_origins: str = (
         "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"

@@ -61,6 +61,10 @@ _TEST_ACCOUNTS: tuple[DevelopmentTestAccount, ...] = (
 )
 
 
+# Seeded test logins: they never receive real email (owner decision 2026-11-15).
+TEST_ACCOUNT_EMAILS = frozenset(account.email.lower() for account in _TEST_ACCOUNTS)
+
+
 class DevelopmentTestCredentialsService:
     def ensure(self) -> None:
         # Shared password "1234" accounts: only on a developer's own machine, never on a staging
