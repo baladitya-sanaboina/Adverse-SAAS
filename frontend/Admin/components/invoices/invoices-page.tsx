@@ -2,7 +2,8 @@
 
 /*
  * Invoices (Phase 11, owner request 2026-11-14). A draft is prepared automatically when a client's
- * top-up is used up; the Admin can also make one for any client and period. Each invoice lists
+ * payment sheet is complete (2026-11-15, numbered ADV-0001 on, with GST when the client has it);
+ * the Admin can also make one for any payment sheet, client and period. Each invoice lists
  * every video with its date and amount, the payments received in the period and the balance.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -35,7 +36,7 @@ type Invoice = {
   id: string;
   code: string;
   status: InvoiceStatus;
-  source: "MANUAL" | "TOP_UP";
+  source: "MANUAL" | "TOP_UP" | "SHEET";
   client: { id: string; name: string; code: string };
   client_email: string | null;
   period_start: string;
@@ -44,6 +45,10 @@ type Invoice = {
   due_date: string | null;
   currency: string;
   subtotal: string;
+  tax_rate: string;
+  tax_amount: string;
+  total: string;
+  client_gstin: string;
   payments_total: string;
   budget_added: string;
   balance: string;
@@ -62,12 +67,13 @@ type Cycle = {
   index: number;
   start: string;
   end: string | null;
-  amount: string;
+  paid: string;
   used: string;
-  remaining: string;
+  left: string;
   items: number;
-  invoice_id: string | null;
-  invoice_code: string | null;
+  ran_out_on: string | null;
+  invoice_id?: string | null;
+  invoice_code?: string | null;
 };
 type ClientItem = { id: string; name: string; status?: string };
 type Sheet = { mode: "create" } | { mode: "detail"; id: string } | null;
@@ -234,8 +240,8 @@ export function InvoicesPage() {
             <ReceiptText />
             <h3>{status || client ? "No invoices match these filters" : "No invoices yet"}</h3>
             <p>
-              A draft is prepared automatically when a client&apos;s top-up is used up. You can also make one for any
-              period.
+              A draft is prepared automatically when a client&apos;s payment sheet is complete. You can also make one
+              for any period.
             </p>
             <button type="button" onClick={() => open({ mode: "create" })}>
               <Plus /> New invoice
@@ -257,13 +263,13 @@ export function InvoicesPage() {
                 <div className="production-cell">
                   <small>
                     {formatDate(invoice.period_start)} – {formatDate(invoice.period_end)}
-                    {invoice.source === "TOP_UP" ? " · top-up" : ""}
+                    {invoice.source === "TOP_UP" ? " · top-up" : invoice.source === "SHEET" ? " · payment sheet" : ""}
                   </small>
                   <strong>{invoice.code}</strong>
                 </div>
                 <span>{invoice.client.name}</span>
                 <span>{invoice.items}</span>
-                <span className="production-money">{money(invoice.subtotal, invoice.currency)}</span>
+                <span className="production-money">{money(invoice.total, invoice.currency)}</span>
                 <span className="production-money">{balanceText(invoice)}</span>
                 <em className={tone(invoice.status)}>{STATUS_LABELS[invoice.status]}</em>
                 <CrudActionButtons
@@ -311,6 +317,9 @@ type Preview = {
   currency: string;
   items: number;
   subtotal: string;
+  tax_rate: string;
+  tax_amount: string;
+  total: string;
   payments_total: string;
   budget_added: string;
   lines: { position: number; delivered_on: string; title: string; service_name: string; amount: string }[];
@@ -367,7 +376,7 @@ function CreateInvoice({
       setCycles(null);
       setCycleIndex("");
       try {
-        const data = await api<Cycle[]>(`/api/company/invoices/cycles/${clientId}`);
+        const data = await api<Cycle[]>(`/api/company/finance/sheets/clients/${clientId}`);
         if (cancelled) return;
         setCycles(data);
         const next = [...data].reverse().find((cycle) => !cycle.invoice_id) ?? data[data.length - 1];
@@ -386,6 +395,7 @@ function CreateInvoice({
   const chosen = cycles?.find((cycle) => String(cycle.index) === cycleIndex) ?? null;
   const [periodStart, periodEnd] = useMemo((): [string, string] => {
     if (range === "topup") return chosen ? [chosen.start, chosen.end ?? today] : ["", ""];
+    // (A payment sheet runs from its payment to the day before the next one.)
     if (range === "this-month") return monthRange(0);
     if (range === "last-month") return monthRange(-1);
     return [start, end];
@@ -423,16 +433,31 @@ function CreateInvoice({
     if (periodError) return setError(periodError);
     setSaving(send ? "send" : "draft");
     try {
-      const invoice = await api<InvoiceDetail>("/api/company/invoices", {
-        method: "POST",
-        json: {
-          client_id: clientId,
-          period_start: periodStart,
-          period_end: periodEnd,
-          due_date: due || null,
-          notes: notes.trim(),
-        },
-      });
+      let invoice: InvoiceDetail;
+      if (range === "topup" && chosen) {
+        // One invoice per payment sheet: made here, or the one already made is opened.
+        invoice = await api<InvoiceDetail>("/api/company/invoices/sheet", {
+          method: "POST",
+          json: { client_id: clientId, start: chosen.start },
+        });
+        if ((due || notes.trim()) && invoice.status === "DRAFT") {
+          invoice = await api<InvoiceDetail>(`/api/company/invoices/${invoice.id}`, {
+            method: "PATCH",
+            json: { due_date: due || null, notes: notes.trim() },
+          });
+        }
+      } else {
+        invoice = await api<InvoiceDetail>("/api/company/invoices", {
+          method: "POST",
+          json: {
+            client_id: clientId,
+            period_start: periodStart,
+            period_end: periodEnd,
+            due_date: due || null,
+            notes: notes.trim(),
+          },
+        });
+      }
       const count = `${invoice.items} ${invoice.items === 1 ? "video" : "videos"}`;
       if (!send) return onCreated(invoice.id, `${invoice.code} saved as a draft with ${count}.`);
       try {
@@ -452,13 +477,13 @@ function CreateInvoice({
   }
 
   const ranges: { value: Range; label: string; disabled?: boolean }[] = [
-    { value: "topup", label: "A top-up", disabled: !cycles?.length },
+    { value: "topup", label: "A payment sheet", disabled: !cycles?.length },
     { value: "this-month", label: "This month" },
     { value: "last-month", label: "Last month" },
     { value: "custom", label: "Pick dates" },
   ];
   const shown = preview?.lines.slice(0, 6) ?? [];
-  const balance = preview ? Number(preview.subtotal) - Number(preview.payments_total) : 0;
+  const balance = preview ? Number(preview.total) - Number(preview.payments_total) : 0;
 
   return (
     <>
@@ -508,16 +533,18 @@ function CreateInvoice({
             </Field>
           )}
           {clientId && range === "topup" && cycles && cycles.length > 0 && (
-            <Field label="Top-up">
+            <Field label="Payment sheet">
               <LooplessSelect
                 value={cycleIndex}
                 onValueChange={setCycleIndex}
-                ariaLabel="Top-up"
+                ariaLabel="Payment sheet"
                 options={[...cycles].reverse().map((cycle) => ({
                   value: String(cycle.index),
-                  label: `Top-up ${cycle.index} · ${formatDate(cycle.start)} – ${
+                  label: `Sheet ${cycle.index} · ${formatDate(cycle.start)} – ${
                     cycle.end ? formatDate(cycle.end) : "now"
-                  } · ${money(cycle.amount)}${cycle.invoice_code ? ` · ${cycle.invoice_code} made` : ""}`,
+                  } · ${cycle.items} ${cycle.items === 1 ? "video" : "videos"}${
+                    cycle.invoice_code ? ` · ${cycle.invoice_code} made` : ""
+                  }`,
                 }))}
               />
             </Field>
@@ -539,7 +566,7 @@ function CreateInvoice({
             </div>
           )}
           {chosen?.invoice_code && range === "topup" && (
-            <p className="invoice-hint">{chosen.invoice_code} was already made for this top-up. A new one is a copy.</p>
+            <p className="invoice-hint">{chosen.invoice_code} was already made for this sheet; saving opens it.</p>
           )}
           {periodError && <p className="invoice-hint error">{periodError}</p>}
         </div>
@@ -564,6 +591,12 @@ function CreateInvoice({
                     </small>
                     <strong>{money(preview.subtotal, preview.currency)}</strong>
                   </span>
+                  {Number(preview.tax_amount) > 0 && (
+                    <span>
+                      <small>GST @ {Number(preview.tax_rate)}%</small>
+                      <strong>{money(preview.tax_amount, preview.currency)}</strong>
+                    </span>
+                  )}
                   {Number(preview.payments_total) > 0 && (
                     <span>
                       <small>Paid in these dates</small>
@@ -730,12 +763,13 @@ function InvoiceDetailSheet({
     <>
       <SheetHeader
         eyebrow={`${invoice.code} · ${invoice.client.name}`}
-        title={money(invoice.subtotal, invoice.currency)}
+        title={money(invoice.total, invoice.currency)}
         onClose={onClose}
         badges={
           <>
             <em className={tone(invoice.status)}>{STATUS_LABELS[invoice.status]}</em>
             {invoice.source === "TOP_UP" && <em>Top-up period</em>}
+            {invoice.source === "SHEET" && <em>Payment sheet</em>}
             <em>
               {invoice.items} {invoice.items === 1 ? "item" : "items"}
             </em>
@@ -842,6 +876,24 @@ function InvoiceDetailSheet({
               <dt>Subtotal</dt>
               <dd>{money(invoice.subtotal, invoice.currency)}</dd>
             </div>
+            {Number(invoice.tax_amount) > 0 && (
+              <>
+                <div>
+                  <dt>GST @ {Number(invoice.tax_rate)}%</dt>
+                  <dd>{money(invoice.tax_amount, invoice.currency)}</dd>
+                </div>
+                <div>
+                  <dt>Total with GST</dt>
+                  <dd>{money(invoice.total, invoice.currency)}</dd>
+                </div>
+              </>
+            )}
+            {invoice.client_gstin && (
+              <div>
+                <dt>Client GSTIN</dt>
+                <dd>{invoice.client_gstin}</dd>
+              </div>
+            )}
             <div>
               <dt>Payments in period</dt>
               <dd>{money(invoice.payments_total, invoice.currency)}</dd>
@@ -911,6 +963,18 @@ function InvoiceDetailSheet({
                     <td colSpan={4}>Subtotal</td>
                     <td className="num">{money(invoice.subtotal, invoice.currency)}</td>
                   </tr>
+                  {Number(invoice.tax_amount) > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={4}>GST @ {Number(invoice.tax_rate)}%</td>
+                        <td className="num">{money(invoice.tax_amount, invoice.currency)}</td>
+                      </tr>
+                      <tr>
+                        <td colSpan={4}>Total</td>
+                        <td className="num">{money(invoice.total, invoice.currency)}</td>
+                      </tr>
+                    </>
+                  )}
                 </tfoot>
               </table>
             </div>

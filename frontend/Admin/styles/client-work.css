@@ -468,3 +468,223 @@ a.client-work-row:hover {
     grid-row: 2;
   }
 }
+
+
+/* Client details → Billing: GST and monthly package (owner requests 2026-11-15). */
+.client-billing {
+  margin-top: 16px;
+}
+
+.client-billing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.client-billing-grid > article {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.client-billing-grid h4 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: #0876ed;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.dark .client-billing-grid h4 {
+  color: #8cc8ff;
+}
+
+.client-billing-grid h4 svg {
+  width: 14px;
+  height: 14px;
+}
+
+.client-billing-message {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #c5e7d2;
+  border-radius: 10px;
+  color: #287150;
+  background: #ebf8f0;
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+
+.client-billing-message.error {
+  border-color: #efc8ce;
+  color: #9a4551;
+  background: #fbf0f2;
+}
+
+.dark .client-billing-message {
+  border-color: #23503a;
+  color: #86d3a9;
+  background: #13241b;
+}
+
+.dark .client-billing-message.error {
+  border-color: #5a2a32;
+  color: #f0a6af;
+  background: #2a1418;
+}
+
+.client-billing-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.68rem;
+}
+
+.client-billing-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.client-billing-switch > span {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 160ms ease;
+}
+
+.client-billing-switch > span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 160ms ease;
+}
+
+.client-billing-switch input:checked + span {
+  background: #0876ed;
+}
+
+.client-billing-switch input:checked + span::after {
+  transform: translateX(16px);
+}
+
+.client-billing-switch input:focus-visible + span {
+  outline: 2px solid #0876ed;
+  outline-offset: 2px;
+}
+
+.client-billing-fields,
+.client-billing-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.client-billing-form .client-billing-note,
+.client-billing-actions {
+  grid-column: 1 / -1;
+}
+
+.client-billing-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.client-billing-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.6rem;
+  line-height: 1.5;
+}
+
+.client-billing-grid button {
+  justify-self: start;
+}
+
+.client-billing-package {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.client-billing-package strong,
+.client-billing-row strong {
+  display: block;
+  font-size: 0.7rem;
+}
+
+.client-billing-package small,
+.client-billing-row small {
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.client-billing-meter {
+  height: 6px;
+  display: block;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+.client-billing-meter i {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: #0876ed;
+}
+
+.client-billing-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.client-billing-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.client-billing-history summary {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .client-billing-grid,
+  .client-billing-fields,
+  .client-billing-form {
+    grid-template-columns: 1fr;
+  }
+}

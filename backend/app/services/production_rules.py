@@ -386,7 +386,9 @@ PAYMENT_METHOD_TEXT = {
 
 def budget_cycles(
     entries: Sequence[tuple[date, str, Decimal] | tuple[date, str, Decimal, str]],
-    deliveries: Sequence[tuple[date, Decimal] | tuple[date, Decimal, str]],
+    deliveries: Sequence[
+        tuple[date, Decimal] | tuple[date, Decimal, str] | tuple[date, Decimal, str, bool]
+    ],
     *,
     open_without_payment: bool = False,
 ) -> list[BudgetCycle]:
@@ -419,17 +421,22 @@ def budget_cycles(
                 return index
         return len(windows) - 1
 
-    # (day, order, kind, label, signed amount); on one day money in counts before work.
-    events: list[list[tuple[date, int, Literal["PAYMENT", "ADJUSTMENT", "WORK"], str, Decimal]]] = [
-        [] for _ in windows
-    ]
+    # (day, order, kind, label, signed amount, counts as an item); on one day money in counts
+    # before work. A monthly package charge is used money but not a video (counts=False).
+    events: list[
+        list[tuple[date, int, Literal["PAYMENT", "ADJUSTMENT", "WORK"], str, Decimal, bool]]
+    ] = [[] for _ in windows]
     for day, kind, amount, *_ in entries:
         if kind == "ADJUSTMENT":
-            events[window_of(day)].append((day, 0, "ADJUSTMENT", "Adjustment", Decimal(amount)))
+            events[window_of(day)].append(
+                (day, 0, "ADJUSTMENT", "Adjustment", Decimal(amount), False)
+            )
     for delivery in deliveries:
-        day, amount, *rest = delivery
+        day, amount = delivery[0], delivery[1]
+        extra: list[object] = list(delivery[2:])
+        counts = bool(extra[1]) if len(extra) > 1 else True
         events[window_of(day)].append(
-            (day, 1, "WORK", str(rest[0]) if rest else "", -Decimal(amount))
+            (day, 1, "WORK", str(extra[0]) if extra else "", -Decimal(amount), counts)
         )
 
     first_day = min([ordered[0], *[delivery[0] for delivery in deliveries]])
@@ -452,15 +459,15 @@ def budget_cycles(
         names = labels[start]
         payment = names[0] if len(names) == 1 else f"{len(names)} payments"
         # The payment goes first so that, on the same day, it counts before that day's work.
-        dated: list[tuple[date, int, Literal["PAYMENT", "ADJUSTMENT", "WORK"], str, Decimal]] = (
-            [(start, 0, "PAYMENT", payment, starts[start])] if starts[start] > 0 else []
-        )
+        dated: list[
+            tuple[date, int, Literal["PAYMENT", "ADJUSTMENT", "WORK"], str, Decimal, bool]
+        ] = ([(start, 0, "PAYMENT", payment, starts[start], False)] if starts[start] > 0 else [])
         dated += events[index]
-        for day, _, kind, label, signed in sorted(dated, key=lambda item: item[:2]):
+        for day, _, kind, label, signed, counts in sorted(dated, key=lambda item: item[:2]):
             balance += signed
             if kind == "WORK":
                 used -= signed
-                items += 1
+                items += 1 if counts else 0
             else:
                 amount += signed
             if ran_out_on is None and balance <= 0:

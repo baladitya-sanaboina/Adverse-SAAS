@@ -196,11 +196,25 @@ def render_invoice_pdf(
     parties = Table(
         [
             [
-                block("FROM", company.name, [company.email, company.phone, company.address]),
+                block(
+                    "FROM",
+                    company.name,
+                    [
+                        company.email,
+                        company.phone,
+                        company.address,
+                        f"GSTIN {company.gstin}" if getattr(company, "gstin", None) else None,
+                    ],
+                ),
                 block(
                     "BILL TO",
                     invoice.client_name,
-                    [invoice.client_code, invoice.client_email, invoice.client_address or None],
+                    [
+                        invoice.client_code,
+                        invoice.client_email,
+                        invoice.client_address or None,
+                        f"GSTIN {invoice.client_gstin}" if invoice.client_gstin else None,
+                    ],
                 ),
             ]
         ],
@@ -288,12 +302,17 @@ def render_invoice_pdf(
     story += [table, Spacer(1, 6 * mm)]
 
     # Totals.
-    balance = Decimal(invoice.subtotal) - Decimal(invoice.payments_total)
+    tax = Decimal(invoice.tax_amount)
+    balance = Decimal(invoice.subtotal) + tax - Decimal(invoice.payments_total)
     total_rows = [
         ["Work delivered", f"{len(lines)} {'item' if len(lines) == 1 else 'items'}"],
         ["Subtotal", amount_text(invoice.subtotal, money)],
         ["Payments received in this period", amount_text(invoice.payments_total, money)],
     ]
+    if tax > 0:
+        rate = f"{Decimal(invoice.tax_rate).normalize():f}"
+        total_rows.insert(2, [f"GST @ {rate}%", amount_text(tax, money)])
+        total_rows.insert(3, ["Total with GST", amount_text(Decimal(invoice.subtotal) + tax, money)])
     if Decimal(invoice.budget_added) > 0:
         total_rows.insert(
             2, ["Budget added in this period", amount_text(invoice.budget_added, money)]

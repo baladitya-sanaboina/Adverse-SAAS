@@ -151,6 +151,10 @@ class TaskEvents:
                 )
                 self._budget_check(company_id, row, actor_id)
                 self._advance_check(company_id, row)
+                # Payment sheets (owner request 2026-11-15): a finished sheet gets its draft.
+                from app.services.invoice_service import invoice_service
+
+                invoice_service.ensure_sheet_invoices(company_id, row.client_id, actor_id)
         except Exception:  # noqa: BLE001
             logger.warning("Status notification failed", exc_info=True)
 
@@ -206,11 +210,6 @@ class TaskEvents:
             "/billing",
             data,
         )
-        if crossed == "over":
-            # Imported here to keep module imports one-directional (invoice_service -> rules).
-            from app.services.invoice_service import invoice_service
-
-            invoice_service.create_for_used_up_budget(company_id, row.client_id, actor_id)
 
     def _advance_check(self, company_id: UUID, row: TaskRow) -> None:
         """Manager advances (Phase 12): alert when commission first reaches 80% of the money

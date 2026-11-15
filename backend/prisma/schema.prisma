@@ -110,6 +110,7 @@ model Company {
   taskComments        TaskComment[]
   notifications       Notification[]
   invoices            Invoice[]
+  clientPackages      ClientPackage[]
   calendarEntries     ContentCalendarEntry[]
   chatConversations   ChatConversation[]
   chatMessages        ChatMessage[]
@@ -511,6 +512,7 @@ model User {
   taskComments            TaskComment[]            @relation("TaskCommentAuthor")
   notifications           Notification[]           @relation("NotificationRecipient")
   invoicesCreated         Invoice[]                @relation("InvoiceCreator")
+  clientPackagesCreated   ClientPackage[]          @relation("ClientPackageCreator")
   calendarEntriesCreated  ContentCalendarEntry[]   @relation("CalendarEntryCreator")
   chatConversationsMade   ChatConversation[]       @relation("ChatConversationCreator")
   chatMemberships         ChatMember[]
@@ -600,6 +602,9 @@ model Client {
   state                 String                 @default("")
   country               String                 @default("")
   status                OrganizationStatus     @default(ACTIVE)
+  gstEnabled            Boolean                @default(false) @map("gst_enabled")
+  gstRate               Decimal                @default(18) @map("gst_rate") @db.Decimal(5, 2)
+  gstin                 String                 @default("") @db.VarChar(20)
   createdAt             DateTime               @default(now()) @map("created_at")
   updatedAt             DateTime               @updatedAt @map("updated_at")
   company               Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -613,6 +618,7 @@ model Client {
   budgetEntries         ClientBudgetEntry[]
   payments              ClientPayment[]
   invoices              Invoice[]
+  packages              ClientPackage[]
   calendarEntries       ContentCalendarEntry[]
   chatRooms             ChatConversation[]
   leads                 Lead[]
@@ -1237,6 +1243,8 @@ model Task {
   files              TaskFile[]
   invoiceLines       InvoiceLine[]
   calendarEntries    ContentCalendarEntry[]
+  packageId          String?                @map("package_id") @db.Uuid
+  package            ClientPackage?         @relation(fields: [packageId], references: [id], onDelete: SetNull)
 
   @@unique([companyId, number])
   @@index([companyId, status, dueDate])
@@ -1245,7 +1253,31 @@ model Task {
   @@index([companyId, assigneeUserId, status])
   @@index([companyId, monitorUserId, status])
   @@index([companyId, approvedAt])
+  @@index([packageId])
   @@map("tasks")
+}
+
+/// Monthly package (owner request 2026-11-15): a fixed monthly price covers some videos;
+/// extra videos are billed at the per-item rate. Ended and replaced, never edited in place.
+model ClientPackage {
+  id             String    @id @default(uuid()) @db.Uuid
+  companyId      String    @map("company_id") @db.Uuid
+  clientId       String    @map("client_id") @db.Uuid
+  name           String    @db.VarChar(120)
+  monthlyPrice   Decimal   @map("monthly_price") @db.Decimal(12, 2)
+  videosIncluded Int       @map("videos_included")
+  startsOn       DateTime  @map("starts_on") @db.Date
+  endsOn         DateTime? @map("ends_on") @db.Date
+  createdById    String    @map("created_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client         Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy      User      @relation("ClientPackageCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  tasks          Task[]
+
+  @@index([companyId, clientId, startsOn])
+  @@map("client_packages")
 }
 
 model TaskStatusHistory {
@@ -1458,6 +1490,7 @@ model Invoice {
   companyId     String        @map("company_id") @db.Uuid
   clientId      String        @map("client_id") @db.Uuid
   number        Int
+  prefix        String        @default("ADV") @db.VarChar(8)
   status        InvoiceStatus @default(DRAFT)
   source        String        @default("MANUAL") @db.VarChar(20)
   periodStart   DateTime      @map("period_start") @db.Date
@@ -1470,6 +1503,9 @@ model Invoice {
   budgetAdded   Decimal       @map("budget_added") @db.Decimal(12, 2)
   payments      Json          @default("[]")
   notes         String        @default("") @db.VarChar(1000)
+  taxRate       Decimal       @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount     Decimal       @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  clientGstin   String        @default("") @map("client_gstin") @db.VarChar(20)
   createdById   String        @map("created_by_id") @db.Uuid
   sentAt        DateTime?     @map("sent_at")
   paidAt        DateTime?     @map("paid_at")

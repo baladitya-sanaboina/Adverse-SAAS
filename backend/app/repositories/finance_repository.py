@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 from psycopg.errors import UniqueViolation
 
 from app.database.connectivity import database_pool
+from app.repositories.package_repository import package_charges_sql
 from app.schemas.production import PaymentListFilters
 
 _BILLABLE = "('APPROVED','COMPLETED')"
@@ -127,11 +128,12 @@ class CommissionTaskRow:
 class DeliveryRow:
     """A delivered (approved/completed) task as a client may see it: no code, people or costs."""
 
-    task_id: UUID
+    task_id: UUID | None  # None for a monthly package charge
     title: str
     service_name: str
     delivered_on: date
     amount: Decimal
+    kind: str = "WORK"  # WORK (a video) or PACKAGE (a monthly package charge)
 
 
 @dataclass(frozen=True)
@@ -845,13 +847,16 @@ class FinanceRepository:
         created_in_range = _range_sql(_local_date("t.created_at"), start, end)
         approved_in_range = _range_sql(_local_date("t.approved_at"), start, end)
         received_in_range = _range_sql("p.received_on", start, end)
+        charged_in_range = _range_sql("pk.charge_on", start, end)
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
                 f"""
                 SELECT c.id, c.name, c.code,
                   COALESCE(work.total, 0), COALESCE(work.completed, 0), COALESCE(work.open, 0),
-                  COALESCE(work.billed_range, 0), COALESCE(paid.received_range, 0),
-                  COALESCE(work.billed_all, 0), COALESCE(paid.received_all, 0),
+                  COALESCE(work.billed_range, 0) + COALESCE(packages.billed_range, 0),
+                  COALESCE(paid.received_range, 0),
+                  COALESCE(work.billed_all, 0) + COALESCE(packages.billed_all, 0),
+                  COALESCE(paid.received_all, 0),
                   COALESCE(budget.total, 0),
                   paid.last_on, COALESCE(bills.unpaid, 0), COALESCE(bills.overdue, 0)
                 FROM clients c
@@ -866,6 +871,11 @@ class FinanceRepository:
                     SUM(t.client_price_final) FILTER (WHERE t.status IN {_BILLABLE}) AS billed_all
                   FROM tasks t WHERE t.client_id = c.id
                 ) work ON TRUE
+                LEFT JOIN LATERAL (
+                  SELECT SUM(pk.amount) FILTER (WHERE {charged_in_range}) AS billed_range,
+                    SUM(pk.amount) AS billed_all
+                  FROM {package_charges_sql()} pk WHERE pk.client_id = c.id
+                ) packages ON TRUE
                 LEFT JOIN LATERAL (
                   SELECT SUM(p.amount) FILTER (WHERE {received_in_range}) AS received_range,
                     SUM(p.amount) AS received_all, MAX(p.received_on) AS last_on
@@ -920,11 +930,21 @@ class FinanceRepository:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
                 f"""
-                SELECT t.id, t.title, s.name, {delivered}, t.client_price_final
-                FROM tasks t JOIN company_services s ON s.id = t.service_id
-                WHERE t.company_id=%(company)s AND t.client_id=%(client)s AND t.status IN {_BILLABLE}
-                  AND t.approved_at IS NOT NULL AND {_range_sql(delivered, start, end)}
-                ORDER BY t.approved_at DESC, t.id
+                SELECT x.id, x.title, x.service, x.day, x.amount, x.kind FROM (
+                  SELECT t.id, t.title, s.name AS service, {delivered} AS day,
+                    t.client_price_final AS amount, 'WORK' AS kind, t.approved_at AS sort_at
+                  FROM tasks t JOIN company_services s ON s.id = t.service_id
+                  WHERE t.company_id=%(company)s AND t.client_id=%(client)s
+                    AND t.status IN {_BILLABLE}
+                    AND t.approved_at IS NOT NULL AND {_range_sql(delivered, start, end)}
+                  UNION ALL
+                  SELECT NULL::uuid, pk.name || ' · ' || to_char(pk.charge_on, 'Mon YYYY'),
+                    'Monthly package', pk.charge_on, pk.amount, 'PACKAGE',
+                    pk.charge_on::timestamp
+                  FROM {package_charges_sql()} pk
+                  WHERE pk.client_id = %(client)s AND {_range_sql("pk.charge_on", start, end)}
+                ) x
+                ORDER BY x.day DESC, x.sort_at DESC, x.id
                 {"LIMIT %(limit)s" if limit else ""}
                 """,
                 {
@@ -944,9 +964,12 @@ class FinanceRepository:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
                 f"""
-                SELECT COALESCE(SUM(client_price_final),0) FROM tasks
-                WHERE company_id=%(company)s AND client_id=%(client)s AND status IN {_BILLABLE}
-                  AND {_range_sql(_local_date("approved_at"), start, end)}
+                SELECT
+                  (SELECT COALESCE(SUM(client_price_final),0) FROM tasks
+                   WHERE company_id=%(company)s AND client_id=%(client)s AND status IN {_BILLABLE}
+                     AND {_range_sql(_local_date("approved_at"), start, end)})
+                  + (SELECT COALESCE(SUM(pk.amount),0) FROM {package_charges_sql()} pk
+                     WHERE pk.client_id=%(client)s AND {_range_sql("pk.charge_on", start, end)})
                 """,
                 {"company": company_id, "client": client_id, "tz": tz, "start": start, "end": end},
             )
@@ -1025,8 +1048,10 @@ class FinanceRepository:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
                 f"""
-                SELECT COALESCE(SUM(client_price_final),0), COALESCE(SUM(commission_final),0),
-                  COUNT(*)
+                SELECT COALESCE(SUM(client_price_final),0)
+                    + (SELECT COALESCE(SUM(pk.amount),0) FROM {package_charges_sql()} pk
+                       WHERE {_range_sql("pk.charge_on", start, end)}),
+                  COALESCE(SUM(commission_final),0), COUNT(*)
                 FROM tasks
                 WHERE company_id=%(company)s AND status IN {_BILLABLE}
                   AND {_range_sql(_local_date("approved_at"), start, end)}

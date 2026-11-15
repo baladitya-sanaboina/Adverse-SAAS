@@ -8,6 +8,7 @@ from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from app.database.connectivity import database_pool
+from app.repositories.package_repository import package_charges_sql
 from app.schemas.production import TaskListFilters, WorkerTaskFilters
 
 PricingScope = Literal["CLIENT", "MANAGER"]
@@ -33,7 +34,8 @@ _TASK_COLUMNS = """
     cb.name, t.created_at, t.updated_at,
     t.assigned_at, t.started_at, t.submitted_at, t.approved_at, t.completed_at, t.cancelled_at,
     (SELECT COUNT(*) FROM task_files tf WHERE tf.task_id = t.id)::int,
-    (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id)::int
+    (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id)::int,
+    t.package_id
 """
 _TASK_FROM = """
     FROM tasks t
@@ -56,6 +58,7 @@ _UPDATABLE_COLUMNS = frozenset(
         "monitor_user_id",
         "client_price_final",
         "client_price_reason",
+        "package_id",
         "commission_default",
         "commission_final",
         "commission_reason",
@@ -113,6 +116,7 @@ class TaskRow:
     cancelled_at: datetime | None
     files_count: int = 0
     comments_count: int = 0
+    package_id: UUID | None = None  # set when a monthly package covered this video
 
     @property
     def code(self) -> str:
@@ -347,12 +351,14 @@ class TaskRepository:
         """Budget total, used (approved work) and committed (open work) for one client."""
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
-                """
+                f"""
                 SELECT
                   (SELECT COALESCE(SUM(amount),0) FROM client_budget_entries
                      WHERE company_id=%(company)s AND client_id=%(client)s),
                   COALESCE(SUM(client_price_final) FILTER (
-                     WHERE status IN ('APPROVED','COMPLETED')),0),
+                     WHERE status IN ('APPROVED','COMPLETED')),0)
+                  + (SELECT COALESCE(SUM(pk.amount),0) FROM {package_charges_sql()} pk
+                     WHERE pk.client_id = %(client)s),
                   COALESCE(SUM(client_price_final) FILTER (
                      WHERE status NOT IN ('APPROVED','COMPLETED','CANCELLED')),0)
                 FROM tasks

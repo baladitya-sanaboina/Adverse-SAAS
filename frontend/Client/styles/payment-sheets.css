@@ -161,6 +161,51 @@
   white-space: nowrap;
 }
 
+.sheet-summary-main {
+  position: relative;
+}
+
+.sheet-summary-action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sheet-summary-action a,
+.sheet-summary-action button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid #0876ed;
+  border-radius: 9px;
+  color: #fff;
+  background: #0876ed;
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.sheet-summary-action .secondary {
+  border-color: var(--border);
+  color: var(--foreground);
+  background: var(--surface-muted);
+}
+
+.sheet-summary-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sheet-summary-action button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 /* Statement table, like the app's other tables. */
 .sheet-table-wrap {
   overflow-x: auto;
@@ -171,7 +216,7 @@
 
 .sheet-table {
   width: 100%;
-  min-width: 560px;
+  min-width: 780px;
   border-collapse: collapse;
   font-size: 0.65rem;
 }
@@ -201,6 +246,74 @@
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.sheet-table thead tr.sheet-filters th {
+  height: auto;
+  padding: 8px 8px;
+  background: var(--surface);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.sheet-table thead tr.sheet-filters th:first-child {
+  padding-left: 16px;
+}
+
+.sheet-table thead tr.sheet-filters th:last-child {
+  padding-right: 16px;
+}
+
+.sheet-filters input {
+  width: 100%;
+  min-width: 120px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--foreground);
+  background: var(--surface);
+  font-family: inherit;
+  font-size: 0.62rem;
+}
+
+.sheet-filters .loopless-select,
+.sheet-filters [class*="select"] {
+  min-width: 110px;
+  font-size: 0.62rem;
+}
+
+.sheet-no-rows {
+  color: var(--muted);
+  text-align: center !important;
+}
+
+.sheet-filtered {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.sheet-filtered button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  color: #0876ed;
+  background: none;
+  font-family: inherit;
+  font-size: 0.6rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sheet-filtered svg {
+  width: 12px;
+  height: 12px;
 }
 
 .sheet-table td:first-child {

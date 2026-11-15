@@ -19,6 +19,7 @@ import {
   statusTone,
 } from "@/lib/production/client";
 import type { AdminTask, ClientBudget, ClientPayment, Paged, PaymentList, TaskStatus } from "@/lib/production/types";
+import { SheetInvoiceButton } from "@/components/sheets/sheet-invoice-button";
 import { PaymentSheets, type Sheet } from "@loopless-shared/production/payment-sheets";
 import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
 import "@/styles/client-work.css";
@@ -308,6 +309,7 @@ export function ClientWorkPanel({ clientId }: { clientId: string }) {
               date={formatDate}
               itemWord="video"
               empty="No payments yet. Each payment you record in Payments → Client payments opens a new sheet."
+              sheetAction={(sheet) => <SheetInvoiceButton sheet={sheet} clientId={clientId} />}
             />
           </div>
 

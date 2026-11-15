@@ -36,6 +36,10 @@ class PaymentSheet(BaseModel):
     items: int
     ran_out_on: date | None
     lines: list[SheetLine]
+    # Admin views only: the invoice made for this sheet, if any (owner request 2026-11-15).
+    invoice_id: UUID | None = None
+    invoice_code: str | None = None
+    invoice_status: str | None = None
 
 
 class SheetOwner(BaseModel):
@@ -112,6 +116,10 @@ class InvoiceResponse(BaseModel):
     due_date: date | None
     currency: str
     subtotal: Money
+    tax_rate: Decimal = Decimal("0")
+    tax_amount: Money = Decimal("0.00")
+    total: Money = Decimal("0.00")
+    client_gstin: str = ""
     payments_total: Money
     budget_added: Money
     balance: Money
@@ -136,6 +144,9 @@ class InvoicePreviewResponse(BaseModel):
     currency: str
     items: int
     subtotal: Money
+    tax_rate: Decimal = Decimal("0")
+    tax_amount: Money = Decimal("0.00")
+    total: Money = Decimal("0.00")
     payments_total: Money
     budget_added: Money
     lines: list[InvoiceLineResponse]
@@ -195,6 +206,8 @@ class ClientInvoiceSummary(BaseModel):
     period_end: date
     issue_date: date
     subtotal: Money
+    tax_amount: Money = Decimal("0.00")
+    total: Money = Decimal("0.00")
     payments_total: Money
     balance: Money
     items: int
@@ -215,3 +228,58 @@ class ClientBillingResponse(BaseModel):
     days: list[ClientDayRow]
     payments: list[ClientPaymentLine]
     invoices: list[ClientInvoiceSummary]
+
+
+# -- GST and monthly packages per client (owner requests 2026-11-15) ----------------------------
+
+
+class SheetInvoiceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_id: UUID
+    start: date
+
+
+class ClientGstRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    gst_enabled: bool
+    gst_rate: Decimal = Field(default=Decimal("18"), ge=0, le=100, decimal_places=2)
+    gstin: str = Field(default="", max_length=20, pattern=r"^[0-9A-Za-z]*$")
+
+
+class PackageCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=120)
+    monthly_price: Decimal = Field(ge=0, le=Decimal("99999999.99"), decimal_places=2)
+    videos_included: int = Field(ge=0, le=1000)
+    starts_on: date
+
+
+class PackageEndRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ends_on: date
+
+
+class PackageResponse(BaseModel):
+    id: UUID
+    name: str
+    monthly_price: Money
+    videos_included: int
+    starts_on: date
+    ends_on: date | None
+    status: Literal["UPCOMING", "ACTIVE", "ENDED"]
+    used_this_month: int
+    created_by_name: str
+
+
+class BillingSettingsResponse(BaseModel):
+    client_id: UUID
+    currency: str
+    gst_enabled: bool
+    gst_rate: Decimal
+    gstin: str
+    company_gstin: str
+    packages: list[PackageResponse]

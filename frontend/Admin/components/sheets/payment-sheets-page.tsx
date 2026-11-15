@@ -12,6 +12,7 @@ import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { api, errorText, formatDate, money } from "@/lib/production/client";
 import { PaymentSheets } from "@loopless-shared/production/payment-sheets";
 import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
+import { SheetInvoiceButton } from "./sheet-invoice-button";
 import { STATUS_TEXT, ownerLine, type SheetOwner, type SheetsOverview } from "./sheet-types";
 import "@/styles/organization.css";
 import "@/styles/production.css";
@@ -199,6 +200,11 @@ export function PaymentSheetsPage() {
                     date={formatDate}
                     itemWord={current.kind === "MANAGER" ? "task" : "video"}
                     empty="No sheets yet."
+                    sheetAction={
+                      current.kind === "CLIENT"
+                        ? (sheet) => <SheetInvoiceButton sheet={sheet} clientId={current.id} onError={setError} />
+                        : undefined
+                    }
                   />
                 </section>
               )}

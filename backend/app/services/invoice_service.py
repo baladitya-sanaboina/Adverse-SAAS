@@ -7,7 +7,7 @@ plus the payments received in that period. No tax for now (owner decision 2026-1
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
@@ -16,13 +16,16 @@ from zoneinfo import ZoneInfo
 from app.core.settings import settings
 from app.repositories.finance_repository import FinanceRepository
 from app.repositories.invoice_repository import InvoiceRepository, InvoiceRow
+from app.repositories.package_repository import PackageRepository, PackageRow
 from app.repositories.task_repository import TaskRepository
 from app.schemas.authentication import AuthContext
 from app.schemas.invoices import (
+    BillingSettingsResponse,
     BudgetCycleResponse,
     ClientBillingResponse,
     ClientDayRow,
     ClientDeliveryRow,
+    ClientGstRequest,
     ClientInvoiceSummary,
     InvoiceCreateRequest,
     InvoiceDetailResponse,
@@ -33,7 +36,11 @@ from app.schemas.invoices import (
     InvoiceResponse,
     InvoiceSendResponse,
     InvoiceUpdateRequest,
+    PackageCreateRequest,
+    PackageEndRequest,
+    PackageResponse,
     PaymentSheet,
+    SheetInvoiceRequest,
     SheetOwner,
     SheetsOverviewResponse,
     SheetStatus,
@@ -71,10 +78,12 @@ class InvoiceService:
         repository: InvoiceRepository | None = None,
         finance: FinanceRepository | None = None,
         tasks: TaskRepository | None = None,
+        packages: PackageRepository | None = None,
     ):
         self.repository = repository or InvoiceRepository()
         self.finance = finance or FinanceRepository()
         self.tasks = tasks or TaskRepository()
+        self.packages = packages or PackageRepository()
 
     # -- access and helpers ----------------------------------------------------------------
 
@@ -135,7 +144,12 @@ class InvoiceService:
         cycles = budget_cycles(
             entries,
             [
-                (row.delivered_on, Decimal(row.amount), f"{row.title} · {row.service_name}")
+                (
+                    row.delivered_on,
+                    Decimal(row.amount),
+                    row.title if row.kind == "PACKAGE" else f"{row.title} · {row.service_name}",
+                    row.kind == "WORK",
+                )
                 for row in rows
             ],
         )
@@ -184,9 +198,13 @@ class InvoiceService:
             due_date=row.due_date,
             currency=row.currency,
             subtotal=money(row.subtotal),
+            tax_rate=Decimal(row.tax_rate),
+            tax_amount=money(row.tax_amount),
+            total=money(row.total),
+            client_gstin=row.client_gstin,
             payments_total=money(row.payments_total),
             budget_added=money(row.budget_added),
-            balance=money(Decimal(row.subtotal) - Decimal(row.payments_total)),
+            balance=money(row.total - Decimal(row.payments_total)),
             items=row.line_count,
             notes=row.notes,
             created_by_name=row.created_by_name,
@@ -245,6 +263,15 @@ class InvoiceService:
         )
         return deliveries, payments, budget_added
 
+    def _tax(
+        self, company_id: UUID, client_id: UUID, subtotal: Decimal
+    ) -> tuple[Decimal, Decimal, str]:
+        """GST for this client (owner request 2026-11-15): (rate, amount, client GSTIN)."""
+        tax = self.packages.client_tax(company_id, client_id)
+        if tax is None or not tax.gst_enabled:
+            return ZERO, money(ZERO), tax.gstin if tax else ""
+        return Decimal(tax.gst_rate), money(subtotal * Decimal(tax.gst_rate) / 100), tax.gstin
+
     def _make(
         self,
         company_id: UUID,
@@ -258,6 +285,8 @@ class InvoiceService:
     ) -> UUID:
         _, _, today = self._zone(company_id)
         deliveries, payments, budget_added = self._collect(company_id, client_id, start, end)
+        subtotal = money(sum((Decimal(row.amount) for row in deliveries), ZERO))
+        tax_rate, tax_amount, gstin = self._tax(company_id, client_id, subtotal)
         return self.repository.create(
             company_id,
             client_id,
@@ -269,7 +298,10 @@ class InvoiceService:
                 "issue_date": today,
                 "due_date": due_date,
                 "currency": self.finance.company_currency(company_id),
-                "subtotal": money(sum((Decimal(row.amount) for row in deliveries), ZERO)),
+                "subtotal": subtotal,
+                "tax_rate": tax_rate,
+                "tax_amount": tax_amount,
+                "client_gstin": gstin,
                 "payments_total": money(sum((Decimal(p.amount) for p in payments), ZERO)),
                 "budget_added": money(budget_added),
                 "payments": [
@@ -337,12 +369,16 @@ class InvoiceService:
         deliveries, payments, budget_added = self._collect(company_id, client_id, start, end)
         subtotal = money(sum((Decimal(row.amount) for row in deliveries), ZERO))
         paid = money(sum((Decimal(p.amount) for p in payments), ZERO))
+        tax_rate, tax_amount, _ = self._tax(company_id, client_id, subtotal)
         return InvoicePreviewResponse(
             period_start=start,
             period_end=end,
             currency=self.finance.company_currency(company_id),
             items=len(deliveries),
             subtotal=subtotal,
+            tax_rate=tax_rate,
+            tax_amount=tax_amount,
+            total=money(subtotal + tax_amount),
             payments_total=paid,
             budget_added=money(budget_added),
             lines=[
@@ -442,7 +478,7 @@ class InvoiceService:
                     company_name=company.name,
                     client_name=row.client_name,
                     invoice_code=row.code,
-                    amount=amount_text(Decimal(row.subtotal), row.currency),
+                    amount=amount_text(row.total, row.currency),
                     period=f"{row.period_start:%d %b %Y} – {row.period_end:%d %b %Y}",
                     portal_url=_portal_url(),
                     pdf=content,
@@ -463,7 +499,7 @@ class InvoiceService:
             [notification_service.client_user(company_id, row.client_id)],
             "invoice.sent",
             f"New invoice {row.code}",
-            f"{amount_text(Decimal(row.subtotal), row.currency)} for "
+            f"{amount_text(row.total, row.currency)} for "
             f"{row.period_start:%d %b} – {row.period_end:%d %b %Y}.",
             "/billing",
             {"invoice_id": str(row.id)},
@@ -473,33 +509,179 @@ class InvoiceService:
         )
 
     def create_for_used_up_budget(self, company_id: UUID, client_id: UUID, actor_id: UUID) -> None:
-        """Called when approved work uses up a client's budget: prepare a draft for the current
-        top-up period (once per period) and tell the admins."""
+        """Kept for callers of Phase 11; invoices now follow payment sheets."""
+        self.ensure_sheet_invoices(company_id, client_id, actor_id)
+
+    # -- invoices per payment sheet (owner request 2026-11-15) --------------------------------
+
+    def _sheet_invoices(self, company_id: UUID, client_id: UUID) -> dict[date, InvoiceRow]:
+        rows, _ = self.repository.list(company_id, client_id, ["DRAFT", "SENT", "PAID"], 1, 200)
+        return {row.period_start: row for row in rows if row.source == "SHEET"}
+
+    def _sheet_period(self, sheet: PaymentSheet, today: date) -> tuple[date, date]:
+        return sheet.start, sheet.end or min(sheet.ran_out_on or today, today)
+
+    def ensure_sheet_invoices(self, company_id: UUID, client_id: UUID, actor_id: UUID) -> None:
+        """A draft invoice for every payment sheet that has finished: its money ran out, or the
+        next payment closed it. Made once per sheet; the admin checks and sends it."""
         try:
-            cycles, _ = self._cycles(company_id, client_id)
-            if not cycles:
-                return
-            current = cycles[-1]
-            if current.invoice_id is not None or self.repository.find_auto(
-                company_id, client_id, current.start
-            ):
-                return
             _, _, today = self._zone(company_id)
-            invoice_id = self._make(company_id, client_id, actor_id, current.start, today, "TOP_UP")
-            row = self.repository.get(company_id, invoice_id)
-            if row is None:
-                return
-            notification_service.notify(
-                company_id,
-                notification_service.admins(company_id),
-                "invoice.ready",
-                f"Invoice {row.code} is ready for {row.client_name}",
-                "Their budget is used up. Review the draft and send it.",
-                f"/invoices?invoice={row.id}",
-                {"invoice_id": str(row.id), "client_id": str(client_id)},
+            made = self._sheet_invoices(company_id, client_id)
+            for sheet in self._client_sheets(company_id, client_id):
+                had_money = sheet.paid + sheet.carried_in > 0
+                finished = sheet.end is not None or (had_money and sheet.left <= 0)
+                if not finished or sheet.items == 0 or sheet.start in made:
+                    continue
+                start, end = self._sheet_period(sheet, today)
+                invoice_id = self._make(company_id, client_id, actor_id, start, end, "SHEET")
+                row = self.repository.get(company_id, invoice_id)
+                if row is None:
+                    continue
+                notification_service.notify(
+                    company_id,
+                    notification_service.admins(company_id),
+                    "invoice.ready",
+                    f"Invoice {row.code} is ready for {row.client_name}",
+                    f"Payment sheet {sheet.index} is complete. Review the draft and send it.",
+                    f"/invoices?invoice={row.id}",
+                    {"invoice_id": str(row.id), "client_id": str(client_id)},
+                )
+        except Exception:  # noqa: BLE001 - never block the approval or payment that triggered it
+            logger.warning("Automatic sheet invoice failed", exc_info=True)
+
+    def create_for_sheet(
+        self, context: AuthContext, request: SheetInvoiceRequest
+    ) -> InvoiceDetailResponse:
+        """The admin's 'Generate invoice' button on a payment sheet."""
+        company_id = self._admin(context, "CREATE")
+        if self.tasks.get_client(company_id, request.client_id) is None:
+            raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
+        sheet = next(
+            (
+                item
+                for item in self._client_sheets(company_id, request.client_id)
+                if item.start == request.start
+            ),
+            None,
+        )
+        if sheet is None:
+            raise AuthenticationError(404, "SHEET_NOT_FOUND", "That payment sheet was not found.")
+        existing = self._sheet_invoices(company_id, request.client_id).get(sheet.start)
+        if existing is not None:
+            return self._detail(company_id, existing.id)
+        _, _, today = self._zone(company_id)
+        start, end = self._sheet_period(sheet, today)
+        invoice_id = self._make(company_id, request.client_id, context.user_id, start, end, "SHEET")
+        return self._detail(company_id, invoice_id)
+
+    # -- GST and monthly packages per client (owner requests 2026-11-15) ----------------------
+
+    def _package(self, row: PackageRow, today: date, tz: str) -> PackageResponse:
+        status: Literal["UPCOMING", "ACTIVE", "ENDED"] = (
+            "UPCOMING"
+            if row.starts_on > today
+            else "ENDED" if row.ends_on is not None and row.ends_on < today else "ACTIVE"
+        )
+        month_start = today.replace(day=1)
+        month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        return PackageResponse(
+            id=row.id,
+            name=row.name,
+            monthly_price=money(row.monthly_price),
+            videos_included=row.videos_included,
+            starts_on=row.starts_on,
+            ends_on=row.ends_on,
+            status=status,
+            used_this_month=(
+                self.packages.covered_in_month(row.id, tz, month_start, month_end)
+                if status == "ACTIVE"
+                else 0
+            ),
+            created_by_name=row.created_by_name,
+        )
+
+    def billing_settings(self, context: AuthContext, client_id: UUID) -> BillingSettingsResponse:
+        company_id = self._admin(context, "VIEW")
+        tax = self.packages.client_tax(company_id, client_id)
+        if tax is None:
+            raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
+        tz, _, today = self._zone(company_id)
+        company = self.repository.company_profile(company_id)
+        return BillingSettingsResponse(
+            client_id=client_id,
+            currency=self.finance.company_currency(company_id),
+            gst_enabled=tax.gst_enabled,
+            gst_rate=Decimal(tax.gst_rate),
+            gstin=tax.gstin,
+            company_gstin=company.gstin or "",
+            packages=[
+                self._package(row, today, tz) for row in self.packages.list(company_id, client_id)
+            ],
+        )
+
+    def set_gst(
+        self, context: AuthContext, client_id: UUID, request: ClientGstRequest
+    ) -> BillingSettingsResponse:
+        company_id = self._admin(context, "EDIT")
+        if not self.packages.set_client_tax(
+            company_id, client_id, request.gst_enabled, request.gst_rate, request.gstin.upper()
+        ):
+            raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
+        return self.billing_settings(context, client_id)
+
+    def add_package(
+        self, context: AuthContext, client_id: UUID, request: PackageCreateRequest
+    ) -> BillingSettingsResponse:
+        """A new monthly package. One package at a time: the running one must end the day
+        before (so months already charged keep their price)."""
+        company_id = self._admin(context, "CREATE")
+        if self.tasks.get_client(company_id, client_id) is None:
+            raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
+        running = self.packages.running_after(company_id, client_id, request.starts_on)
+        if running is not None:
+            raise AuthenticationError(
+                409,
+                "PACKAGE_RUNNING",
+                f"{running.name} is still running then. End it before {request.starts_on:%d %b %Y} first.",
             )
-        except Exception:  # noqa: BLE001 - never block the approval that triggered this
-            logger.warning("Automatic invoice failed", exc_info=True)
+        self.packages.create(
+            company_id,
+            client_id,
+            context.user_id,
+            request.name.strip(),
+            request.monthly_price,
+            request.videos_included,
+            request.starts_on,
+        )
+        return self.billing_settings(context, client_id)
+
+    def end_package(
+        self, context: AuthContext, client_id: UUID, package_id: UUID, request: PackageEndRequest
+    ) -> BillingSettingsResponse:
+        company_id = self._admin(context, "EDIT")
+        package = self.packages.get(company_id, package_id)
+        if package is None or package.client_id != client_id:
+            raise AuthenticationError(404, "PACKAGE_NOT_FOUND", "Package was not found.")
+        if not self.packages.end(company_id, package_id, request.ends_on):
+            raise AuthenticationError(
+                422, "INVALID_END_DATE", "The end date must be on or after the start date."
+            )
+        return self.billing_settings(context, client_id)
+
+    def remove_package(
+        self, context: AuthContext, client_id: UUID, package_id: UUID
+    ) -> BillingSettingsResponse:
+        company_id = self._admin(context, "DELETE")
+        package = self.packages.get(company_id, package_id)
+        if package is None or package.client_id != client_id:
+            raise AuthenticationError(404, "PACKAGE_NOT_FOUND", "Package was not found.")
+        if not self.packages.remove_unstarted(company_id, package_id):
+            raise AuthenticationError(
+                409,
+                "PACKAGE_STARTED",
+                "This package has started. End it instead; months already charged stay.",
+            )
+        return self.billing_settings(context, client_id)
 
     # -- payment sheets overview (owner request 2026-11-14) -----------------------------------
 
@@ -535,10 +717,13 @@ class InvoiceService:
             sheets=sheets,
         )
 
-    def _client_sheets(self, company_id: UUID, client_id: UUID) -> list[PaymentSheet]:
+    def _client_sheets(
+        self, company_id: UUID, client_id: UUID, with_invoices: bool = False
+    ) -> list[PaymentSheet]:
         """Client payment sheets: each payment received opens a sheet (owner decision
         2026-11-14); delivered videos are taken from it. Work with no payment yet still shows."""
         tz, _, _ = self._zone(company_id)
+        made = self._sheet_invoices(company_id, client_id) if with_invoices else {}
         payments = self.finance.list_client_payments_for_client(company_id, client_id)
         rows = list(reversed(self.finance.client_deliveries(company_id, client_id, tz)))
         cycles = budget_cycles(
@@ -553,7 +738,12 @@ class InvoiceService:
                 for payment in payments
             ],
             [
-                (row.delivered_on, Decimal(row.amount), f"{row.title} · {row.service_name}")
+                (
+                    row.delivered_on,
+                    Decimal(row.amount),
+                    row.title if row.kind == "PACKAGE" else f"{row.title} · {row.service_name}",
+                    row.kind == "WORK",
+                )
                 for row in rows
             ],
             open_without_payment=True,
@@ -579,6 +769,9 @@ class InvoiceService:
                     )
                     for line in cycle.lines
                 ],
+                invoice_id=made[cycle.start].id if cycle.start in made else None,
+                invoice_code=made[cycle.start].code if cycle.start in made else None,
+                invoice_status=made[cycle.start].status if cycle.start in made else None,
             )
             for cycle in cycles
         ]
@@ -587,7 +780,7 @@ class InvoiceService:
         company_id = self._admin(context, "VIEW")
         if self.tasks.get_client(company_id, client_id) is None:
             raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client not found.")
-        return self._client_sheets(company_id, client_id)
+        return self._client_sheets(company_id, client_id, with_invoices=True)
 
     def sheets_overview(self, context: AuthContext) -> SheetsOverviewResponse:
         """Every manager's and client's payment sheets, most urgent first (Admin only)."""
@@ -595,7 +788,7 @@ class InvoiceService:
         tz, _, _ = self._zone(company_id)
         clients: list[SheetOwner] = []
         for row in self.finance.client_balances(company_id, tz, None, None):
-            sheets = self._client_sheets(company_id, row.client_id)
+            sheets = self._client_sheets(company_id, row.client_id, with_invoices=True)
             if sheets:
                 clients.append(
                     self._owner(
@@ -719,8 +912,10 @@ class InvoiceService:
                     period_end=row.period_end,
                     issue_date=row.issue_date,
                     subtotal=money(row.subtotal),
+                    tax_amount=money(row.tax_amount),
+                    total=money(row.total),
                     payments_total=money(row.payments_total),
-                    balance=money(Decimal(row.subtotal) - Decimal(row.payments_total)),
+                    balance=money(row.total - Decimal(row.payments_total)),
                     items=row.line_count,
                 )
                 for row in invoices

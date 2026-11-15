@@ -14,8 +14,10 @@ from fastapi import APIRouter, Query, Response
 
 from app.middleware.authentication import AuthenticatedContext
 from app.schemas.invoices import (
+    BillingSettingsResponse,
     BudgetCycleResponse,
     ClientBillingResponse,
+    ClientGstRequest,
     InvoiceCreateRequest,
     InvoiceDetailResponse,
     InvoiceListResponse,
@@ -23,6 +25,9 @@ from app.schemas.invoices import (
     InvoiceSendResponse,
     InvoiceStatus,
     InvoiceUpdateRequest,
+    PackageCreateRequest,
+    PackageEndRequest,
+    SheetInvoiceRequest,
 )
 from app.schemas.registration import ErrorResponse
 from app.services.invoice_service import invoice_service
@@ -94,6 +99,78 @@ def create_invoice(
     context: AuthenticatedContext, request: InvoiceCreateRequest
 ) -> InvoiceDetailResponse:
     return invoice_service.create(context, request)
+
+
+@router.post(
+    "/sheet",
+    response_model=InvoiceDetailResponse,
+    status_code=201,
+    summary="Make the invoice for one payment sheet (or open the one already made)",
+    responses=ERRORS,
+)
+def create_sheet_invoice(
+    context: AuthenticatedContext, request: SheetInvoiceRequest
+) -> InvoiceDetailResponse:
+    return invoice_service.create_for_sheet(context, request)
+
+
+@router.get(
+    "/billing-settings/{client_id}",
+    response_model=BillingSettingsResponse,
+    summary="A client's GST and monthly packages",
+    responses=ERRORS,
+)
+def billing_settings(context: AuthenticatedContext, client_id: UUID) -> BillingSettingsResponse:
+    return invoice_service.billing_settings(context, client_id)
+
+
+@router.put(
+    "/billing-settings/{client_id}/gst",
+    response_model=BillingSettingsResponse,
+    summary="Switch GST on or off for a client",
+    responses=ERRORS,
+)
+def set_gst(
+    context: AuthenticatedContext, client_id: UUID, request: ClientGstRequest
+) -> BillingSettingsResponse:
+    return invoice_service.set_gst(context, client_id, request)
+
+
+@router.post(
+    "/billing-settings/{client_id}/packages",
+    response_model=BillingSettingsResponse,
+    status_code=201,
+    summary="Start a monthly package",
+    responses=ERRORS,
+)
+def add_package(
+    context: AuthenticatedContext, client_id: UUID, request: PackageCreateRequest
+) -> BillingSettingsResponse:
+    return invoice_service.add_package(context, client_id, request)
+
+
+@router.post(
+    "/billing-settings/{client_id}/packages/{package_id}/end",
+    response_model=BillingSettingsResponse,
+    summary="End a monthly package on a date",
+    responses=ERRORS,
+)
+def end_package(
+    context: AuthenticatedContext, client_id: UUID, package_id: UUID, request: PackageEndRequest
+) -> BillingSettingsResponse:
+    return invoice_service.end_package(context, client_id, package_id, request)
+
+
+@router.delete(
+    "/billing-settings/{client_id}/packages/{package_id}",
+    response_model=BillingSettingsResponse,
+    summary="Remove a package that has not started",
+    responses=ERRORS,
+)
+def remove_package(
+    context: AuthenticatedContext, client_id: UUID, package_id: UUID
+) -> BillingSettingsResponse:
+    return invoice_service.remove_package(context, client_id, package_id)
 
 
 @router.get(

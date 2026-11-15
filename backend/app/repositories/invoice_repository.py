@@ -38,10 +38,19 @@ class InvoiceRow:
     paid_at: datetime | None
     created_at: datetime
     line_count: int
+    prefix: str = "ADV"
+    tax_rate: Decimal = Decimal("0")
+    tax_amount: Decimal = Decimal("0")
+    client_gstin: str = ""
 
     @property
     def code(self) -> str:
-        return f"INV-{self.number:04d}"
+        # ADV-0001 (owner request 2026-11-15); invoices sent before that keep INV-.
+        return f"{self.prefix}-{self.number:04d}"
+
+    @property
+    def total(self) -> Decimal:
+        return Decimal(self.subtotal) + Decimal(self.tax_amount)
 
 
 @dataclass(frozen=True)
@@ -61,6 +70,7 @@ class CompanyProfile:
     phone: str | None
     address: str | None
     website: str | None
+    gstin: str | None = None
 
 
 _SELECT = """
@@ -70,7 +80,8 @@ _SELECT = """
       i.period_start, i.period_end, i.issue_date, i.due_date, i.currency, i.subtotal,
       i.payments_total, i.budget_added, i.payments, i.notes, u.name, i.sent_at, i.paid_at,
       i.created_at,
-      (SELECT COUNT(*) FROM invoice_lines l WHERE l.invoice_id = i.id)::int
+      (SELECT COUNT(*) FROM invoice_lines l WHERE l.invoice_id = i.id)::int,
+      i.prefix, i.tax_rate, i.tax_amount, i.client_gstin
     FROM invoices i
     JOIN clients c ON c.id = i.client_id
     JOIN users u ON u.id = i.created_by_id
@@ -104,9 +115,9 @@ class InvoiceRepository:
                 """
                 INSERT INTO invoices (id, company_id, client_id, number, status, source,
                   period_start, period_end, issue_date, due_date, currency, subtotal,
-                  payments_total, budget_added, payments, notes, created_by_id, created_at,
-                  updated_at)
-                VALUES (%s,%s,%s,%s,'DRAFT',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,
+                  payments_total, budget_added, payments, notes, created_by_id, tax_rate,
+                  tax_amount, client_gstin, created_at, updated_at)
+                VALUES (%s,%s,%s,%s,'DRAFT',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,
                   NOW() AT TIME ZONE 'UTC', NOW() AT TIME ZONE 'UTC')
                 """,
                 (
@@ -126,6 +137,9 @@ class InvoiceRepository:
                     json.dumps(header["payments"], default=str),
                     header.get("notes", ""),
                     actor_id,
+                    header.get("tax_rate", Decimal("0")),
+                    header.get("tax_amount", Decimal("0")),
+                    header.get("client_gstin", ""),
                 ),
             )
             for position, line in enumerate(lines, start=1):
@@ -194,13 +208,15 @@ class InvoiceRepository:
             )
             return [_row(row) for row in cursor.fetchall()], int(count[0]) if count else 0
 
-    def find_auto(self, company_id: UUID, client_id: UUID, period_start: date) -> UUID | None:
-        """An automatic (top-up) invoice already made for this budget period, if any."""
+    def find_auto(
+        self, company_id: UUID, client_id: UUID, period_start: date, source: str = "TOP_UP"
+    ) -> UUID | None:
+        """An automatic invoice already made for this period (top-up or payment sheet)."""
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
-                "SELECT id FROM invoices WHERE company_id=%s AND client_id=%s AND source='TOP_UP' "
+                "SELECT id FROM invoices WHERE company_id=%s AND client_id=%s AND source=%s "
                 "AND period_start=%s AND status <> 'VOID' LIMIT 1",
-                (company_id, client_id, period_start),
+                (company_id, client_id, source, period_start),
             )
             row = cursor.fetchone()
             return row[0] if row else None
@@ -233,7 +249,9 @@ class InvoiceRepository:
     def company_profile(self, company_id: UUID) -> CompanyProfile:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
-                "SELECT name, contact_email, phone, address, website FROM companies WHERE id=%s",
+                "SELECT c.name, c.contact_email, c.phone, c.address, c.website, d.gst_tax_id "
+                "FROM companies c LEFT JOIN company_tenant_defaults d ON d.company_id = c.id "
+                "WHERE c.id=%s",
                 (company_id,),
             )
             row = cursor.fetchone()

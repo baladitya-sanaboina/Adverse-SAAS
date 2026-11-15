@@ -48,6 +48,8 @@ type Billing = {
     period_end: string;
     issue_date: string;
     subtotal: string;
+    tax_amount?: string;
+    total?: string;
     payments_total: string;
     balance: string;
     items: number;
@@ -386,7 +388,8 @@ function BillingContent() {
                           {invoice.items === 1 ? "video" : "videos"}
                         </small>
                         <strong>
-                          {invoice.code} · {money(invoice.subtotal, currency)}
+                          {invoice.code} · {money(invoice.total ?? invoice.subtotal, currency)}
+                          {Number(invoice.tax_amount ?? 0) > 0 ? " incl. GST" : ""}
                         </strong>
                       </span>
                       <span className="meta billing-invoice-meta">

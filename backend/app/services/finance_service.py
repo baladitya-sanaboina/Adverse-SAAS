@@ -511,7 +511,8 @@ class FinanceService:
             monthly=[
                 ClientMonthPoint(month=start, items=items, amount=amount)
                 for start, items, amount in monthly_totals(
-                    [(row.delivered_on, row.amount) for row in recent], month_starts
+                    [(row.delivered_on, row.amount) for row in recent if row.kind == "WORK"],
+                    month_starts,
                 )
             ],
         )
@@ -599,6 +600,10 @@ class FinanceService:
         row = self.repository.get_client_payment(company_id, payment_id)
         assert row is not None
         payment = self._client_payment(row)
+        # The new payment closes the previous sheet: it gets its draft invoice (2026-11-15).
+        from app.services.invoice_service import invoice_service
+
+        invoice_service.ensure_sheet_invoices(company_id, request.client_id, context.user_id)
         notification_service.notify(
             company_id,
             [notification_service.client_user(company_id, request.client_id)],

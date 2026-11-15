@@ -8,7 +8,7 @@ Rules (docs/ProductionManagementPlan.md, sections 3.2 and 4):
 - Clients have no task access at all.
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from fastapi import UploadFile
 
 from app.repositories.finance_repository import FinanceRepository
+from app.repositories.package_repository import PackageRepository
 from app.repositories.task_repository import (
     PersonRow,
     TaskMutation,
@@ -98,9 +99,11 @@ class TaskService:
         finance_repository: FinanceRepository | None = None,
         storage: TaskFileStorage | None = None,
         events: TaskEvents | None = None,
+        packages: PackageRepository | None = None,
     ):
         self.repository = repository or TaskRepository()
         self.finance = finance_repository or FinanceRepository()
+        self.packages = packages or PackageRepository()
         self.storage = storage or TaskFileStorage()
         # Notifications are sent only by the app's own instance (see the bottom of this file).
         self.events = events or NoTaskEvents()
@@ -735,13 +738,46 @@ class TaskService:
 
         def plan(row: TaskRow) -> TaskMutation:
             previous["status"] = row.status
-            return self._status_plan(row, "ADMIN", request)
+            mutation = self._status_plan(row, "ADMIN", request)
+            if request.status in BILLABLE_STATUSES and row.status not in BILLABLE_STATUSES:
+                self._cover_by_package(company_id, row, mutation)
+            return mutation
 
         self._mutate(company_id, task_id, context.user_id, plan)
         self.events.status_changed(
             company_id, task_id, context.user_id, previous.get("status"), by_admin=True
         )
         return self._write_response(company_id, task_id)
+
+    def _cover_by_package(self, company_id: UUID, row: TaskRow, mutation: TaskMutation) -> None:
+        """Monthly packages (owner request 2026-11-15): while the client's package for this
+        month still has videos left, an approved video is covered by it (price 0, recorded as a
+        price change with the reason). Extra videos keep their per-item price."""
+        if row.package_id is not None:
+            return
+        today = self._today(company_id)
+        package = self.packages.active_on(company_id, row.client_id, today)
+        if package is None:
+            return
+        month_start = today.replace(day=1)
+        month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        used = self.packages.covered_in_month(
+            package.id, self.finance.company_timezone(company_id), month_start, month_end
+        )
+        if used >= package.videos_included:
+            return
+        reason = (
+            f"Included in {package.name} ({used + 1} of {package.videos_included}, "
+            f"{month_start:%b %Y})"
+        )
+        mutation.updates.update(
+            {
+                "package_id": package.id,
+                "client_price_final": money(0),
+                "client_price_reason": reason,
+            }
+        )
+        mutation.price_changes.append(("CLIENT_PRICE", row.client_price_final, money(0), reason))
 
     def _status_plan(
         self, row: TaskRow, role: TaskActorRole, request: TaskStatusChangeRequest
