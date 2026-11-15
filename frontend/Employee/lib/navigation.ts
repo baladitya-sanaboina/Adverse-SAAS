@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Contact,
   Gauge,
+  Mail,
   MessagesSquare,
   UserRound,
 } from "lucide-react";
@@ -15,6 +16,8 @@ export const navigationItems = [
   { href: "/salary", label: "My Salary", icon: Banknote, module: "TASKS" },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/chat", label: "Chat", icon: MessagesSquare },
+  // Mail opens in its own tab (owner request 2026-11-15).
+  { href: "/mail", label: "Mail", icon: Mail, newTab: true },
   { href: "/clients", label: "Clients", icon: Contact, module: "CLIENTS", feature: "CLIENT_MANAGEMENT" },
   { href: "/crm", label: "CRM", icon: ChartNoAxesCombined, module: "CRM", feature: "CRM" },
   { href: "/profile", label: "Profile", icon: UserRound },

@@ -13,6 +13,7 @@ import { getBrandLogo } from "@/lib/branding";
 import { DashboardContentLoader } from "@/components/loader/dashboard-content-loader";
 import { AppFooter, ErrorState, ShellActions } from "@/components/foundation/ui-foundation";
 import { navigationItems } from "@/lib/navigation";
+import { MAIL_WINDOW, openMail } from "@loopless-shared/mail/mail-types";
 import { loadCurrentUser, logout } from "@/lib/auth/client";
 import type { CurrentUser } from "@/lib/auth/types";
 import { useCompanyBranding } from "@/components/branding/company-branding-provider";
@@ -105,21 +106,43 @@ function Sidebar({
           const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
           const Icon = item.icon;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={item.label}
-              onClick={(event) => onNavigate(event, item.href)}
-              className={`dash-nav-item${active ? " active" : ""}`}
-            >
-              <span className="dash-nav-icon">
-                <Icon width={18} height={18} strokeWidth={1.8} aria-hidden="true" />
-              </span>
-              <span className="dash-nav-text">{item.label}</span>
-              <span className="dash-nav-arrow" aria-hidden="true">
-                ›
-              </span>
-            </Link>
+            "newTab" in item && item.newTab ? (
+              <a
+                key={item.href}
+                href={item.href}
+                target={MAIL_WINDOW}
+                title={`${item.label} (opens in a new tab)`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  openMail(item.href);
+                }}
+                className="dash-nav-item"
+              >
+                <span className="dash-nav-icon">
+                  <Icon width={18} height={18} strokeWidth={1.8} aria-hidden="true" />
+                </span>
+                <span className="dash-nav-text">{item.label}</span>
+                <span className="dash-nav-arrow" aria-hidden="true">
+                  ›
+                </span>
+              </a>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                title={item.label}
+                onClick={(event) => onNavigate(event, item.href)}
+                className={`dash-nav-item${active ? " active" : ""}`}
+              >
+                <span className="dash-nav-icon">
+                  <Icon width={18} height={18} strokeWidth={1.8} aria-hidden="true" />
+                </span>
+                <span className="dash-nav-text">{item.label}</span>
+                <span className="dash-nav-arrow" aria-hidden="true">
+                  ›
+                </span>
+              </Link>
+            )
           );
         })}
       </nav>

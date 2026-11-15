@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Bell, BellRing, Check, CheckCheck, Cookie, Inbox, Volume2, VolumeX, X } from "lucide-react";
+import { MAIL_WINDOW } from "@/components/mail/mail-types";
 import { subscribeRealtime } from "@/lib/realtime";
 import "@/styles/notifications.css";
 
@@ -261,6 +262,15 @@ function writeRaw(key: string, value: string) {
 
 /* ------------------------------------------------------------------------------------- bell */
 
+// Mail lives in its own tab (2026-11-15): mail links open (or reuse) that tab.
+function follow(link: string, push: (href: string) => void): void {
+  if (link === "/mail" || link.startsWith("/mail?")) {
+    window.open(link, MAIL_WINDOW)?.focus();
+    return;
+  }
+  push(link);
+}
+
 export function NotificationBell() {
   const router = useRouter();
   const [items, setItems] = useState<AppNotification[]>([]);
@@ -289,7 +299,7 @@ export function NotificationBell() {
           .then((result) => setUnread(result.unread_count))
           .catch(() => undefined);
       }
-      if (item.link) router.push(item.link);
+      if (item.link) follow(item.link, router.push);
     },
     [router],
   );
@@ -503,7 +513,7 @@ export function NotificationsPage() {
         // Still navigate.
       }
     }
-    if (item.link) router.push(item.link);
+    if (item.link) follow(item.link, router.push);
   }
 
   async function markAll() {

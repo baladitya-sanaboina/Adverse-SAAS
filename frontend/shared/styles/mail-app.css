@@ -1,0 +1,2284 @@
+/* Adverse Mail, its own tab (owner requests 2026-11-15). App tokens only; light and dark. */
+
+.mailx {
+  --mx-accent: #0876ed;
+  --mx-accent-soft: color-mix(in srgb, #0876ed 11%, var(--surface));
+  --mx-unread: color-mix(in srgb, #0876ed 5%, var(--surface));
+  --mx-red: #d93a4a;
+  --mx-amber: #b26b00;
+  --mx-green: #23885a;
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  grid-template-rows: 64px minmax(0, 1fr);
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
+  font-size: 0.7rem;
+}
+
+.mailx button {
+  font-family: inherit;
+}
+
+.mailx svg {
+  flex: none;
+}
+
+.mailx .spin {
+  animation: mailx-spin 0.8s linear infinite;
+}
+
+@keyframes mailx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* -- top bar ------------------------------------------------------------------------------- */
+.mailx-top {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.mailx-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 222px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.mailx-brand:hover {
+  background: var(--surface-muted);
+}
+
+.mailx-brand img {
+  height: 26px;
+  width: auto;
+}
+
+.mailx-brand span {
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.mailx-search {
+  flex: 1;
+  max-width: 720px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--surface-muted);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mailx-search:focus-within {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgb(15 23 42 / 0.1);
+}
+
+.mailx-search > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.mailx-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--foreground);
+  background: transparent;
+  font: inherit;
+  font-size: 0.74rem;
+}
+
+.mailx-search button {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: none;
+  cursor: pointer;
+}
+
+.mailx-search button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mailx-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.mailx-me {
+  margin-left: 6px;
+}
+
+.mailx-menu {
+  display: none !important;
+}
+
+/* -- icon buttons -------------------------------------------------------------------------- */
+.mailx-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: none;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.mailx-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.mailx-icon:hover:not(:disabled) {
+  color: var(--foreground);
+  background: var(--surface-muted);
+}
+
+.mailx-icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.mailx-icon.on,
+.mailx-icon.starred {
+  color: var(--mx-accent);
+  background: var(--mx-accent-soft);
+}
+
+.mailx-icon.starred svg {
+  fill: #f2b300;
+  color: #f2b300;
+}
+
+.mailx-primary,
+.mailx-secondary,
+.mailx-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mailx-primary {
+  color: #fff;
+  background: var(--mx-accent);
+  box-shadow: 0 6px 16px rgb(8 118 237 / 0.25);
+}
+
+.mailx-primary:hover {
+  background: #065ec1;
+}
+
+.mailx-primary.small {
+  height: 34px;
+  margin-left: auto;
+}
+
+.mailx-primary svg,
+.mailx-tool svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mailx-secondary {
+  color: var(--foreground);
+  background: var(--surface-muted);
+}
+
+.mailx-tool {
+  height: 32px;
+  padding: 0 12px;
+  color: var(--foreground);
+  background: var(--surface-muted);
+}
+
+.mailx-tool:hover {
+  background: var(--mx-accent-soft);
+}
+
+.mailx-tool.danger {
+  color: var(--mx-red);
+}
+
+/* -- side bar ------------------------------------------------------------------------------ */
+.mailx-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 12px 14px 10px;
+  overflow-y: auto;
+  background: var(--background);
+}
+
+.mailx-compose-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  height: 54px;
+  margin: 0 0 10px 2px;
+  padding: 0 24px 0 18px;
+  border: 0;
+  border-radius: 16px;
+  color: #052c57;
+  background: #c9e3ff;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.12);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.mailx-compose-btn:hover {
+  box-shadow: 0 6px 16px rgb(8 118 237 / 0.25);
+}
+
+.mailx-compose-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.dark .mailx-compose-btn {
+  color: #dcecff;
+  background: #10335c;
+}
+
+.mailx-side nav {
+  display: grid;
+  gap: 1px;
+}
+
+.mailx-folder {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 34px;
+  padding: 0 14px 0 20px;
+  border: 0;
+  border-radius: 0 999px 999px 0;
+  color: var(--foreground);
+  background: none;
+  font-size: 0.7rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mailx-folder svg {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.mailx-folder span {
+  flex: 1;
+}
+
+.mailx-folder b {
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.mailx-folder:hover {
+  background: var(--surface-muted);
+}
+
+.mailx-folder.active {
+  color: #052c57;
+  background: #d3e8ff;
+  font-weight: 700;
+}
+
+.mailx-folder.active svg {
+  color: #052c57;
+}
+
+.dark .mailx-folder.active {
+  color: #dcecff;
+  background: #10335c;
+}
+
+.dark .mailx-folder.active svg {
+  color: #dcecff;
+}
+
+.mailx-folder.bold {
+  font-weight: 700;
+}
+
+.mailx-side-ticket {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 4px 0;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--foreground);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mailx-side-ticket:hover {
+  border-color: var(--mx-accent);
+}
+
+.mailx-side-ticket svg {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border-radius: 9px;
+  color: var(--mx-accent);
+  background: var(--mx-accent-soft);
+}
+
+.mailx-side-ticket span {
+  display: grid;
+  gap: 1px;
+}
+
+.mailx-side-ticket strong {
+  font-size: 0.66rem;
+}
+
+.mailx-side-ticket small {
+  color: var(--muted);
+  font-size: 0.56rem;
+}
+
+.mailx-side-note {
+  margin: auto 8px 0;
+  padding-top: 16px;
+  color: var(--muted);
+  font-size: 0.56rem;
+  line-height: 1.5;
+}
+
+/* -- main ---------------------------------------------------------------------------------- */
+.mailx-main {
+  min-width: 0;
+  min-height: 0;
+  margin: 0 14px 14px 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.mailx-list-wrap,
+.mailx-thread,
+.mailx-tickets {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.mailx-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mailx-check {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.mailx-check:hover {
+  background: var(--surface-muted);
+}
+
+.mailx-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--mx-accent);
+  cursor: pointer;
+}
+
+.mailx-search-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 999px;
+  color: var(--mx-accent);
+  background: var(--mx-accent-soft);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.mailx-search-chip button {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: 0;
+  border-radius: 50%;
+  color: inherit;
+  background: none;
+  cursor: pointer;
+}
+
+.mailx-search-chip svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mailx-pages {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.mailx-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.mailx-tabs button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  width: 240px;
+  height: 52px;
+  padding: 0 18px;
+  border: 0;
+  color: var(--muted);
+  background: none;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mailx-tabs button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.mailx-tabs button:hover {
+  background: var(--surface-muted);
+}
+
+.mailx-tabs button.active {
+  color: var(--mx-accent);
+}
+
+.mailx-tabs button.active::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--mx-accent);
+}
+
+.mailx-tabs b {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--mx-accent);
+  font-size: 0.54rem;
+}
+
+.mailx-tabs b.updates {
+  background: var(--mx-amber);
+}
+
+.mailx-banner {
+  margin: 0;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--surface-muted);
+  font-size: 0.62rem;
+}
+
+/* -- conversation rows --------------------------------------------------------------------- */
+.mailx-rows {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.mailx-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px 32px minmax(120px, 200px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  height: 44px;
+  padding: 0 16px 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-muted);
+  cursor: pointer;
+}
+
+.mailx-row.unread {
+  background: var(--surface);
+}
+
+.mailx-row:hover {
+  z-index: 1;
+  box-shadow:
+    inset 1px 0 0 var(--border),
+    inset -1px 0 0 var(--border),
+    0 2px 6px rgb(15 23 42 / 0.12);
+}
+
+.mailx-row.checked {
+  background: color-mix(in srgb, #0876ed 14%, var(--surface));
+}
+
+.mailx-row.focused::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--mx-accent);
+}
+
+.mailx-star {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: none;
+  cursor: pointer;
+}
+
+.mailx-star svg {
+  width: 17px;
+  height: 17px;
+}
+
+.mailx-star:hover {
+  background: var(--border);
+}
+
+.mailx-star.on svg {
+  color: #f2b300;
+  fill: #f2b300;
+}
+
+.mailx-row-who {
+  overflow: hidden;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mailx-row-who small {
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 400;
+}
+
+.mailx-draft {
+  color: var(--mx-red);
+  font-style: normal;
+}
+
+.mailx-row-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.mailx-row-text strong {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+.mailx-row-text > span {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+}
+
+.mailx-row.unread .mailx-row-who,
+.mailx-row.unread .mailx-row-text strong,
+.mailx-row.unread .mailx-row-meta time {
+  font-weight: 700;
+}
+
+.mailx-row.unread .mailx-row-meta time {
+  color: var(--foreground);
+}
+
+.mailx-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+  min-width: 72px;
+  color: var(--muted);
+  font-size: 0.6rem;
+  white-space: nowrap;
+}
+
+.mailx-row-meta svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mailx-scheduled {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mx-amber);
+}
+
+.mailx-row-hover {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  display: none;
+  gap: 2px;
+  padding-left: 12px;
+  background: inherit;
+  transform: translateY(-50%);
+}
+
+.mailx-row:hover .mailx-row-hover {
+  display: flex;
+}
+
+.mailx-row:hover .mailx-row-meta {
+  visibility: hidden;
+}
+
+.mailx-row-hover button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: none;
+  cursor: pointer;
+}
+
+.mailx-row-hover button:hover {
+  color: var(--foreground);
+  background: var(--border);
+}
+
+.mailx-row-hover svg {
+  width: 17px;
+  height: 17px;
+}
+
+.mailx-label,
+.mailx-ticket-pill,
+.mailx-priority {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.54rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.mailx-label {
+  color: var(--muted);
+  background: var(--border);
+}
+
+.mailx-ticket-pill {
+  color: #065ec1;
+  background: #e2efff;
+}
+
+.mailx-ticket-pill.in_progress {
+  color: #8a5300;
+  background: #fff1d6;
+}
+
+.mailx-ticket-pill.closed {
+  color: #1d6b44;
+  background: #e0f4e8;
+}
+
+.dark .mailx-ticket-pill {
+  color: #8cc8ff;
+  background: #10294a;
+}
+
+.dark .mailx-ticket-pill.in_progress {
+  color: #ffc56b;
+  background: #3a2a0c;
+}
+
+.dark .mailx-ticket-pill.closed {
+  color: #86d3a9;
+  background: #13281c;
+}
+
+.mailx-priority {
+  color: var(--muted);
+  background: var(--surface-muted);
+}
+
+.mailx-priority.high {
+  color: #9a5a06;
+  background: #fdf1df;
+}
+
+.mailx-priority.urgent {
+  color: #fff;
+  background: var(--mx-red);
+}
+
+.dark .mailx-priority.high {
+  color: #ffc56b;
+  background: #3a2a0c;
+}
+
+.mailx-empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 40px 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.mailx-empty > svg {
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  border-radius: 14px;
+  color: var(--mx-accent);
+  background: var(--mx-accent-soft);
+}
+
+.mailx-empty strong {
+  color: var(--foreground);
+  font-size: 0.78rem;
+}
+
+.mailx-empty span {
+  max-width: 360px;
+  font-size: 0.64rem;
+}
+
+/* -- conversation -------------------------------------------------------------------------- */
+.mailx-thread-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 28px 40px 22px;
+}
+
+.mailx-subject {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 18px 54px;
+  font-size: 1.15rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.mailx-messages {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mailx-message {
+  padding: 14px 0 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mailx-message:last-child {
+  border-bottom: 0;
+}
+
+.mailx-message > header {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.mailx-from {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.mailx-from > span {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.mailx-from strong {
+  font-size: 0.74rem;
+}
+
+.mailx-from small {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.mailx-to {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: max-content;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  color: var(--muted);
+  background: none;
+  font-size: 0.6rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mailx-to svg {
+  width: 13px;
+  height: 13px;
+}
+
+.mailx-message time {
+  color: var(--muted);
+  font-size: 0.6rem;
+  white-space: nowrap;
+}
+
+.mailx-msg-actions {
+  display: inline-flex;
+  align-items: center;
+}
+
+.mailx-msg-actions button,
+.mailx-more > button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: none;
+  cursor: pointer;
+}
+
+.mailx-msg-actions button:hover {
+  color: var(--foreground);
+  background: var(--surface-muted);
+}
+
+.mailx-msg-actions svg {
+  width: 17px;
+  height: 17px;
+}
+
+.mailx-more {
+  position: relative;
+}
+
+.mailx-menu-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  min-width: 170px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 14px 34px rgb(15 23 42 / 0.18);
+}
+
+.mailx-menu-pop.up {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+}
+
+.mailx-menu-pop button {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  width: 100% !important;
+  height: 34px !important;
+  padding: 0 10px !important;
+  border: 0;
+  border-radius: 8px !important;
+  color: var(--foreground) !important;
+  background: none;
+  font-size: 0.64rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mailx-menu-pop button:hover {
+  background: var(--surface-muted) !important;
+}
+
+.mailx-menu-pop svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+.mailx-details {
+  display: grid;
+  gap: 4px;
+  width: max-content;
+  max-width: 100%;
+  margin: 8px 0 0 54px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 8px 20px rgb(15 23 42 / 0.08);
+  font-size: 0.62rem;
+}
+
+.mailx-details div {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.mailx-details dt {
+  color: var(--muted);
+  text-align: right;
+}
+
+.mailx-details dd {
+  margin: 0;
+}
+
+.mailx-body {
+  margin: 14px 0 0 54px;
+  font-size: 0.74rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mailx-body a {
+  color: var(--mx-accent);
+}
+
+.mailx-quote {
+  margin: 8px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+
+.mailx-open-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 0 54px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--mx-accent);
+  background: var(--surface);
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mailx-open-link:hover {
+  background: var(--mx-accent-soft);
+}
+
+.mailx-open-link svg {
+  width: 15px;
+  height: 15px;
+}
+
+.mailx-files {
+  margin: 18px 0 0 54px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+}
+
+.mailx-files-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.mailx-files-title svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mailx-files > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.mailx-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 220px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--foreground);
+  background: var(--surface);
+  text-decoration: none;
+}
+
+.mailx-file:hover {
+  border-color: var(--mx-accent);
+}
+
+.mailx-file > svg {
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border-radius: 8px;
+  color: var(--mx-red);
+  background: color-mix(in srgb, #d93a4a 10%, var(--surface));
+}
+
+.mailx-file > svg.dl {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin-left: auto;
+  color: var(--muted);
+  background: none;
+}
+
+.mailx-file span {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mailx-file small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.mailx-file.image {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.mailx-file.image img {
+  width: 220px;
+  height: 130px;
+  object-fit: cover;
+}
+
+.mailx-file.image span {
+  padding: 8px 10px;
+}
+
+.mailx-collapsed {
+  display: grid;
+  grid-template-columns: 30px 170px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.mailx-collapsed strong {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mailx-collapsed span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mailx-collapsed time {
+  font-size: 0.6rem;
+}
+
+.mailx-scheduled-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px 54px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: #8a5300;
+  background: #fff4dd;
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+
+.dark .mailx-scheduled-bar {
+  color: #ffc56b;
+  background: #2f230b;
+}
+
+.mailx-scheduled-bar svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mailx-scheduled-bar button {
+  margin-left: auto;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 8px;
+  color: inherit;
+  background: rgb(255 255 255 / 0.6);
+  font-size: 0.6rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mailx-reply-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 22px 0 0 54px;
+}
+
+.mailx-reply-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 20px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--foreground);
+  background: var(--surface);
+  font-size: 0.66rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mailx-reply-bar button:hover {
+  border-color: var(--mx-accent);
+  background: var(--mx-accent-soft);
+}
+
+.mailx-reply-bar svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mailx-inline {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.mailx-inline-box {
+  overflow: visible;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 8px 26px rgb(15 23 42 / 0.12);
+}
+
+.mailx-inline-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 0;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.mailx-inline-head svg {
+  width: 15px;
+  height: 15px;
+}
+
+.mailx-spacer {
+  height: 40px;
+}
+
+/* -- faces --------------------------------------------------------------------------------- */
+.mailx-face {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+}
+
+.mailx-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mailx-face.app {
+  background: var(--mx-accent-soft);
+}
+
+.mailx-face.app img {
+  width: 64%;
+  height: 64%;
+  object-fit: contain;
+}
+
+/* -- tickets ------------------------------------------------------------------------------- */
+.mailx-ticket-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 16px 54px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-muted);
+}
+
+.mailx-ticket-facts,
+.mailx-ticket-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.mailx-ticket-facts span,
+.mailx-ticket-controls label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mailx-ticket-controls label {
+  min-width: 150px;
+}
+
+.mailx-ticket-bar small {
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mailx-ticket-bar strong {
+  font-size: 0.68rem;
+}
+
+.mailx-ticket-bar .mailx-ticket-pill,
+.mailx-ticket-bar .mailx-priority {
+  width: max-content;
+}
+
+.mailx-tickets-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.mailx-tickets-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  background: none;
+  font-size: 0.64rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mailx-tickets-tabs button:hover {
+  background: var(--surface-muted);
+}
+
+.mailx-tickets-tabs button.active {
+  color: #052c57;
+  background: #d3e8ff;
+}
+
+.dark .mailx-tickets-tabs button.active {
+  color: #dcecff;
+  background: #10335c;
+}
+
+.mailx-tickets-tabs b {
+  font-size: 0.56rem;
+}
+
+.mailx-ticket-table {
+  flex: 1;
+  overflow: auto;
+}
+
+.mailx-ticket-head,
+.mailx-ticket-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 2.2fr) minmax(120px, 1fr) 100px 120px minmax(120px, 1fr) 90px;
+  align-items: center;
+  gap: 12px;
+  min-width: 820px;
+  padding: 0 18px;
+}
+
+.mailx-ticket-head {
+  position: sticky;
+  top: 0;
+  height: 40px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mailx-ticket-row {
+  width: 100%;
+  height: 58px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
+  background: var(--surface);
+  font-size: 0.64rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mailx-ticket-row:hover {
+  background: var(--surface-muted);
+}
+
+.mailx-ticket-row .subject {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mailx-ticket-row .subject small {
+  color: var(--mx-accent);
+  font-size: 0.56rem;
+  font-weight: 700;
+}
+
+.mailx-ticket-row .subject strong {
+  overflow: hidden;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mailx-ticket-row em {
+  color: var(--muted);
+}
+
+/* -- compose ------------------------------------------------------------------------------- */
+.mailx-compose {
+  position: fixed;
+  right: 24px;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 32px));
+  height: min(600px, calc(100vh - 90px));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px 14px 0 0;
+  background: var(--surface);
+  box-shadow: 0 18px 50px rgb(15 23 42 / 0.28);
+}
+
+.mailx-compose.min {
+  width: 300px;
+  height: auto;
+}
+
+.mailx-compose.max {
+  top: 50%;
+  right: 50%;
+  bottom: auto;
+  width: min(1000px, calc(100vw - 64px));
+  height: min(760px, calc(100vh - 64px));
+  border-radius: 16px;
+  transform: translate(50%, -50%);
+  box-shadow: 0 0 0 100vmax rgb(10 10 11 / 0.45), 0 24px 60px rgb(0 0 0 / 0.3);
+}
+
+.mailx-compose > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 42px;
+  padding: 0 8px 0 16px;
+  color: var(--foreground);
+  background: var(--surface-muted);
+  cursor: default;
+}
+
+.mailx-compose.min > header {
+  cursor: pointer;
+}
+
+.mailx-compose > header strong {
+  overflow: hidden;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mailx-compose > header span {
+  display: flex;
+}
+
+.mailx-compose > header button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: none;
+  cursor: pointer;
+}
+
+.mailx-compose > header button:hover {
+  color: var(--foreground);
+  background: var(--border);
+}
+
+.mailx-compose > header svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mailx-composer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.mailx-composer.inline {
+  min-height: 300px;
+}
+
+.mailx-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  margin: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mailx-field-label {
+  flex: none;
+  min-width: 52px;
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.mailx-field > input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  border: 0;
+  outline: 0;
+  color: var(--foreground);
+  background: transparent;
+  font: inherit;
+  font-size: 0.7rem;
+}
+
+.mailx-chips {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.mailx-chips input {
+  flex: 1;
+  min-width: 120px;
+  height: 30px;
+  border: 0;
+  outline: 0;
+  color: var(--foreground);
+  background: transparent;
+  font: inherit;
+  font-size: 0.7rem;
+}
+
+.mailx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 4px 0 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.mailx-chip button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: none;
+  cursor: pointer;
+}
+
+.mailx-chip button:hover {
+  color: var(--foreground);
+  background: var(--border);
+}
+
+.mailx-chip button svg {
+  width: 12px;
+  height: 12px;
+}
+
+.mailx-cc-toggles {
+  display: flex;
+  gap: 2px;
+}
+
+.mailx-cc-toggles button {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: none;
+  font-size: 0.64rem;
+  cursor: pointer;
+}
+
+.mailx-cc-toggles button:hover {
+  color: var(--foreground);
+  background: var(--surface-muted);
+}
+
+.mailx-suggest {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 52px;
+  z-index: 70;
+  display: grid;
+  gap: 1px;
+  width: min(360px, calc(100% - 52px));
+  max-height: 280px;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 16px 36px rgb(15 23 42 / 0.2);
+  list-style: none;
+}
+
+.mailx-suggest li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mailx-suggest li.active,
+.mailx-suggest li:hover {
+  background: var(--surface-muted);
+}
+
+.mailx-suggest span {
+  display: grid;
+}
+
+.mailx-suggest strong {
+  font-size: 0.66rem;
+}
+
+.mailx-suggest small {
+  color: var(--muted);
+  font-size: 0.56rem;
+}
+
+.mailx-text {
+  flex: 1;
+  min-height: 160px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  color: var(--foreground);
+  background: transparent;
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.65;
+}
+
+.mailx-composer.inline .mailx-text {
+  min-height: 180px;
+}
+
+.mailx-pending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0 16px 8px;
+  list-style: none;
+}
+
+.mailx-pending li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  padding: 6px 6px 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.mailx-pending svg {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.mailx-pending span {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mailx-pending small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.mailx-pending button {
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: none;
+  cursor: pointer;
+}
+
+.mailx-hint {
+  margin: 0 16px 8px;
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.mailx-problem {
+  margin: 0 16px 8px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  color: #9a2b38;
+  background: #fbecee;
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.dark .mailx-problem {
+  color: #f0a6af;
+  background: #2a1418;
+}
+
+.mailx-composer > footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px 12px 16px;
+}
+
+.mailx-send {
+  display: inline-flex;
+  margin-right: 6px;
+}
+
+.mailx-send .mailx-primary {
+  height: 38px;
+  padding: 0 20px;
+  border-radius: 999px 0 0 999px;
+  box-shadow: none;
+}
+
+.mailx-composer.ticket .mailx-send .mailx-primary {
+  border-radius: 999px;
+}
+
+.mailx-send-more {
+  position: relative;
+}
+
+.mailx-send-more > button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: 0 999px 999px 0;
+  color: #fff;
+  background: var(--mx-accent);
+  cursor: pointer;
+}
+
+.mailx-send-more > button:hover {
+  background: #065ec1;
+}
+
+.mailx-send-more svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mailx-saved {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.mailx-ticket-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 16px 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #065ec1;
+  background: var(--mx-accent-soft);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.dark .mailx-ticket-note {
+  color: #8cc8ff;
+}
+
+.mailx-ticket-note > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.mailx-ticket-note > span {
+  flex: 1;
+  min-width: 180px;
+}
+
+.mailx-ticket-note > :last-child {
+  min-width: 150px;
+}
+
+/* -- dialogs and toasts -------------------------------------------------------------------- */
+.mailx-modal-back {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(10 10 11 / 0.45);
+}
+
+.mailx-modal {
+  width: min(440px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.3);
+}
+
+.mailx-modal > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.mailx-modal h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.mailx-modal h2 svg {
+  width: 20px;
+  height: 20px;
+  color: var(--mx-accent);
+}
+
+.mailx-presets {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mailx-presets button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 42px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--foreground);
+  background: none;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mailx-presets button:hover {
+  background: var(--surface-muted);
+}
+
+.mailx-presets small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.mailx-custom-time {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.mailx-custom-time strong {
+  font-size: 0.68rem;
+}
+
+.mailx-custom-time > div {
+  display: grid;
+  grid-template-columns: 1fr 130px;
+  gap: 8px;
+}
+
+.mailx-custom-time input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--foreground);
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.68rem;
+  color-scheme: light dark;
+}
+
+.mailx-custom-time .mailx-problem {
+  margin: 0;
+}
+
+.mailx-custom-time footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mailx-keys {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 18px;
+  margin: 0;
+}
+
+.mailx-keys div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mailx-keys dt {
+  min-width: 92px;
+}
+
+.mailx-keys dd {
+  margin: 0;
+  font-size: 0.64rem;
+}
+
+.mailx-keys kbd {
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  font-family: inherit;
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.mailx-toasts {
+  position: fixed;
+  bottom: 22px;
+  left: 22px;
+  z-index: 90;
+  display: grid;
+  gap: 8px;
+}
+
+.mailx-toast {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 300px;
+  padding: 10px 10px 10px 18px;
+  border-radius: 10px;
+  color: #f5f5f7;
+  background: #1f2430;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.3);
+  font-size: 0.66rem;
+  animation: mailx-up 0.18s ease;
+}
+
+.mailx-toast.error {
+  background: #8f2530;
+}
+
+.mailx-toast span {
+  flex: 1;
+}
+
+.mailx-toast button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #8cc8ff;
+  background: none;
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mailx-toast button:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.mailx-toast button.close {
+  padding: 4px;
+  color: #b5bac5;
+}
+
+.mailx-toast svg {
+  width: 15px;
+  height: 15px;
+}
+
+@keyframes mailx-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.mailx-scrim {
+  display: none;
+}
+
+/* -- small screens ------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .mailx {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mailx-menu {
+    display: inline-grid !important;
+  }
+
+  .mailx-brand {
+    min-width: 0;
+  }
+
+  .mailx-brand span {
+    display: none;
+  }
+
+  .mailx-side {
+    position: fixed;
+    top: 64px;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    width: 272px;
+    border-right: 1px solid var(--border);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+
+  .mailx.drawer-open .mailx-side {
+    transform: none;
+  }
+
+  .mailx-scrim {
+    position: fixed;
+    inset: 64px 0 0;
+    z-index: 45;
+    display: block;
+    border: 0;
+    background: rgb(10 10 11 / 0.35);
+  }
+
+  .mailx-main {
+    margin: 0;
+    border-width: 0;
+    border-radius: 0;
+  }
+
+  .mailx-row {
+    grid-template-columns: 32px 28px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    height: auto;
+    padding: 8px 12px 8px 6px;
+  }
+
+  .mailx-row-who {
+    grid-column: 3;
+  }
+
+  .mailx-row-text {
+    grid-column: 3 / -1;
+    grid-row: 2;
+  }
+
+  .mailx-row-meta {
+    grid-column: 4;
+    grid-row: 1;
+  }
+
+  .mailx-row-hover {
+    display: none !important;
+  }
+
+  .mailx-tabs button {
+    width: 50%;
+  }
+
+  .mailx-subject,
+  .mailx-body,
+  .mailx-files,
+  .mailx-reply-bar,
+  .mailx-details,
+  .mailx-ticket-bar,
+  .mailx-open-link,
+  .mailx-scheduled-bar {
+    margin-left: 0;
+  }
+
+  .mailx-thread-scroll {
+    padding: 14px 14px 30px;
+  }
+
+  .mailx-inline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mailx-inline > .mailx-face {
+    display: none;
+  }
+
+  .mailx-compose,
+  .mailx-compose.max {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    transform: none;
+  }
+
+  .mailx-compose.min {
+    inset: auto 0 0 auto;
+    width: 260px;
+    height: auto;
+  }
+
+  .mailx-top-actions .mailx-icon[aria-label="Keyboard shortcuts"] {
+    display: none;
+  }
+}
+
+@media print {
+  .mailx-top,
+  .mailx-side,
+  .mailx-toolbar,
+  .mailx-reply-bar,
+  .mailx-msg-actions,
+  .mailx-compose,
+  .mailx-toasts {
+    display: none !important;
+  }
+
+  .mailx {
+    position: static;
+    display: block;
+  }
+
+  .mailx-main {
+    border: 0;
+  }
+
+  .mailx-thread-scroll {
+    overflow: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mailx .spin,
+  .mailx-toast {
+    animation: none;
+  }
+}

@@ -28,7 +28,6 @@ import {
   Link2,
   Inbox,
   MessageCirclePlus,
-  Mail,
   MessageSquare,
   Paperclip,
   Pencil,
@@ -68,9 +67,7 @@ import {
   type Conversation,
 } from "./chat-types";
 import { STATUS_EVENT, announceStatus } from "./topbar-status";
-import { MailPane } from "./mail-pane";
 import "@/styles/chat.css";
-import "@/styles/mail.css";
 import { OrbitLoader } from "@/components/loader/orbit-loader";
 
 type Folder = "INBOX" | "CLIENTS" | "TEAM" | "DIRECT";
@@ -113,11 +110,6 @@ export function ChatPage({ role }: { role: ChatRole }) {
   const [chats, setChats] = useState<Conversation[] | null>(null);
   const [error, setError] = useState("");
   const [folder, setFolder] = useState<Folder>("INBOX");
-  // Internal mailbox (owner request 2026-11-15): Chat has a Mail folder too.
-  const [mode, setMode] = useState<"chat" | "mail">("chat");
-  const [mailOpen, setMailOpen] = useState<string | null>(null);
-  const [mailReading, setMailReading] = useState(false);
-  const [mailUnread, setMailUnread] = useState(0);
   const [tab, setTab] = useState<Tab>("ALL");
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<ChatMessage[]>([]);
@@ -146,23 +138,6 @@ export function ChatPage({ role }: { role: ChatRole }) {
     }
   }, []);
 
-  // Unread mail on the Mail folder (internal mailbox, 2026-11-15).
-  useEffect(() => {
-    const refresh = () =>
-      void fetch("/api/mail/unread", { cache: "no-store" })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((data: { total?: number } | null) => data && setMailUnread(data.total ?? 0))
-        .catch(() => undefined);
-    const first = window.setTimeout(refresh, 0);
-    const off = subscribeRealtime((event) => {
-      if (event.type === "mail.new" || event.type === "mail.read") refresh();
-    });
-    return () => {
-      window.clearTimeout(first);
-      off();
-    };
-  }, []);
-
   // My status changed in the top bar: show it in the status menu here too.
   useEffect(() => {
     const changed = (event: Event) => {
@@ -180,11 +155,11 @@ export function ChatPage({ role }: { role: ChatRole }) {
       wantedChat.current = new URLSearchParams(window.location.search).get("c");
     }
     const timer = window.setTimeout(() => {
-      // ?mail=<id> (from a mail notification) opens the Mail folder on that mail.
+      // Older mail notifications point at /chat?mail=<id>: Mail has its own tab now.
       const mail = new URLSearchParams(window.location.search).get("mail");
       if (mail) {
-        setMode("mail");
-        setMailOpen(mail);
+        window.location.replace(`/mail?m=${encodeURIComponent(mail)}`);
+        return;
       }
       void loadChats();
       void loadPeople();
@@ -327,7 +302,7 @@ export function ChatPage({ role }: { role: ChatRole }) {
           </div>
         )}
         <section
-          className={`chat-app${(mode === "chat" ? active : mailReading) ? " thread-open" : ""}${isStaff ? "" : " client"}`}
+          className={`chat-app${active ? " thread-open" : ""}${isStaff ? "" : " client"}`}
           aria-label="Chat"
         >
           {isStaff && (
@@ -336,28 +311,15 @@ export function ChatPage({ role }: { role: ChatRole }) {
                 <button
                   key={key}
                   type="button"
-                  className={mode === "chat" && folder === key ? "active" : undefined}
-                  aria-pressed={mode === "chat" && folder === key}
-                  onClick={() => {
-                    setMode("chat");
-                    setFolder(key);
-                  }}
+                  className={folder === key ? "active" : undefined}
+                  aria-pressed={folder === key}
+                  onClick={() => setFolder(key)}
                 >
                   <Icon aria-hidden="true" />
                   <span>{label}</span>
                   {counts[key] > 0 && <em>{counts[key]}</em>}
                 </button>
               ))}
-              <button
-                type="button"
-                className={mode === "mail" ? "active" : undefined}
-                aria-pressed={mode === "mail"}
-                onClick={() => setMode("mail")}
-              >
-                <Mail aria-hidden="true" />
-                <span>Mail</span>
-                {mailUnread > 0 && <em>{mailUnread}</em>}
-              </button>
               {me && (
                 <div className="chat-me">
                   <Avatar person={{ ...me, status: me.status }} size={34} />
@@ -370,38 +332,6 @@ export function ChatPage({ role }: { role: ChatRole }) {
             </nav>
           )}
 
-          {!isStaff && (
-            <div className="chat-mode-switch" role="tablist" aria-label="Chats or mail">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === "chat"}
-                className={mode === "chat" ? "active" : undefined}
-                onClick={() => setMode("chat")}
-              >
-                <MessageSquare aria-hidden="true" /> Chats
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === "mail"}
-                className={mode === "mail" ? "active" : undefined}
-                onClick={() => setMode("mail")}
-              >
-                <Mail aria-hidden="true" /> Mail
-                {mailUnread > 0 && <em>{mailUnread}</em>}
-              </button>
-            </div>
-          )}
-          {mode === "mail" && me ? (
-            <MailPane
-              meId={me.id}
-              role={role}
-              openId={mailOpen}
-              onOpenChange={setMailReading}
-              onUnread={setMailUnread}
-            />
-          ) : (
             <>
               <div className="chat-list">
                 <header>
@@ -561,7 +491,6 @@ export function ChatPage({ role }: { role: ChatRole }) {
                 )}
               </div>
             </>
-          )}
         </section>
       </div>
 

@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 import { NotificationBell } from "@loopless-shared/notifications/notification-center";
+import { MailButton } from "@loopless-shared/mail/mail-button";
 import Image from "next/image";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 
@@ -30,6 +31,7 @@ export function ShellActions({
 
   return (
     <div className="shell-actions">
+      <MailButton />
       <NotificationBell />
       <div className="shell-profile" aria-label={`${userName} profile`}>
         <b>

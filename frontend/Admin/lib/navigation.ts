@@ -6,6 +6,7 @@ import {
   Contact,
   FileSignature,
   Gauge,
+  Mail,
   MessagesSquare,
   NotebookTabs,
   ReceiptText,
@@ -28,6 +29,8 @@ export const navigationItems = [
   { href: "/tasks", label: "Tasks", icon: ClipboardList, module: "TASKS", feature: "TASKS" },
   { href: "/calendar", label: "Content Calendar", icon: CalendarDays, module: "TASKS", feature: "TASKS" },
   { href: "/chat", label: "Chat", icon: MessagesSquare },
+  // Mail opens in its own tab (owner request 2026-11-15).
+  { href: "/mail", label: "Mail", icon: Mail, newTab: true },
   // Admin-only money pages: gated by role permission, not by the subscription plan.
   { href: "/payments", label: "Payments", icon: Wallet, module: "FINANCE" },
   { href: "/sheets", label: "Payment Sheets", icon: NotebookTabs, module: "FINANCE" },
