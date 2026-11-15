@@ -59,7 +59,6 @@ function Sidebar({
   const branding = useCompanyBranding();
   const accountName = user?.user.name ?? roleLabel;
   const accountRole = user?.role.name ?? roleLabel;
-  const accountPlan = user?.company?.subscription_plan;
   const accountInitials = accountName
     .split(/\\s+/)
     .filter(Boolean)
@@ -124,10 +123,7 @@ function Sidebar({
           );
         })}
       </nav>
-      <div
-        className="dash-sidebar-footer"
-        title={`${accountName} · ${accountRole}${accountPlan ? ` · ${accountPlan}` : ""}`}
-      >
+      <div className="dash-sidebar-footer" title={`${accountName} · ${accountRole}`}>
         <div className="dash-avatar">
           {user?.user.profile_image_url ? (
             <Image
@@ -144,10 +140,7 @@ function Sidebar({
         </div>
         <div className="dash-user-info">
           <div className="dash-user-name">{accountName}</div>
-          <div className="dash-user-plan">
-            {accountRole}
-            {accountPlan ? ` · ${accountPlan}` : ""}
-          </div>
+          <div className="dash-user-plan">{accountRole}</div>
         </div>
         <button type="button" className="dash-logout" aria-label="Log out" onClick={onLogout}>
           <LogOut width={16} height={16} strokeWidth={1.9} aria-hidden="true" />
@@ -267,12 +260,7 @@ function Topbar({
           </span>
           <span className="dash-theme-knob" />
         </button>
-        <ShellActions
-          role={role}
-          plan={user?.company?.subscription_plan}
-          userName={user?.user.name ?? role}
-          profileImageUrl={user?.user.profile_image_url}
-        />
+        <ShellActions role={role} userName={user?.user.name ?? role} profileImageUrl={user?.user.profile_image_url} />
       </div>
     </header>
   );

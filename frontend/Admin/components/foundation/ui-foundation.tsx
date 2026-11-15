@@ -13,12 +13,10 @@ export function AppFooter({ role }: { role: string }) {
 }
 export function ShellActions({
   role,
-  plan,
   userName,
   profileImageUrl,
 }: {
   role: string;
-  plan?: string;
   userName: string;
   profileImageUrl?: string | null;
 }) {
@@ -50,10 +48,7 @@ export function ShellActions({
         </b>
         <span>
           {userName}
-          <small>
-            {role}
-            {plan ? ` · ${plan}` : ""}
-          </small>
+          <small>{role}</small>
         </span>
       </div>
     </div>
