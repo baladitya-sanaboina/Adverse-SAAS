@@ -20,6 +20,7 @@ import {
   Paperclip,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -161,6 +162,12 @@ export function ContentCalendarPage({ role }: { role: Role }) {
   const [view, setView] = useState<"sheet" | "month">("sheet");
   const [selectedDay, setSelectedDay] = useState(today);
   const [clientFilter, setClientFilter] = useState("");
+  // Filters (owner request 2026-11-15).
+  const [search, setSearch] = useState("");
+  const [progress, setProgress] = useState("");
+  const [videoState, setVideoState] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const [entries, setEntries] = useState<CalendarEntry[] | null>(null);
   const [error, setError] = useState("");
@@ -227,14 +234,47 @@ export function ContentCalendarPage({ role }: { role: Role }) {
     }
   }, [entries]);
 
+  const shown = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return (entries ?? []).filter((entry) => {
+      if (!entry.title && !entry.notes) return true; // a row just added stays visible
+      if (term && ![entry.title, entry.notes, entry.client.name].some((text) => text.toLowerCase().includes(term)))
+        return false;
+      if (from && entry.entry_date < from) return false;
+      if (to && entry.entry_date > to) return false;
+      const posted = entry.posted_instagram || entry.posted_youtube;
+      if (progress === "not-recorded" && (entry.no_post || entry.recorded)) return false;
+      if (progress === "recorded" && !entry.recorded) return false;
+      if (progress === "script" && !entry.script_ready) return false;
+      if (progress === "edited" && !entry.edited) return false;
+      if (progress === "posted" && !posted) return false;
+      if (progress === "not-posted" && (entry.no_post || posted)) return false;
+      if (progress === "no-post" && !entry.no_post) return false;
+      const status = entry.task?.status;
+      if (videoState === "none" && entry.task) return false;
+      if (videoState === "working" && !(status && !["APPROVED", "COMPLETED", "CANCELLED"].includes(status)))
+        return false;
+      if (videoState === "approved" && !(status === "APPROVED" || status === "COMPLETED")) return false;
+      return true;
+    });
+  }, [entries, search, from, to, progress, videoState]);
+  const filtering = Boolean(search || from || to || progress || videoState);
+  const clearFilters = () => {
+    setSearch("");
+    setProgress("");
+    setVideoState("");
+    setFrom("");
+    setTo("");
+  };
+
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarEntry[]>();
-    for (const entry of entries ?? []) map.set(entry.entry_date, [...(map.get(entry.entry_date) ?? []), entry]);
+    for (const entry of shown) map.set(entry.entry_date, [...(map.get(entry.entry_date) ?? []), entry]);
     return map;
-  }, [entries]);
+  }, [shown]);
 
   const monthKey = iso(month).slice(0, 7);
-  const inMonth = (entries ?? []).filter(
+  const inMonth = shown.filter(
     (entry) => !entry.no_post && (view === "sheet" || entry.entry_date.startsWith(monthKey)),
   );
   const totals = {
@@ -415,6 +455,58 @@ export function ContentCalendarPage({ role }: { role: Role }) {
             </div>
           </div>
 
+          <div className="cal-filters" role="search" aria-label="Filter the calendar">
+            <label className="cal-filter-search">
+              <Search aria-hidden="true" />
+              <input
+                type="search"
+                value={search}
+                placeholder={role === "ADMIN" ? "Search title, notes or client" : "Search title or notes"}
+                aria-label="Search the calendar"
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
+            <LooplessSelect
+              value={progress}
+              onValueChange={setProgress}
+              ariaLabel="Filter by progress"
+              options={[
+                { value: "", label: "Any progress" },
+                { value: "not-recorded", label: "Not recorded yet" },
+                { value: "recorded", label: "Recorded" },
+                { value: "script", label: "Script ready" },
+                { value: "edited", label: "Edited" },
+                { value: "posted", label: "Posted" },
+                { value: "not-posted", label: "Not posted yet" },
+                { value: "no-post", label: "No-post days" },
+              ]}
+            />
+            <LooplessSelect
+              value={videoState}
+              onValueChange={setVideoState}
+              ariaLabel="Filter by video"
+              options={[
+                { value: "", label: "Any video status" },
+                { value: "none", label: "No video yet" },
+                { value: "working", label: "Video in production" },
+                { value: "approved", label: "Video approved" },
+              ]}
+            />
+            <label className="cal-filter-date">
+              <span>From</span>
+              <input type="date" value={from} max={to || undefined} onChange={(event) => setFrom(event.target.value)} />
+            </label>
+            <label className="cal-filter-date">
+              <span>To</span>
+              <input type="date" value={to} min={from || undefined} onChange={(event) => setTo(event.target.value)} />
+            </label>
+            {filtering && (
+              <button type="button" className="cal-btn" onClick={clearFilters}>
+                <X /> Clear · {shown.length} of {entries?.length ?? 0}
+              </button>
+            )}
+          </div>
+
           <dl className="cal-totals" aria-label={view === "sheet" ? "Summary" : `${monthLabel} summary`}>
             <div>
               <dt>Planned</dt>
@@ -458,7 +550,7 @@ export function ContentCalendarPage({ role }: { role: Role }) {
             <CalendarSheet
               role={role}
               title={`${clientName} Content Calendar`}
-              entries={entries}
+              entries={shown}
               showClient={role === "ADMIN" && !clientFilter}
               canAdd={role === "CLIENT" || Boolean(clientFilter)}
               onToggle={(entry, key) => void toggle(entry, key)}
