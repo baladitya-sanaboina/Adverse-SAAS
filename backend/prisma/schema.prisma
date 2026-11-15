@@ -875,7 +875,7 @@ model CompanyTenantDefault {
   supportPhone            String?  @map("support_phone")
   gstTaxId                String?  @map("gst_tax_id")
   registrationNumber      String?  @map("registration_number")
-  currency                String   @default("USD")
+  currency                String   @default("INR")
   dateFormat              String   @default("DD/MM/YYYY") @map("date_format")
   timeFormat              String   @default("12_HOUR") @map("time_format")
   workingDays             String[] @default(["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]) @map("working_days")

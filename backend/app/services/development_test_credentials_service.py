@@ -209,7 +209,7 @@ class DevelopmentTestCredentialsService:
         )
         cursor.execute(
             "INSERT INTO company_tenant_defaults (company_id, primary_color, secondary_color, accent_color, theme, timezone, language, default_roles, default_permissions, notification_preferences, dashboard_configuration, email_footer, currency, date_format, time_format, business_hours, created_at, updated_at) "
-            "VALUES (%s, '#0876ED', '#065EC1', '#0876ED', 'system', %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, '', 'USD', 'DD/MM/YYYY', '12_HOUR', %s::jsonb, NOW(), NOW())",
+            "VALUES (%s, '#0876ED', '#065EC1', '#0876ED', 'system', %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, '', 'INR', 'DD/MM/YYYY', '12_HOUR', %s::jsonb, NOW(), NOW())",
             (
                 company_id,
                 timezone,
