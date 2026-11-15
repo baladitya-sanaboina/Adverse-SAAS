@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 
+from app.api.agenda import router as agenda_router
 from app.api.audit_logs import router as audit_logs_router
 from app.api.authentication import router as authentication_router
 from app.api.calendar import client_router as client_calendar_router
@@ -303,6 +304,7 @@ app.include_router(client_calendar_router, prefix=settings.api_prefix)
 app.include_router(staff_calendar_router, prefix=settings.api_prefix)
 app.include_router(chat_router, prefix=settings.api_prefix)
 app.include_router(mail_router, prefix=settings.api_prefix)
+app.include_router(agenda_router, prefix=settings.api_prefix)
 app.include_router(onboarding_router, prefix=settings.api_prefix)
 app.include_router(public_onboarding_router, prefix=settings.api_prefix)
 app.include_router(crm_router, prefix=settings.api_prefix)

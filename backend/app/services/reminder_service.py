@@ -167,6 +167,7 @@ MAIL_CHECK_SECONDS = 20
 def _mail_loop(stop: threading.Event) -> None:
     """Scheduled mail goes out within about 20 seconds of its time. The release is one atomic
     UPDATE ... RETURNING, so several workers never send the same mail twice."""
+    from app.services.agenda_service import agenda_service
     from app.services.mail_service import mail_service
 
     while not stop.wait(MAIL_CHECK_SECONDS):
@@ -174,6 +175,11 @@ def _mail_loop(stop: threading.Event) -> None:
             mail_service.release_due()
         except Exception:  # noqa: BLE001 - try again at the next check
             logger.warning("Scheduled mail check failed", exc_info=True)
+        try:
+            # Calendar alerts, 10 minutes before and at the start (claimed atomically too).
+            agenda_service.run_alerts()
+        except Exception:  # noqa: BLE001
+            logger.warning("Calendar alert check failed", exc_info=True)
 
 
 _stop = threading.Event()

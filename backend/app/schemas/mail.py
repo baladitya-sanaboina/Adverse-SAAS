@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.agenda import AgendaEvent
+
 MailFolder = Literal["INBOX", "UPDATES", "STARRED", "SENT", "SCHEDULED", "DRAFTS", "ALL", "TRASH"]
 MailRole = Literal["ADMIN", "MANAGER", "EMPLOYEE", "CLIENT"]
 MailAction = Literal[
@@ -118,6 +120,7 @@ class MailThreadResponse(BaseModel):
     subject: str
     items: list[MailItem]
     ticket: MailTicket | None = None
+    event: AgendaEvent | None = None  # a meeting planned from this conversation
 
 
 class MailPeopleResponse(BaseModel):

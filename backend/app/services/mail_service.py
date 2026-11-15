@@ -292,11 +292,14 @@ class MailService:
         ticket = self.repository.ticket_for_threads(company_id, [first.thread_id]).get(
             first.thread_id
         )
+        from app.services.agenda_service import agenda_service
+
         return MailThreadResponse(
             thread_id=first.thread_id,
             subject=rows[0].subject if rows else first.subject,
             items=self._items(rows, me),
             ticket=self._ticket(ticket, me, role == "ADMIN") if ticket else None,
+            event=agenda_service.event_for_thread(context, first.thread_id),
         )
 
     def act(
@@ -687,6 +690,35 @@ class MailService:
                 f"/mail?m={message_id}",
                 {"message_id": str(message_id)},
             )
+
+    def send_from(
+        self,
+        company_id: UUID,
+        sender_id: UUID,
+        recipients: Sequence[UUID],
+        subject: str,
+        body: str,
+        link: str = "",
+        kind: str = "PERSONAL",
+    ) -> None:
+        """A mail written for a person by the app (e.g. a calendar invitation from its
+        organiser). Never raises."""
+        try:
+            people = [user_id for user_id in dict.fromkeys(recipients) if user_id != sender_id]
+            if not people:
+                return
+            message_id = self.repository.create(
+                company_id,
+                sender_id,
+                people,
+                subject[:200],
+                body[:20000],
+                kind=kind[:40],
+                link=link[:300],
+            )
+            self._deliver(company_id, sender_id, people, message_id, subject)
+        except Exception:  # noqa: BLE001
+            logger.warning("Mail failed: %s", subject, exc_info=True)
 
     def system(
         self,
