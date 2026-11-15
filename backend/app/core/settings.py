@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     turn_urls: str = ""
     turn_secret: SecretStr = SecretStr("")
     turn_ttl_seconds: int = Field(default=6 * 3600, ge=300, le=86400)
+    # Web Push (VAPID): notifications reach phones and desktops even when the app is closed.
+    # Empty keys = no push (the bell and in-page alerts still work).
+    vapid_public_key: str = ""
+    vapid_private_key: SecretStr = SecretStr("")
+    vapid_subject: str = "mailto:admin@localhost"
 
     cors_origins: str = (
         "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"

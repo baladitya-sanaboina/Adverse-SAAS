@@ -83,6 +83,30 @@ Without TURN, meets connect directly between browsers. That works on most home n
 
 To also offer TURN over TLS on 443 (the strictest networks), give coturn a certificate and add `--tls-listening-port`. This is not needed for a first deploy.
 
+## Installable apps and push notifications
+
+Each app can be installed from Chrome, Edge or Safari ("Install app" in the address bar, or the "Install Adverse as an app" card). Installed apps open in their own window.
+
+Push notifications reach phones and computers even when the app is closed, once the person has allowed notifications. They need a VAPID key pair in `backend/.env.production`. Make one once:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml run --rm backend python -c "
+import base64; from cryptography.hazmat.primitives import serialization; from py_vapid import Vapid01
+v = Vapid01(); v.generate_keys(); b = lambda x: base64.urlsafe_b64encode(x).rstrip(b'=').decode()
+print('VAPID_PUBLIC_KEY=' + b(v.public_key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)))
+print('VAPID_PRIVATE_KEY=' + b(v.private_key.private_numbers().private_value.to_bytes(32, 'big')))"
+```
+
+Then:
+- Put both lines in `backend/.env.production`.
+- Set `VAPID_SUBJECT` to `mailto:` plus an address you read.
+- Restart the backend.
+
+Changing the keys later means everyone has to allow notifications again.
+
+- **iPhone and iPad:** push only works after the app is added to the Home Screen (Share, then "Add to Home Screen") on iOS 16.4 or later.
+- **Office networks:** push uses the browser's own push service (Google, Mozilla or Apple), so it needs internet access from the person's device. It does not need any extra ports on the server.
+
 ## Mail
 
 Outgoing mail uses the SMTP account in `backend/.env.production`. For Gmail:

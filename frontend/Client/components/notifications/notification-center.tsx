@@ -9,8 +9,9 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Bell, BellRing, Check, CheckCheck, Cookie, Inbox, Volume2, VolumeX, X } from "lucide-react";
+import { Bell, BellRing, Check, CheckCheck, Cookie, Download, Inbox, Volume2, VolumeX, X } from "lucide-react";
 import { MAIL_WINDOW } from "@/components/mail/mail-types";
+import { canInstall, disablePush, enablePush, install, installed, onInstallChange, pushActive, registerWorker } from "@/components/pwa/pwa";
 import { subscribeRealtime } from "@/lib/realtime";
 import "@/styles/notifications.css";
 
@@ -151,6 +152,8 @@ function BodyPortal({ children }: { children: ReactNode }) {
 
 const COOKIE_KEY = "adverse-cookie-consent";
 const ASKED_KEY = "adverse-notify-asked";
+const INSTALL_KEY = "adverse-install-asked";
+const ASK_AGAIN_MS = 3 * 24 * 60 * 60 * 1000;
 
 function stored(key: string): string | null {
   try {
@@ -167,16 +170,25 @@ function stored(key: string): string | null {
  * "Not now" on the alerts card asks again after 3 days.
  */
 function PermissionPrompts() {
-  const [step, setStep] = useState<"cookies" | "alerts" | null>(null);
+  const [step, setStep] = useState<"cookies" | "alerts" | "install" | null>(null);
 
   useEffect(() => {
+    const offerInstall = () =>
+      canInstall() && !installed() && Date.now() - Number(stored(INSTALL_KEY) ?? 0) > ASK_AGAIN_MS;
     const timer = window.setTimeout(() => {
       if (stored(COOKIE_KEY) !== "accepted") return setStep("cookies");
-      if (typeof Notification === "undefined" || Notification.permission !== "default") return;
-      const asked = Number(stored(ASKED_KEY) ?? 0);
-      if (Date.now() - asked > 3 * 24 * 60 * 60 * 1000) setStep("alerts");
+      if (typeof Notification !== "undefined" && Notification.permission === "default") {
+        const asked = Number(stored(ASKED_KEY) ?? 0);
+        if (Date.now() - asked > ASK_AGAIN_MS) return setStep("alerts");
+      }
+      if (offerInstall()) setStep("install");
     }, 1200);
-    return () => window.clearTimeout(timer);
+    // The browser can offer "Install" a little after the page loads.
+    const off = onInstallChange(() => setStep((current) => current ?? (offerInstall() ? "install" : null)));
+    return () => {
+      window.clearTimeout(timer);
+      off();
+    };
   }, []);
 
   const nextAfterCookies = () => {
@@ -199,6 +211,8 @@ function PermissionPrompts() {
         writePref(SOUND_KEY, true);
         playChime();
         new Notification("Notifications are on", { body: "You will hear a chime for new updates." });
+        // Also when the app is closed (Web Push).
+        void enablePush();
       }
     } catch {
       // The browser refused to ask; the setting stays available on the Notifications page.
@@ -212,23 +226,50 @@ function PermissionPrompts() {
         className="notify-consent"
         role="dialog"
         aria-live="polite"
-        aria-label={step === "cookies" ? "Cookies" : "Notifications"}
+        aria-label={step === "cookies" ? "Cookies" : step === "install" ? "Install the app" : "Notifications"}
       >
         <span className="notify-consent-icon" aria-hidden="true">
-          {step === "cookies" ? <Cookie /> : <BellRing />}
+          {step === "cookies" ? <Cookie /> : step === "install" ? <Download /> : <BellRing />}
         </span>
         <div>
-          <strong>{step === "cookies" ? "We use cookies" : "Turn on notifications?"}</strong>
+          <strong>
+            {step === "cookies" ? "We use cookies" : step === "install" ? "Install Adverse as an app" : "Turn on notifications?"}
+          </strong>
           <p>
             {step === "cookies"
               ? "Only the sign-in cookies that keep you logged in for 7 days on this device. No ads, no tracking."
-              : "Get an alert with a sound when a task is assigned, approved or paid, even when this tab is in the background."}
+              : step === "install"
+                ? "Open it from your dock, taskbar or home screen like any app. Alerts arrive even when it is closed."
+                : "Get an alert with a sound when a task is assigned, approved or paid, even when Adverse is closed."}
           </p>
           <div className="notify-consent-actions">
             {step === "cookies" ? (
               <button type="button" className="primary" onClick={nextAfterCookies}>
                 Accept
               </button>
+            ) : step === "install" ? (
+              <>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    writeRaw(INSTALL_KEY, String(Date.now()));
+                    setStep(null);
+                    void install();
+                  }}
+                >
+                  Install
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    writeRaw(INSTALL_KEY, String(Date.now()));
+                    setStep(null);
+                  }}
+                >
+                  Not now
+                </button>
+              </>
             ) : (
               <>
                 <button type="button" className="primary" onClick={() => void allowAlerts()}>
@@ -305,7 +346,15 @@ export function NotificationBell() {
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
+    const timer = window.setTimeout(() => {
+      void load();
+      // The installable app and Web Push (2026-11-15): keep this browser subscribed.
+      void registerWorker().then(() => {
+        if (typeof Notification !== "undefined" && Notification.permission === "granted" && readPref(DESKTOP_KEY)) {
+          void enablePush();
+        }
+      });
+    }, 0);
     unlockAudioOnce();
     const unsubscribe = subscribeRealtime((event) => {
       if (event.type === "notification") {
@@ -318,8 +367,10 @@ export function NotificationBell() {
         const openChat = (window as { __adverseActiveChat?: string }).__adverseActiveChat;
         if (item.type === "chat.message" && !away && openChat && openChat === item.data?.conversation_id) return;
         if (readPref(SOUND_KEY)) playChime();
-        const onDesktop = away && readPref(DESKTOP_KEY) && showDesktop(item, () => go(item));
-        if (!onDesktop) {
+        // With Web Push on, the service worker shows the alert when the app is in the background.
+        const byWorker = away && pushActive();
+        const onDesktop = !byWorker && away && readPref(DESKTOP_KEY) && showDesktop(item, () => go(item));
+        if (!onDesktop && !byWorker) {
           setToasts((current) => [...current.slice(-2), item]);
           window.setTimeout(() => setToasts((current) => current.filter((entry) => entry.id !== item.id)), 6000);
         }
@@ -536,10 +587,12 @@ export function NotificationsPage() {
       }
       writePref(DESKTOP_KEY, true);
       setDesktop(true);
+      void enablePush();
       return;
     }
     writePref(DESKTOP_KEY, false);
     setDesktop(false);
+    void disablePush();
   }
 
   const today = new Date().toDateString();

@@ -525,6 +525,7 @@ model User {
   agendaEvents            AgendaEvent[]            @relation("AgendaEventOwner")
   agendaInvites           AgendaAttendee[]         @relation("AgendaAttendee")
   agendaTodos             AgendaTodo[]             @relation("AgendaTodoOwner")
+  pushSubscriptions       PushSubscription[]
   mailReceived            MailRecipient[]
   templatesUpdated        DocumentTemplate[]       @relation("TemplateEditor")
   onboardingPackets       OnboardingPacket[]       @relation("PacketRecipient")
@@ -2006,4 +2007,21 @@ model AgendaTodo {
   @@index([ownerId, doneAt])
   @@index([companyId, dueDate])
   @@map("agenda_todos")
+}
+
+/// Web Push (owner request 2026-11-15): a browser or installed app that allowed notifications.
+model PushSubscription {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  endpoint   String    @unique @db.VarChar(1000)
+  p256dh     String    @db.VarChar(200)
+  auth       String    @db.VarChar(100)
+  userAgent  String    @default("") @map("user_agent") @db.VarChar(300)
+  failures   Int       @default(0)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastSentAt DateTime? @map("last_sent_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }

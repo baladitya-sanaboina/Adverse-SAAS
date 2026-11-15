@@ -41,6 +41,7 @@ from app.api.organization import router as organization_router
 from app.api.platform_dashboard import router as platform_dashboard_router
 from app.api.platform_settings import router as platform_settings_router
 from app.api.profile import router as profile_router
+from app.api.push import router as push_router
 from app.api.registration import router as registration_router
 from app.api.role_management import router as role_management_router
 from app.api.service_pricing import router as service_pricing_router
@@ -305,6 +306,7 @@ app.include_router(staff_calendar_router, prefix=settings.api_prefix)
 app.include_router(chat_router, prefix=settings.api_prefix)
 app.include_router(mail_router, prefix=settings.api_prefix)
 app.include_router(agenda_router, prefix=settings.api_prefix)
+app.include_router(push_router, prefix=settings.api_prefix)
 app.include_router(onboarding_router, prefix=settings.api_prefix)
 app.include_router(public_onboarding_router, prefix=settings.api_prefix)
 app.include_router(crm_router, prefix=settings.api_prefix)

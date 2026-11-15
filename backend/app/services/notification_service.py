@@ -57,6 +57,26 @@ class NotificationService:
             return
         for user_id, row in stored.items():
             realtime.publish([user_id], "notification", self._response(row).model_dump(mode="json"))
+        for user_id, row in stored.items():
+            self._push([user_id], title, body, link, type_, str(row.id))
+
+    @staticmethod
+    def _push(
+        user_ids: list[UUID], title: str, body: str, link: str, type_: str, tag: str = ""
+    ) -> None:
+        """The same alert as a Web Push to the person's devices (never raises)."""
+        from app.services.push_service import push_service
+
+        push_service.send(
+            user_ids,
+            {
+                "title": title,
+                "body": body[:300],
+                "link": link or "/",
+                "type": type_,
+                "tag": tag or type_,
+            },
+        )
 
     def notify_chat(
         self,
@@ -86,6 +106,9 @@ class NotificationService:
             row, replaced = result
             payload = self._response(row).model_dump(mode="json")
             realtime.publish([user_id], "notification", {**payload, "replaced": replaced})
+            self._push(
+                [user_id], row.title, row.body, row.link, "chat.message", f"chat:{conversation_id}"
+            )
 
     def read_chat(self, company_id: UUID, user_id: UUID, conversation_id: UUID) -> None:
         try:
