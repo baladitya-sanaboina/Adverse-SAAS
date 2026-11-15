@@ -1,6 +1,7 @@
 "use client";
 
 import { CallManager } from "@loopless-shared/chat/call-manager";
+import { TopbarStatus } from "@loopless-shared/chat/topbar-status";
 import { ChatLauncher } from "@loopless-shared/chat/chat-launcher";
 import Link from "next/link";
 import Image from "next/image";
@@ -231,6 +232,7 @@ function Topbar({
         </div>
       </div>
       <div className="dash-topbar-controls">
+        <TopbarStatus />
         <button
           type="button"
           className={`dash-theme-switch ${theme}`}

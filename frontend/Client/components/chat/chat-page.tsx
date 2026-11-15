@@ -63,6 +63,7 @@ import {
   type ChatStatus,
   type Conversation,
 } from "./chat-types";
+import { STATUS_EVENT, announceStatus } from "./topbar-status";
 import "@/styles/chat.css";
 
 type Folder = "INBOX" | "CLIENTS" | "TEAM" | "DIRECT";
@@ -131,6 +132,16 @@ export function ChatPage({ role }: { role: ChatRole }) {
     } catch {
       // The list still works; statuses just are not shown.
     }
+  }, []);
+
+  // My status changed in the top bar: show it in the status menu here too.
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const status = (event as CustomEvent<ChatStatus>).detail;
+      setMe((current) => (current ? { ...current, status } : current));
+    };
+    window.addEventListener(STATUS_EVENT, changed);
+    return () => window.removeEventListener(STATUS_EVENT, changed);
   }, []);
 
   // ?c=<chat> (from a notification) is read before the URL sync below can clear it.
@@ -250,6 +261,7 @@ export function ChatPage({ role }: { role: ChatRole }) {
       const result = await chatApi<{ me: ChatPerson; people: ChatPerson[] }>("/status", jsonBody("PUT", { status }));
       setMe(result.me);
       setPeople(result.people);
+      announceStatus(result.me.status);
     } catch (reason) {
       setNotice(reason instanceof Error ? reason.message : "Could not change your status.");
     }

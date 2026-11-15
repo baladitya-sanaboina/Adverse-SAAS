@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, MessageCircle, UsersRound } from "lucide-react";
 import { STATUS_LABELS, chatApi, initials, jsonBody, type ChatPerson, type ChatStatus } from "./chat-types";
+import { STATUS_EVENT, announceStatus } from "./topbar-status";
 import "../styles/availability.css";
 
 type People = { me: ChatPerson; people: ChatPerson[] };
@@ -62,10 +63,17 @@ export function AvailabilityPanel() {
     const poll = window.setInterval(() => void load(), 30_000);
     const focus = () => void load();
     window.addEventListener("focus", focus);
+    // The top bar changed my status: show it here too.
+    const changed = (event: Event) => {
+      const status = (event as CustomEvent<ChatStatus>).detail;
+      setData((current) => (current ? { ...current, me: { ...current.me, status } } : current));
+    };
+    window.addEventListener(STATUS_EVENT, changed);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(poll);
       window.removeEventListener("focus", focus);
+      window.removeEventListener(STATUS_EVENT, changed);
     };
   }, [load]);
 
@@ -75,6 +83,7 @@ export function AvailabilityPanel() {
     setData({ ...data, me: { ...data.me, status } });
     try {
       setData(await chatApi<People>("/status", jsonBody("PUT", { status })));
+      announceStatus(status);
     } catch (reason) {
       setData(before);
       setError(reason instanceof Error ? reason.message : "Could not change your status.");

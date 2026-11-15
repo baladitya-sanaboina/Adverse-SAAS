@@ -1,6 +1,7 @@
 "use client";
 
 import { CallManager } from "@/components/chat/call-manager";
+import { TopbarStatus } from "@/components/chat/topbar-status";
 import { ChatLauncher } from "@/components/chat/chat-launcher";
 import Link from "next/link";
 import Image from "next/image";
@@ -229,6 +230,7 @@ function Topbar({
         </div>
       </div>
       <div className="dash-topbar-controls">
+        <TopbarStatus />
         <button
           type="button"
           className={`dash-theme-switch ${theme}`}
