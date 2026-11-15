@@ -366,44 +366,34 @@
 }
 
 .callroom-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.callroom-grid {
   display: grid;
   flex: 1;
-  gap: 0.75rem;
+  min-width: 0;
   min-height: 0;
-  grid-auto-rows: minmax(0, 1fr);
+  place-items: center;
 }
 
-.callroom-grid.cols-1 {
-  grid-template-columns: 1fr;
+/* Tiles are sized in the page (fitTiles): all the same 16:9 size, centred rows, like Meet. */
+.callroom-grid {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.callroom-grid.cols-2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.callroom-grid.cols-2 > .callroom-tile:last-child:nth-child(odd) {
-  grid-column: 1 / -1;
-  justify-self: center;
-  width: calc(50% - 0.375rem);
-}
-
-.callroom-grid.cols-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.callroom-grid.cols-4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.callroom-grid.cols-strip {
-  flex: 0 0 clamp(11rem, 18vw, 16rem);
-  grid-auto-rows: minmax(0, 9rem);
-  align-content: start;
+/* Spotlight: the rest in a column on the right. */
+.callroom-strip {
+  display: flex;
+  flex: 0 0 clamp(11rem, 17vw, 15rem);
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -411,19 +401,85 @@
   position: relative;
   display: grid;
   place-items: center;
+  flex: none;
   overflow: hidden;
-  height: 100%;
-  min-height: 0;
   margin: 0;
   border-radius: 0.9rem;
   background: var(--call-tile);
   outline: 3px solid transparent;
   outline-offset: -3px;
-  transition: outline-color 0.15s ease;
+  transition:
+    outline-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.callroom-tile.small {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+/* Me, small in the corner, when there is one other person. */
+.callroom-tile.pip {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 4;
+  width: clamp(150px, 19%, 270px);
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 0.45);
+}
+
+.callroom-tile.pip figcaption {
+  bottom: 0.4rem;
+  left: 0.45rem;
+  font-size: 0.72rem;
 }
 
 .callroom-tile.speaking {
   outline-color: var(--call-speaking);
+  box-shadow: 0 0 0 4px rgb(77 163 255 / 0.18);
+}
+
+.callroom-tile-face {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.callroom-tile .callroom-avatar.lg {
+  width: clamp(2.6rem, 28%, 7.5rem);
+  height: auto;
+  aspect-ratio: 1;
+  font-size: clamp(0.95rem, 2.4vw, 2.4rem);
+  color: #fff;
+}
+
+.callroom-tile-muted {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.55);
+  color: #ff8a8d;
+}
+
+.callroom-tile-muted svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.callroom-tile.small .callroom-tile-muted,
+.callroom-tile.pip .callroom-tile-muted {
+  top: 0.4rem;
+  right: 0.4rem;
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 .callroom-tile-hand {
@@ -451,25 +507,39 @@
 
 .callroom-tile-pin {
   position: absolute;
-  top: 0.6rem;
-  right: 0.6rem;
+  top: 50%;
+  left: 50%;
   display: grid;
   place-items: center;
-  width: 2.2rem;
-  height: 2.2rem;
+  width: 2.6rem;
+  height: 2.6rem;
   border: 0;
   border-radius: 50%;
-  background: rgb(0 0 0 / 0.55);
+  background: rgb(0 0 0 / 0.6);
   color: #fff;
   cursor: pointer;
   opacity: 0;
+  transform: translate(-50%, -50%);
   transition: opacity 0.15s ease;
 }
 
 .callroom-tile:hover .callroom-tile-pin,
-.callroom-tile-pin:focus-visible,
-.callroom-tile.pinned .callroom-tile-pin {
+.callroom-tile-pin:focus-visible {
   opacity: 1;
+}
+
+.callroom-tile.pinned .callroom-tile-pin {
+  top: 0.6rem;
+  left: auto;
+  right: 0.6rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  opacity: 1;
+  transform: none;
+}
+
+.callroom-tile.pinned .callroom-tile-muted {
+  right: 2.9rem;
 }
 
 .callroom-tile-pin svg {
@@ -553,7 +623,7 @@
 .callroom-tile figcaption {
   position: absolute;
   bottom: 0.6rem;
-  left: 0.75rem;
+  left: 0.6rem;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -583,6 +653,8 @@
 
 .callroom-alone {
   display: grid;
+  flex: none;
+  overflow: hidden;
   place-content: center;
   justify-items: center;
   gap: 0.6rem;
@@ -1262,6 +1334,190 @@
   box-shadow: inset 0 0 0 1px var(--primary);
 }
 
+/* Settings (Meet-style: sections on the left) */
+
+.callroom-dialog.wide {
+  width: min(46rem, 100%);
+}
+
+.callroom-settings {
+  display: grid;
+  grid-template-columns: 10.5rem minmax(0, 1fr);
+  gap: 1.25rem;
+  min-height: 19rem;
+}
+
+.callroom-settings-tabs {
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+}
+
+.callroom-settings-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.85rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.callroom-settings-tabs button:hover {
+  background: var(--surface-muted);
+}
+
+.callroom-settings-tabs button.active {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+
+.callroom-settings-body {
+  display: grid;
+  align-content: start;
+  gap: 1.1rem;
+  min-width: 0;
+}
+
+.callroom-setting {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.callroom-setting > span {
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.callroom-setting > small,
+.callroom-setting em {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-style: normal;
+}
+
+.callroom-setting-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.callroom-setting-row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.callroom-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 1.4rem;
+}
+
+.callroom-meter i {
+  width: 4px;
+  height: 40%;
+  border-radius: 2px;
+  background: var(--border);
+  transition: height 0.08s ease;
+}
+
+.callroom-meter i.on {
+  height: 100%;
+  background: var(--primary);
+}
+
+.callroom-setting-preview {
+  display: grid;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  border-radius: 0.8rem;
+  background: var(--call-tile);
+  color: var(--call-dim);
+  font-size: 0.85rem;
+}
+
+.callroom-setting-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.callroom-layout-pic {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 3px;
+  height: 3.2rem;
+  margin-bottom: 0.4rem;
+  padding: 4px;
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.callroom-layout-pic.tiled {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.callroom-layout-pic i {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--primary) 45%, var(--surface));
+}
+
+.callroom-layout-pic.spotlight {
+  grid-template-columns: 3fr 1fr;
+}
+
+.callroom-layout-pic.spotlight > span {
+  display: grid;
+  gap: 3px;
+}
+
+.callroom-panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.callroom-panel-row h2 {
+  margin: 0;
+}
+
+.callroom-panel-row .callroom-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.76rem;
+}
+
+.callroom-panel-row .callroom-chip svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+@media (max-width: 760px) {
+  .callroom-settings {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .callroom-settings-tabs {
+    display: flex;
+    overflow-x: auto;
+  }
+}
+
 /* Bottom bar */
 
 .callroom-bar {
@@ -1312,26 +1568,23 @@
     flex-direction: column;
   }
 
-  .callroom-grid.cols-2 {
-    grid-template-columns: 1fr;
-  }
-
-  .callroom-grid.cols-2 > .callroom-tile:last-child:nth-child(odd) {
-    width: 100%;
-  }
-
-  .callroom-grid.cols-3,
-  .callroom-grid.cols-4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .callroom-grid.cols-strip {
-    flex: 0 0 7rem;
-    grid-auto-flow: column;
-    grid-auto-columns: 9rem;
-    grid-auto-rows: 100%;
+  .callroom-strip {
+    flex: 0 0 auto;
+    flex-direction: row;
+    justify-content: flex-start;
     overflow-x: auto;
     overflow-y: hidden;
+  }
+
+  .callroom-strip .callroom-tile.small {
+    width: 9rem;
+  }
+
+  .callroom-tile.pip {
+    right: 10px;
+    bottom: 10px;
+    width: 96px;
+    aspect-ratio: 3 / 4;
   }
 
   .callroom-panel {

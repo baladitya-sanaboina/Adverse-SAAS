@@ -199,13 +199,59 @@ function useSpeaking(streams: Record<string, MediaStream | null>, active: boolea
   return speaking;
 }
 
+/** A steady colour per person for avatars without a photo (Meet-style). */
+const AVATAR_COLOURS = ["#0876ed", "#7c5cff", "#0f9d8a", "#e0692b", "#c2408c", "#3f7d20", "#b8860b", "#5865f2"];
+function colourFor(name: string): string {
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return AVATAR_COLOURS[hash % AVATAR_COLOURS.length];
+}
+
 function Avatar({ name, image, size = "md" }: { name: string; image?: string | null; size?: "md" | "lg" }) {
   return (
-    <span className={`callroom-avatar ${size}`}>
+    <span className={`callroom-avatar ${size}`} style={image ? undefined : { background: colourFor(name) }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {image ? <img src={image} alt="" /> : initials(name)}
     </span>
   );
+}
+
+type Box = { width: number; height: number };
+
+/** The size of an element, kept up to date. */
+function useBox<T extends HTMLElement>(): [(element: T | null) => void, Box] {
+  const [box, setBox] = useState<Box>({ width: 0, height: 0 });
+  const observer = useRef<ResizeObserver | null>(null);
+  const ref = useCallback((element: T | null) => {
+    observer.current?.disconnect();
+    if (!element) return;
+    observer.current = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setBox((current) =>
+        Math.abs(current.width - width) < 1 && Math.abs(current.height - height) < 1 ? current : { width, height },
+      );
+    });
+    observer.current.observe(element);
+  }, []);
+  return [ref, box];
+}
+
+/**
+ * Tiles as large as they can be, all the same size and shape, in centred rows (like Google
+ * Meet): try every column count and keep the one that gives the biggest tile.
+ */
+function fitTiles(count: number, box: Box, gap: number): Box {
+  if (count === 0 || box.width === 0 || box.height === 0) return { width: 0, height: 0 };
+  const aspect = box.width / box.height < 0.85 ? 3 / 4 : 16 / 9; // phones held upright: taller tiles
+  let best: Box = { width: 0, height: 0 };
+  for (let columns = 1; columns <= count; columns += 1) {
+    const rows = Math.ceil(count / columns);
+    const maxWidth = (box.width - gap * (columns - 1)) / columns;
+    const maxHeight = (box.height - gap * (rows - 1)) / rows;
+    const width = Math.min(maxWidth, maxHeight * aspect);
+    if (width > best.width) best = { width: Math.floor(width), height: Math.floor(width / aspect) };
+  }
+  return best;
 }
 
 function Tile({
@@ -221,6 +267,8 @@ function Tile({
   hand,
   pinned,
   onPin,
+  size,
+  className,
 }: {
   name: string;
   image?: string | null;
@@ -234,10 +282,15 @@ function Tile({
   hand?: boolean;
   pinned?: boolean;
   onPin?: () => void;
+  size?: Box;
+  className?: string;
 }) {
   return (
     <figure
-      className={`callroom-tile${speaking ? " speaking" : ""}${screen ? " screen" : ""}${pinned ? " pinned" : ""}`}
+      className={`callroom-tile${speaking ? " speaking" : ""}${screen ? " screen" : ""}${pinned ? " pinned" : ""}${
+        className ? ` ${className}` : ""
+      }`}
+      style={size && size.width > 0 ? { width: size.width, height: size.height } : undefined}
     >
       {video && stream ? (
         <video
@@ -250,11 +303,18 @@ function Tile({
           }}
         />
       ) : (
-        <Avatar name={name} image={image} size="lg" />
+        <span className="callroom-tile-face">
+          <Avatar name={name} image={image} size="lg" />
+        </span>
       )}
       {hand && (
         <span className="callroom-tile-hand" aria-label={`${mine ? "Your" : `${name}'s`} hand is raised`}>
           <Hand />
+        </span>
+      )}
+      {!mic && (
+        <span className="callroom-tile-muted" aria-label={`${mine ? "You are" : `${name} is`} muted`}>
+          <MicOff />
         </span>
       )}
       {onPin && (
@@ -269,11 +329,77 @@ function Tile({
         </button>
       )}
       <figcaption>
-        {!mic && <MicOff aria-label="Muted" />}
-        <span>{screen ? `${mine ? "You are" : `${name} is`} presenting` : mine ? `${name} (you)` : name}</span>
+        <span>{screen ? `${mine ? "You are" : `${name} is`} presenting` : mine ? "You" : name}</span>
         {role && !mine && !screen && <small>{role}</small>}
       </figcaption>
     </figure>
+  );
+}
+
+/** A live level meter for the microphone in Settings: speak and the bars move. */
+function MicMeter({ stream }: { stream: MediaStream | null }) {
+  const [level, setLevel] = useState(0);
+  useEffect(() => {
+    const audio = audioContext();
+    if (!audio || !stream || stream.getAudioTracks().length === 0) return;
+    let frame = 0;
+    let source: MediaStreamAudioSourceNode | null = null;
+    try {
+      source = audio.createMediaStreamSource(stream);
+    } catch {
+      return;
+    }
+    const analyser = audio.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.fftSize);
+    const read = () => {
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (const value of data) sum += ((value - 128) / 128) ** 2;
+      setLevel(Math.min(1, Math.sqrt(sum / data.length) * 6));
+      frame = window.requestAnimationFrame(read);
+    };
+    frame = window.requestAnimationFrame(read);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      source?.disconnect();
+    };
+  }, [stream]);
+  const lit = Math.round(level * 14);
+  return (
+    <span
+      className="callroom-meter"
+      role="meter"
+      aria-label="Microphone level"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(level * 100)}
+    >
+      {Array.from({ length: 14 }, (_, index) => (
+        <i key={index} className={index < lit ? "on" : undefined} />
+      ))}
+    </span>
+  );
+}
+
+/** Small drawings of each layout for the Settings picker. */
+function LayoutPicture({ kind }: { kind: Layout }) {
+  return (
+    <span className={`callroom-layout-pic ${kind}`} aria-hidden="true">
+      {kind === "spotlight" ? (
+        <>
+          <i className="big" />
+          <span>
+            <i />
+            <i />
+            <i />
+          </span>
+        </>
+      ) : (
+        Array.from({ length: kind === "tiled" ? 6 : 4 }, (_, index) => <i key={index} />)
+      )}
+    </span>
   );
 }
 
@@ -339,6 +465,7 @@ export function CallRoom({
   const [pinned, setPinned] = useState<string | null>(null);
   const [layout, setLayout] = useState<Layout>("auto");
   const [settings, setSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"audio" | "video" | "layout">("audio");
   const [speakers, setSpeakers] = useState<Device[]>([]);
   const [speakerId, setSpeakerId] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
@@ -1180,6 +1307,8 @@ export function CallRoom({
     return streams;
   }, [remote, local, me]);
   const speaking = useSpeaking(meters, phase === "incall");
+  const [gridRef, gridBox] = useBox<HTMLDivElement>();
+  const [mainRef, mainBox] = useBox<HTMLDivElement>();
   // Spotlight layout follows whoever else spoke last.
   useEffect(() => {
     const talker = [...speaking].find((id) => id !== me?.id);
@@ -1433,7 +1562,12 @@ export function CallRoom({
         : (presenter ?? pinnedHere);
   const spotlight = focusId ? tiles.find((tile) => tile.id === focusId) : undefined;
   const strip = spotlight ? tiles.filter((tile) => tile.id !== spotlight.id) : tiles;
-  const columns = strip.length <= 1 ? 1 : strip.length <= 4 ? 2 : strip.length <= 9 ? 3 : 4;
+  // One other person: they fill the stage and I am a small picture in the corner (like Meet).
+  const solo = !spotlight && layout !== "tiled" && others.length === 1;
+  const mineTile = tiles.find((tile) => tile.mine);
+  const gridTiles = solo ? tiles.filter((tile) => !tile.mine) : strip;
+  const aloneCard = others.length === 0 && !spotlight;
+  const tileSize = fitTiles(gridTiles.length + (aloneCard ? 1 : 0), gridBox, 12);
   const canPin = tiles.length > 1;
   const pin = (id: string) => setPinned((current) => (current === id ? null : id));
   const seats = [...(call?.participants ?? [])].sort(
@@ -1462,42 +1596,63 @@ export function CallRoom({
 
       <div className="callroom-body">
         <section className={`callroom-stage${spotlight ? " spotlight" : ""}`}>
-          {spotlight && (
-            <div className="callroom-main">
-              <Tile
-                {...spotlight}
-                speaking={speaking.has(spotlight.id)}
-                pinned={pinnedHere === spotlight.id}
-                onPin={canPin ? () => pin(spotlight.id) : undefined}
-              />
+          {spotlight ? (
+            <>
+              <div className="callroom-main" ref={mainRef}>
+                <Tile
+                  {...spotlight}
+                  size={fitTiles(1, mainBox, 0)}
+                  speaking={speaking.has(spotlight.id)}
+                  pinned={pinnedHere === spotlight.id}
+                  onPin={canPin ? () => pin(spotlight.id) : undefined}
+                />
+              </div>
+              <div className="callroom-strip">
+                {strip.map((tile) => (
+                  <Tile
+                    key={tile.id}
+                    {...tile}
+                    className="small"
+                    screen={false}
+                    speaking={speaking.has(tile.id)}
+                    pinned={pinnedHere === tile.id}
+                    onPin={canPin ? () => pin(tile.id) : undefined}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="callroom-grid" ref={gridRef}>
+              {gridTiles.map((tile) => (
+                <Tile
+                  key={tile.id}
+                  {...tile}
+                  size={tileSize}
+                  speaking={speaking.has(tile.id)}
+                  pinned={pinnedHere === tile.id}
+                  onPin={canPin ? () => pin(tile.id) : undefined}
+                />
+              ))}
+              {aloneCard && (
+                <div
+                  className="callroom-alone"
+                  style={tileSize.width > 0 ? { width: tileSize.width, height: tileSize.height } : undefined}
+                >
+                  <strong>{ringback ? `Calling ${info?.title ?? ""}…` : "You're the only one here"}</strong>
+                  {code && (
+                    <>
+                      <span>Share this link with others you want in the call</span>
+                      <button type="button" className="callroom-linkbox" onClick={() => void copyLink()}>
+                        <span>{linkText}</span>
+                        {copied ? <Check /> : <Copy />}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
-          <div className={`callroom-grid cols-${spotlight ? "strip" : columns}`}>
-            {strip.map((tile) => (
-              <Tile
-                key={tile.id}
-                {...tile}
-                screen={spotlight ? false : tile.screen}
-                speaking={speaking.has(tile.id)}
-                pinned={pinnedHere === tile.id}
-                onPin={canPin ? () => pin(tile.id) : undefined}
-              />
-            ))}
-            {others.length === 0 && !spotlight && (
-              <div className="callroom-alone">
-                <strong>{ringback ? `Calling ${info?.title ?? ""}…` : "You're the only one here"}</strong>
-                {code && (
-                  <>
-                    <span>Share this link with others you want in the call</span>
-                    <button type="button" className="callroom-linkbox" onClick={() => void copyLink()}>
-                      <span>{linkText}</span>
-                      {copied ? <Check /> : <Copy />}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+          {solo && mineTile && <Tile {...mineTile} className="pip" speaking={speaking.has(mineTile.id)} />}
           <div className="callroom-floating" aria-hidden="true">
             {floating.map((item) => (
               <span key={item.id} style={{ left: `${item.left}%` }}>
@@ -1575,7 +1730,18 @@ export function CallRoom({
                     </ul>
                   </>
                 )}
-                <h2>In the call · {call?.participants.length ?? 0}</h2>
+                <div className="callroom-panel-row">
+                  <h2>In the call · {call?.participants.length ?? 0}</h2>
+                  {canMute && others.some((seat) => peerState[seat.id]?.mic ?? true) && (
+                    <button
+                      type="button"
+                      className="callroom-chip"
+                      onClick={() => others.forEach((seat) => (peerState[seat.id]?.mic ?? true) && askToMute(seat.id))}
+                    >
+                      <MicOff /> Mute everyone
+                    </button>
+                  )}
+                </div>
                 <ul>
                   {seats.map((seat) => {
                     const mine = seat.id === me?.id;
@@ -1798,7 +1964,7 @@ export function CallRoom({
       {settings && (
         <div className="callroom-dialog-backdrop" onClick={() => setSettings(false)}>
           <section
-            className="callroom-dialog"
+            className="callroom-dialog wide"
             role="dialog"
             aria-modal="true"
             aria-label="Call settings"
@@ -1810,68 +1976,119 @@ export function CallRoom({
                 <X />
               </button>
             </header>
-            <h2>Audio and video</h2>
-            <div className="callroom-devices stacked">
-              {mics.length > 0 && (
-                <label>
-                  <span>
-                    <Mic aria-hidden="true" /> Microphone
-                  </span>
-                  <LooplessSelect
-                    value={micId}
-                    options={mics}
-                    onValueChange={(value) => void switchDevice("audio", value)}
-                    ariaLabel="Microphone"
-                  />
-                </label>
-              )}
-              {speakers.length > 0 && (
-                <label>
-                  <span>
-                    <Volume2 aria-hidden="true" /> Speaker
-                  </span>
-                  <LooplessSelect
-                    value={speakerId || speakers[0].value}
-                    options={speakers}
-                    onValueChange={pickSpeaker}
-                    ariaLabel="Speaker"
-                  />
-                </label>
-              )}
-              {callKind === "VIDEO" && cams.length > 0 && (
-                <label>
-                  <span>
-                    <Video aria-hidden="true" /> Camera
-                  </span>
-                  <LooplessSelect
-                    value={camId}
-                    options={cams}
-                    onValueChange={(value) => void switchDevice("video", value)}
-                    ariaLabel="Camera"
-                  />
-                </label>
-              )}
-            </div>
-            <button type="button" className="callroom-button" onClick={() => sounds.join()}>
-              <Volume2 /> Test speaker
-            </button>
-            <h2>
-              <LayoutGrid /> Layout
-            </h2>
-            <div className="callroom-layouts" role="radiogroup" aria-label="Layout">
-              {LAYOUTS.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={layout === item.value}
-                  className={layout === item.value ? "active" : undefined}
-                  onClick={() => setLayout(item.value)}
-                >
-                  <strong>{item.label}</strong>
-                  <small>{item.hint}</small>
-                </button>
-              ))}
+            <div className="callroom-settings">
+              <nav className="callroom-settings-tabs" role="tablist" aria-label="Settings sections">
+                {(
+                  [
+                    ["audio", "Audio", <Volume2 key="i" />],
+                    ...(callKind === "VIDEO" ? ([["video", "Video", <Video key="i" />]] as const) : []),
+                    ["layout", "Layout", <LayoutGrid key="i" />],
+                  ] as const
+                ).map(([value, label, icon]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="tab"
+                    aria-selected={settingsTab === value}
+                    className={settingsTab === value ? "active" : undefined}
+                    onClick={() => setSettingsTab(value)}
+                  >
+                    {icon}
+                    {label}
+                  </button>
+                ))}
+              </nav>
+              <div className="callroom-settings-body" role="tabpanel">
+                {settingsTab === "audio" && (
+                  <>
+                    <div className="callroom-setting">
+                      <span>Microphone</span>
+                      <div className="callroom-setting-row">
+                        {mics.length > 0 ? (
+                          <LooplessSelect
+                            value={micId}
+                            options={mics}
+                            onValueChange={(value) => void switchDevice("audio", value)}
+                            ariaLabel="Microphone"
+                          />
+                        ) : (
+                          <em>No microphone found</em>
+                        )}
+                        <MicMeter stream={local} />
+                      </div>
+                      <small>{micOn ? "Speak: the bars should move." : "Your microphone is off in the call."}</small>
+                    </div>
+                    <div className="callroom-setting">
+                      <span>Speaker</span>
+                      <div className="callroom-setting-row">
+                        {speakers.length > 0 ? (
+                          <LooplessSelect
+                            value={speakerId || speakers[0].value}
+                            options={speakers}
+                            onValueChange={pickSpeaker}
+                            ariaLabel="Speaker"
+                          />
+                        ) : (
+                          <em>System default (this browser can&apos;t choose)</em>
+                        )}
+                        <button type="button" className="callroom-button" onClick={() => sounds.join()}>
+                          <Volume2 /> Test
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {settingsTab === "video" && (
+                  <>
+                    <div className="callroom-setting-preview">
+                      {hasCamera && camOn ? (
+                        <video
+                          className="mirror"
+                          autoPlay
+                          playsInline
+                          muted
+                          ref={(element) => {
+                            if (element && element.srcObject !== local) element.srcObject = local;
+                          }}
+                        />
+                      ) : (
+                        <span>{hasCamera ? "Your camera is off" : "No camera found"}</span>
+                      )}
+                    </div>
+                    <div className="callroom-setting">
+                      <span>Camera</span>
+                      {cams.length > 0 ? (
+                        <LooplessSelect
+                          value={camId}
+                          options={cams}
+                          onValueChange={(value) => void switchDevice("video", value)}
+                          ariaLabel="Camera"
+                        />
+                      ) : (
+                        <em>No camera found</em>
+                      )}
+                    </div>
+                  </>
+                )}
+                {settingsTab === "layout" && (
+                  <div className="callroom-layouts" role="radiogroup" aria-label="Layout">
+                    {LAYOUTS.map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={layout === item.value}
+                        className={layout === item.value ? "active" : undefined}
+                        onClick={() => setLayout(item.value)}
+                      >
+                        <LayoutPicture kind={item.value} />
+                        <strong>{item.label}</strong>
+                        <small>{item.hint}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </section>
         </div>
