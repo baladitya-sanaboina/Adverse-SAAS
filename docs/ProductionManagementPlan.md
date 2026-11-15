@@ -233,7 +233,7 @@ Working notes for later phases:
 - The test company's currency is set to **USD** (Settings → Regional). Prices and reports display in that currency until it is changed to INR.
 - The seed still gives `COMPANY_MANAGER` a `TASKS: ASSIGN` permission. It has no effect, because assignment endpoints require the Admin role.
 - Backend timestamps are UTC but sent without a `Z`. The new pages parse them as UTC (`lib/production/client.ts`). Pre-existing, not fixed: the dashboard's "Recent activity" shows times 5½ hours off for India because it parses them as local time.
-- The Docker VM has about 7.7 GB of RAM. Four Next.js dev servers use roughly 1.3–1.5 GB each, and the Admin container was once killed for running out of memory (`OOMKilled`) after many page compiles. Fix with `docker start loopless-admin-1`, or give Docker more memory.
+- Docker Desktop memory was raised from 7.7 GB to 12 GB on 2026-11-15 (owner's go-ahead) because the four Next.js dev servers (1.3–2 GB each) had been killed for running out of memory. Earlier note: The Docker VM has about 7.7 GB of RAM. Four Next.js dev servers use roughly 1.3–1.5 GB each, and the Admin container was once killed for running out of memory (`OOMKilled`) after many page compiles. Fix with `docker start loopless-admin-1`, or give Docker more memory.
 - The ECC plugin's GateGuard hook asks for facts before the first edit of each file and before destructive commands. Answer it and retry.
 
 - On the host, port 5432 is a separate Homebrew Postgres. Reach the Docker database with `docker exec loopless-postgres-1 psql -U loopless -d loopless_dev`.
