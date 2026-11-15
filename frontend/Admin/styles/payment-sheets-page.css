@@ -30,177 +30,165 @@
   flex: 0 0 auto;
 }
 
-.sheets-page-grid {
-  display: grid;
-  grid-template-columns: minmax(240px, 340px) minmax(0, 1fr);
-  align-items: start;
-  gap: 16px;
+/* Owners as the app's table (owner request 2026-11-15: like the rest of the website). */
+.organization-table.sheets-owner-table {
+  margin-bottom: 16px;
   font-family: var(--font-poppins), Arial, Helvetica, sans-serif;
 }
 
-.sheets-owner-list {
+.organization-table.sheets-owner-table :is(.organization-table-head, button) {
   display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  grid-template-columns: minmax(160px, 1.3fr) minmax(130px, 1fr) 130px 120px minmax(110px, 0.8fr) 130px;
+  align-items: center;
+  gap: 22px;
+  padding: 0 16px;
 }
 
-.sheets-owner-list button {
-  display: grid;
-  gap: 8px;
+.organization-table.sheets-owner-table .organization-table-head > span:last-child {
+  text-align: left;
+}
+
+.organization-table.sheets-owner-table button {
   width: 100%;
-  padding: 13px 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  min-height: 64px;
+  padding-block: 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
   color: var(--foreground);
   background: var(--surface);
   font-family: inherit;
+  font-size: 0.65rem;
   text-align: left;
   cursor: pointer;
 }
 
-.sheets-owner-list button.active {
-  border-color: #0876ed;
-  box-shadow: 0 0 0 1px #0876ed inset;
+.organization-table.sheets-owner-table button:last-child {
+  border-bottom: 0;
 }
 
-.sheets-owner-top {
+.organization-table.sheets-owner-table button:hover {
+  background: color-mix(in srgb, var(--surface-muted) 64%, transparent);
+}
+
+.organization-table.sheets-owner-table button.active {
+  background: color-mix(in srgb, #0876ed 7%, var(--surface));
+  box-shadow: inset 3px 0 0 #0876ed;
+}
+
+.sheets-owner-table .production-money {
+  color: var(--foreground);
+  font-weight: 700;
+  text-align: right;
+}
+
+.sheets-owner-table .production-money.sheets-minus {
+  color: #b74858;
+}
+
+.dark .sheets-owner-table .production-money.sheets-minus {
+  color: #f0a6af;
+}
+
+.sheets-used {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-}
-
-.sheets-owner-top strong {
-  overflow: hidden;
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sheets-owner-list small {
   color: var(--muted);
-  font-size: 0.6rem;
   font-weight: 600;
 }
 
-.sheets-status {
-  flex: 0 0 auto;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 0.56rem;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.sheets-status.ok {
-  color: #287150;
-  background: color-mix(in srgb, #287150 12%, transparent);
-}
-
-.sheets-status.near {
-  color: #c96f05;
-  background: color-mix(in srgb, #c96f05 12%, transparent);
-}
-
-.sheets-status.used_up,
-.sheets-status.over {
-  color: #b74858;
-  background: color-mix(in srgb, #b74858 11%, transparent);
-}
-
-.sheets-owner-bar {
+.sheets-used i {
+  flex: 1;
+  max-width: 90px;
   height: 6px;
   display: block;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: 5px;
   background: var(--surface-muted);
 }
 
-.sheets-owner-bar i {
+.sheets-used b {
   height: 100%;
   display: block;
   border-radius: inherit;
   background: #0876ed;
 }
 
-.sheets-owner-bar i.near {
+.sheets-used b.near {
   background: #c96f05;
 }
 
-.sheets-owner-bar i.used_up,
-.sheets-owner-bar i.over {
+.sheets-used b.used_up,
+.sheets-used b.over {
   background: #b74858;
 }
 
-.sheets-owner-detail {
-  display: grid;
-  gap: 14px;
-  padding: 18px;
+.sheets-status {
+  width: max-content;
+  padding: 5px 9px;
   border: 1px solid var(--border);
-  border-radius: 14px;
-  color: var(--foreground);
-  background: var(--surface);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  font-size: 0.61rem;
+  font-style: normal;
+  font-weight: 750;
 }
 
-.sheets-owner-detail > header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+.sheets-status.ok {
+  border-color: #c5e7d2;
+  color: #287150;
+  background: #ebf8f0;
 }
 
-.sheets-owner-detail > header > div {
-  display: grid;
-  gap: 3px;
+.sheets-status.near {
+  border-color: #f3dcb8;
+  color: #9a5a06;
+  background: #fdf5e9;
 }
 
-.sheets-owner-detail > header span {
-  color: #0876ed;
-  font-size: 0.6rem;
-  font-weight: 800;
-  letter-spacing: 0.07em;
-}
-
-.sheets-owner-detail h3 {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-.sheets-owner-detail p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.64rem;
-  font-weight: 600;
-}
-
-.sheets-owner-detail > header a {
-  text-decoration: none;
-}
-
-.dark .sheets-owner-detail > header span {
-  color: #8cc8ff;
+.sheets-status.used_up,
+.sheets-status.over {
+  border-color: #efc8ce;
+  color: #9a4551;
+  background: #fbf0f2;
 }
 
 .dark .sheets-status.ok {
+  border-color: #23503a;
   color: #86d3a9;
+  background: #13241b;
 }
 
 .dark .sheets-status.near {
+  border-color: #5a4116;
   color: #f3b766;
+  background: #261c0c;
 }
 
 .dark .sheets-status.used_up,
 .dark .sheets-status.over {
+  border-color: #5a2a32;
   color: #f0a6af;
+  background: #2a1418;
+}
+
+.sheets-owner-detail {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.sheets-owner-detail .management-toolbar a {
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 @media (max-width: 900px) {
-  .sheets-page-grid {
-    grid-template-columns: 1fr;
+  .organization-table.sheets-owner-table {
+    overflow-x: auto;
+  }
+
+  .organization-table.sheets-owner-table :is(.organization-table-head, button) {
+    min-width: 760px;
   }
 }

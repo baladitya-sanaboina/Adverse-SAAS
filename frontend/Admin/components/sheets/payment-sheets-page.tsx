@@ -7,12 +7,13 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Contact, RefreshCw, UsersRound, Wallet } from "lucide-react";
+import { Contact, Plus, RefreshCw, UsersRound, Wallet } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { api, errorText, formatDate, money } from "@/lib/production/client";
 import { PaymentSheets } from "@loopless-shared/production/payment-sheets";
 import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
 import { STATUS_TEXT, ownerLine, type SheetOwner, type SheetsOverview } from "./sheet-types";
+import "@/styles/organization.css";
 import "@/styles/production.css";
 import "@/styles/payment-sheets-page.css";
 
@@ -108,52 +109,89 @@ export function PaymentSheetsPage() {
                 : "No client payments or delivered work yet. Each payment you record in Payments → Client payments opens a sheet."}
             </div>
           ) : (
-            <div className="sheets-page-grid">
-              <ul className="sheets-owner-list" aria-label={tab === "MANAGER" ? "Managers" : "Clients"}>
-                {owners.map((owner) => (
-                  <li key={owner.id}>
+            <>
+              <div
+                className="organization-table sheets-owner-table"
+                role="table"
+                aria-label={tab === "MANAGER" ? "Managers" : "Clients"}
+              >
+                <div className="organization-table-head" role="row">
+                  <span>{tab === "MANAGER" ? "Manager" : "Client"}</span>
+                  <span>Current sheet</span>
+                  <span className="production-money">Paid in + carried</span>
+                  <span className="production-money">Left</span>
+                  <span>Used</span>
+                  <span>Status</span>
+                </div>
+                {owners.map((owner) => {
+                  const latest = owner.sheets[owner.sheets.length - 1];
+                  const left = Number(owner.left);
+                  return (
                     <button
                       type="button"
+                      role="row"
+                      key={owner.id}
                       className={current?.id === owner.id ? "active" : undefined}
-                      aria-pressed={current?.id === owner.id}
+                      aria-selected={current?.id === owner.id}
                       onClick={() => setSelected(owner.id)}
                     >
-                      <span className="sheets-owner-top">
+                      <div className="production-cell">
                         <strong>{owner.name}</strong>
+                        <small>{owner.code}</small>
+                      </div>
+                      <div className="production-cell">
+                        <strong>Sheet {latest?.index ?? 1}</strong>
+                        <small>{latest ? `Since ${formatDate(latest.start)}` : "No sheet yet"}</small>
+                      </div>
+                      <span className="production-money">{money(owner.pot, currency)}</span>
+                      <span className={`production-money${left < 0 ? " sheets-minus" : ""}`}>
+                        {left < 0 ? "−" : ""}
+                        {money(Math.abs(left), currency)}
+                      </span>
+                      <span className="sheets-used">
+                        <i aria-hidden="true">
+                          <b
+                            className={owner.status.toLowerCase()}
+                            style={{ width: `${Math.min(owner.percent_used, 100)}%` }}
+                          />
+                        </i>
+                        {Math.round(owner.percent_used)}%
+                      </span>
+                      <span>
                         <em className={`sheets-status ${owner.status.toLowerCase()}`}>{STATUS_TEXT[owner.status]}</em>
                       </span>
-                      <span className="sheets-owner-bar" aria-hidden="true">
-                        <i
-                          style={{ width: `${Math.min(owner.percent_used, 100)}%` }}
-                          className={owner.status.toLowerCase()}
-                        />
-                      </span>
-                      <small>
-                        Sheet {owner.sheets.length} · {ownerLine(owner, money, currency)}
-                      </small>
                     </button>
-                  </li>
-                ))}
-              </ul>
+                  );
+                })}
+              </div>
+
               {current && (
-                <article className="sheets-owner-detail">
-                  <header>
+                <section className="sheets-owner-detail" aria-label={`${current.name} sheets`}>
+                  <header className="management-toolbar">
                     <div>
-                      <span>{current.kind === "MANAGER" ? "MANAGER" : "CLIENT"}</span>
-                      <h3>{current.name}</h3>
-                      <p>
+                      <span>
+                        {current.kind === "MANAGER" ? "Manager" : "Client"} · {current.name}
+                      </span>
+                      <strong>
                         {ownerLine(current, money, currency)}
-                        {current.ran_out_on ? ` · money ran out on ${formatDate(current.ran_out_on)}` : ""}
-                      </p>
+                        {current.ran_out_on ? ` · ran out ${formatDate(current.ran_out_on)}` : ""}
+                      </strong>
                     </div>
                     <Link
                       href={current.kind === "CLIENT" ? `/clients/${current.id}` : "/payments"}
-                      className="management-secondary-action"
+                      className="management-primary-action"
                     >
-                      {current.kind === "CLIENT" ? "Open client" : "Send a top-up"}
+                      {current.kind === "CLIENT" ? (
+                        "Open client"
+                      ) : (
+                        <>
+                          <Plus /> Send a top-up
+                        </>
+                      )}
                     </Link>
                   </header>
                   <PaymentSheets
+                    key={current.id}
                     sheets={current.sheets}
                     currency={currency}
                     money={money}
@@ -161,9 +199,9 @@ export function PaymentSheetsPage() {
                     itemWord={current.kind === "MANAGER" ? "task" : "video"}
                     empty="No sheets yet."
                   />
-                </article>
+                </section>
               )}
-            </div>
+            </>
           )}
         </section>
       </div>

@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -9,7 +11,7 @@ from app.repositories.authentication_repository import (
 )
 from app.schemas.authentication import LoginRequest
 from app.services.authentication_service import AuthenticationError, AuthenticationService
-from app.services.password_service import hash_password
+from app.services.password_service import hash_password, needs_rehash, verify_password
 
 
 class FakeSecurityRepository:
@@ -66,6 +68,9 @@ class FakeSecurityRepository:
     def set_refresh_hash(self, session_id, refresh_hash):
         return None
 
+    def update_password_hash(self, user_id, password_hash):
+        self.user = replace(self.user, password_hash=password_hash)
+
 
 class AuthenticationSecurityTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -114,6 +119,25 @@ class AuthenticationSecurityTests(unittest.TestCase):
         )
         self.assertEqual(response.user.email, self.repository.user.email)
         self.assertTrue(self.repository.protection_cleared)
+
+    def test_old_weaker_hash_is_upgraded_on_sign_in(self):
+        salt = b"0123456789abcdef"
+        key = hashlib.scrypt(b"CorrectPass!123", salt=salt, n=2**14, r=8, p=1)
+        old = (
+            f"scrypt$16384$8$1${base64.urlsafe_b64encode(salt).decode()}"
+            f"${base64.urlsafe_b64encode(key).decode()}"
+        )
+        self.repository.user = replace(self.repository.user, password_hash=old)
+        self.assertTrue(needs_rehash(old))
+        self.service.login(
+            LoginRequest(email=self.repository.user.email, password="CorrectPass!123"),
+            "test",
+            "127.0.0.1",
+        )
+        upgraded = self.repository.user.password_hash
+        self.assertNotEqual(upgraded, old)
+        self.assertFalse(needs_rehash(upgraded))
+        self.assertTrue(verify_password("CorrectPass!123", upgraded))
 
 
 if __name__ == "__main__":

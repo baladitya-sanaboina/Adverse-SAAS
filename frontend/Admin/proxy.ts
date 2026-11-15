@@ -10,19 +10,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Every signed-in page (security checklist, 2026-11-15). Left open: the sign-in pages,
+  // invitations, meet links (/call shows its own sign-in), the API, Next's files and static files.
   matcher: [
-    "/dashboard/:path*",
-    "/company/:path*",
-    "/employees/:path*",
-    "/clients/:path*",
-    "/projects/:path*",
-    "/tasks/:path*",
-    "/crm/:path*",
-    "/finance/:path*",
-    "/attendance/:path*",
-    "/documents/:path*",
-    "/reports/:path*",
-    "/notifications/:path*",
-    "/settings/:path*",
+    "/((?!$|login|register|forgot-password|reset-password|verify-email|invitations|call|api|_next|.*\\.[A-Za-z0-9]+$).*)",
   ],
 };

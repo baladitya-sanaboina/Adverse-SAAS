@@ -11,20 +11,37 @@
  *    the host or an admin in the call admits them (backend call_service).
  * 3. In the call: audio and video go browser to browser (WebRTC, one connection per pair).
  *    The server only says who is in the call and passes offers, answers and network candidates.
- *    A small data channel per pair carries mic / camera / screen-share state for the tiles.
+ *    A small data channel per pair carries mic / camera / screen-share / raised-hand state for
+ *    the tiles, emoji reactions, and "please mute" from the host or an admin.
+ * 4. More in the call (owner request 2026-11-15: "in call UI enka advanced, meeting and chat
+ *    same layout lo"): the chat beside the video (saved in the chat as well), raise hand,
+ *    reactions, pin, layouts, settings with speaker choice, full screen and keyboard shortcuts.
  */
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   ArrowLeft,
   Check,
   Copy,
   Hand,
+  Info,
+  Keyboard,
+  LayoutGrid,
   Link2,
+  Maximize2,
+  MessageSquareText,
   Mic,
   MicOff,
+  Minimize2,
   MonitorUp,
+  Paperclip,
   PhoneOff,
+  Pin,
+  PinOff,
+  SendHorizontal,
+  Settings,
+  Smile,
   Users,
   Video,
   VideoOff,
@@ -33,7 +50,7 @@ import {
 } from "lucide-react";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { subscribeRealtime } from "../realtime/realtime";
-import { chatApi, initials, jsonBody } from "./chat-types";
+import { chatApi, clock, initials, jsonBody, type ChatMessage } from "./chat-types";
 import { audioContext, repeat, sounds, unlockSounds } from "./call-sounds";
 import "../styles/call.css";
 
@@ -66,9 +83,29 @@ type MeetInfo = {
 };
 type Waiting = { id: string; name: string; role: Role; image: string | null; requested_at: string };
 type Me = { id: string; name: string; image: string | null };
-type PeerState = { mic: boolean; cam: boolean; sharing: boolean };
+type PeerState = { mic: boolean; cam: boolean; sharing: boolean; hand?: boolean };
 type Phase = "loading" | "missing" | "prejoin" | "asking" | "denied" | "joining" | "incall" | "left" | "ended";
 type Device = { value: string; label: string };
+type Panel = "people" | "chat" | "info";
+type Layout = "auto" | "tiled" | "spotlight";
+type Floating = { id: number; emoji: string; name: string; left: number };
+/** What goes over a data channel besides the state: a reaction, or "please mute" from the host. */
+type ChannelMessage = { type: "reaction"; emoji: string } | { type: "mute" };
+
+const EMOJIS = ["👍", "❤️", "😂", "😮", "👏", "🎉", "🙏", "🔥"] as const;
+const LAYOUTS: { value: Layout; label: string; hint: string }[] = [
+  { value: "auto", label: "Auto", hint: "Everyone in a grid; whoever presents goes big" },
+  { value: "tiled", label: "Tiled", hint: "Everyone the same size" },
+  { value: "spotlight", label: "Spotlight", hint: "The person talking (or pinned) goes big" },
+];
+const SHORTCUTS: [string, string][] = [
+  ["Ctrl + D", "Microphone on / off"],
+  ["Ctrl + E", "Camera on / off"],
+  ["Ctrl + Alt + H", "Raise / lower hand"],
+  ["Ctrl + Alt + C", "Open chat"],
+  ["Ctrl + Alt + P", "Open people"],
+  ["Ctrl + Alt + F", "Full screen"],
+];
 
 // Public STUN servers so two browsers can find each other. People behind strict office or mobile
 // networks also need a TURN relay (not set up yet).
@@ -179,6 +216,9 @@ function Tile({
   screen,
   speaking,
   role,
+  hand,
+  pinned,
+  onPin,
 }: {
   name: string;
   image?: string | null;
@@ -189,9 +229,14 @@ function Tile({
   screen?: boolean;
   speaking?: boolean;
   role?: string;
+  hand?: boolean;
+  pinned?: boolean;
+  onPin?: () => void;
 }) {
   return (
-    <figure className={`callroom-tile${speaking ? " speaking" : ""}${screen ? " screen" : ""}`}>
+    <figure
+      className={`callroom-tile${speaking ? " speaking" : ""}${screen ? " screen" : ""}${pinned ? " pinned" : ""}`}
+    >
       {video && stream ? (
         <video
           className={mine && !screen ? "mirror" : undefined}
@@ -205,12 +250,46 @@ function Tile({
       ) : (
         <Avatar name={name} image={image} size="lg" />
       )}
+      {hand && (
+        <span className="callroom-tile-hand" aria-label={`${mine ? "Your" : `${name}'s`} hand is raised`}>
+          <Hand />
+        </span>
+      )}
+      {onPin && (
+        <button
+          type="button"
+          className="callroom-tile-pin"
+          aria-label={pinned ? `Unpin ${name}` : `Pin ${name}`}
+          title={pinned ? "Unpin" : "Pin to the main screen"}
+          onClick={onPin}
+        >
+          {pinned ? <PinOff /> : <Pin />}
+        </button>
+      )}
       <figcaption>
         {!mic && <MicOff aria-label="Muted" />}
         <span>{screen ? `${mine ? "You are" : `${name} is`} presenting` : mine ? `${name} (you)` : name}</span>
         {role && !mine && !screen && <small>{role}</small>}
       </figcaption>
     </figure>
+  );
+}
+
+/** Links in chat lines become clickable; everything else stays plain text (no HTML). */
+function Linked({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s<>"]+)/g);
+  return (
+    <>
+      {parts.map((part, index) =>
+        index % 2 === 1 ? (
+          <a key={index} href={part} target="_blank" rel="noopener noreferrer">
+            {part}
+          </a>
+        ) : (
+          part
+        ),
+      )}
+    </>
   );
 }
 
@@ -242,12 +321,26 @@ export function CallRoom({
   const [micId, setMicId] = useState("");
   const [camId, setCamId] = useState("");
   const [lobby, setLobby] = useState<Waiting[]>([]);
-  const [panel, setPanel] = useState(false);
+  const [panel, setPanel] = useState<Panel | null>(null);
   const [notices, setNotices] = useState<{ id: number; text: string }[]>([]);
   const [copied, setCopied] = useState(false);
   const [elsewhere, setElsewhere] = useState(false);
   const [soundOff, setSoundOff] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [lines, setLines] = useState<ChatMessage[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [hand, setHand] = useState(false);
+  const [floating, setFloating] = useState<Floating[]>([]);
+  const [tray, setTray] = useState(false);
+  const [pinned, setPinned] = useState<string | null>(null);
+  const [layout, setLayout] = useState<Layout>("auto");
+  const [settings, setSettings] = useState(false);
+  const [speakers, setSpeakers] = useState<Device[]>([]);
+  const [speakerId, setSpeakerId] = useState("");
+  const [fullscreen, setFullscreen] = useState(false);
+  const [lastSpeaker, setLastSpeaker] = useState<string | null>(null);
 
   const peers = useRef(new Map<string, RTCPeerConnection>());
   const channels = useRef(new Map<string, RTCDataChannel>());
@@ -256,12 +349,18 @@ export function CallRoom({
   const screenRef = useRef<MediaStream | null>(null);
   const callRef = useRef<Call | null>(null);
   const meRef = useRef<Me | null>(null);
-  const stateRef = useRef<PeerState>({ mic: true, cam: kindHint !== "AUDIO", sharing: false });
+  const stateRef = useRef<PeerState>({ mic: true, cam: kindHint !== "AUDIO", sharing: false, hand: false });
   const phaseRef = useRef<Phase>("loading");
   const seenRef = useRef<Set<string>>(new Set());
   const noticeId = useRef(0);
   const autoJoin = useRef(false);
   const codeRef = useRef(code);
+  const panelRef = useRef<Panel | null>(null);
+  const handsRef = useRef<Set<string>>(new Set());
+  const speakerRef = useRef("");
+  const linesEnd = useRef<HTMLLIElement | null>(null);
+  const lineIds = useRef<Set<string>>(new Set());
+  const muteRequest = useRef<(from: string) => void>(() => undefined);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -272,6 +371,12 @@ export function CallRoom({
   useEffect(() => {
     codeRef.current = code;
   }, [code]);
+  useEffect(() => {
+    panelRef.current = panel;
+  }, [panel]);
+  useEffect(() => {
+    speakerRef.current = speakerId;
+  }, [speakerId]);
 
   const notify = useCallback((text: string) => {
     noticeId.current += 1;
@@ -346,6 +451,9 @@ export function CallRoom({
         .map((device, index) => ({ value: device.deviceId, label: device.label || `${fallback} ${index + 1}` }));
     setMics(shape("audioinput", "Microphone"));
     setCams(shape("videoinput", "Camera"));
+    // Choosing the speaker works in browsers that support it (Chrome, Edge).
+    const canPick = typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype;
+    setSpeakers(canPick ? shape("audiooutput", "Speaker") : []);
   }, []);
 
   const acquire = useCallback(
@@ -415,24 +523,55 @@ export function CallRoom({
     );
   }, []);
 
-  const watchChannel = useCallback((userId: string, channel: RTCDataChannel) => {
-    channels.current.set(userId, channel);
-    channel.onopen = () => channel.send(JSON.stringify(stateRef.current));
-    channel.onmessage = (event) => {
-      try {
-        const state = JSON.parse(String(event.data)) as PeerState;
-        setPeerState((current) => ({ ...current, [userId]: state }));
-      } catch {
-        // Not a state message.
-      }
-    };
+  const float = useCallback((emoji: string, name: string) => {
+    noticeId.current += 1;
+    const id = noticeId.current;
+    const left = 8 + Math.round(Math.random() * 18);
+    setFloating((current) => [...current.slice(-14), { id, emoji, name, left }]);
+    window.setTimeout(() => setFloating((current) => current.filter((item) => item.id !== id)), 4200);
   }, []);
+
+  const watchChannel = useCallback(
+    (userId: string, channel: RTCDataChannel) => {
+      channels.current.set(userId, channel);
+      channel.onopen = () => channel.send(JSON.stringify(stateRef.current));
+      channel.onmessage = (event) => {
+        let parsed: (PeerState & { type?: undefined }) | ChannelMessage;
+        try {
+          parsed = JSON.parse(String(event.data));
+        } catch {
+          return; // not ours
+        }
+        const name = callRef.current?.participants.find((seat) => seat.id === userId)?.name ?? "Someone";
+        if (parsed.type === "reaction") {
+          if ((EMOJIS as readonly string[]).includes(parsed.emoji)) float(parsed.emoji, name);
+          return;
+        }
+        if (parsed.type === "mute") {
+          muteRequest.current(userId);
+          return;
+        }
+        const state = parsed;
+        const raised = Boolean(state.hand);
+        if (raised && !handsRef.current.has(userId)) {
+          sounds.hand();
+          notify(`${name} raised a hand`);
+        }
+        if (raised) handsRef.current.add(userId);
+        else handsRef.current.delete(userId);
+        setPeerState((current) => ({ ...current, [userId]: state }));
+      };
+    },
+    [float, notify],
+  );
 
   const dropPeer = useCallback((userId: string) => {
     peers.current.get(userId)?.close();
     peers.current.delete(userId);
     channels.current.delete(userId);
     queued.current.delete(userId);
+    handsRef.current.delete(userId);
+    setPinned((current) => (current === userId ? null : current));
     setRemote((current) => {
       if (!(userId in current)) return current;
       const next = { ...current };
@@ -480,7 +619,17 @@ export function CallRoom({
     setRemote({});
     setPeerState({});
     setLobby([]);
-    setPanel(false);
+    setPanel(null);
+    setLines([]);
+    lineIds.current = new Set();
+    setUnread(0);
+    setHand(false);
+    setTray(false);
+    setSettings(false);
+    setPinned(null);
+    setFloating([]);
+    handsRef.current = new Set();
+    stateRef.current = { ...stateRef.current, hand: false };
     setCall(null);
     callRef.current = null;
   }, []);
@@ -619,9 +768,21 @@ export function CallRoom({
     if (result) setLobby(result.items);
   }, []);
 
+  const loadLines = useCallback(async () => {
+    const current = callRef.current;
+    if (!current) return;
+    const result = await chatApi<{ items: ChatMessage[] }>(`/calls/${current.id}/messages`).catch(() => null);
+    if (!result) return;
+    result.items.forEach((item) => lineIds.current.add(item.id));
+    setLines(result.items);
+  }, []);
+
   useEffect(() => {
     if (phase !== "incall") return;
-    const first = window.setTimeout(() => void loadLobby(), 0);
+    const first = window.setTimeout(() => {
+      void loadLobby();
+      void loadLines();
+    }, 0);
     const tick = window.setInterval(() => setNow(Date.now()), 1000);
     const ping = window.setInterval(() => {
       const current = callRef.current;
@@ -645,7 +806,7 @@ export function CallRoom({
       window.clearInterval(lobbyTimer);
       window.removeEventListener("pagehide", bye);
     };
-  }, [phase, loadLobby, leave, notify]);
+  }, [phase, loadLobby, loadLines, leave, notify]);
 
   // Live events: people joining and leaving, the lobby, WebRTC signals.
   useEffect(
@@ -681,6 +842,16 @@ export function CallRoom({
           void loadLobby();
         } else if (event.type === "call.lobby") {
           if (current && data.call_id === current.id) void loadLobby();
+        } else if (event.type === "call.chat") {
+          if (!current || data.call_id !== current.id) return;
+          const line = data.message as ChatMessage;
+          if (lineIds.current.has(line.id)) return;
+          lineIds.current.add(line.id);
+          setLines((items) => (items.some((item) => item.id === line.id) ? items : [...items, line]));
+          if (line.sender.id === meRef.current?.id || panelRef.current === "chat") return;
+          setUnread((count) => count + 1);
+          sounds.message();
+          notify(`${line.sender.name}: ${line.body.length > 80 ? `${line.body.slice(0, 80)}…` : line.body}`);
         } else if (event.type === "call.declined") {
           const declined = data as { call_id: string; name: string; direct: boolean };
           if (current?.id !== declined.call_id) return;
@@ -878,6 +1049,126 @@ export function CallRoom({
     window.setTimeout(() => setCopied(false), 2000);
   }
 
+  function toggleHand() {
+    const next = !hand;
+    setHand(next);
+    setState({ hand: next });
+    if (next) sounds.hand();
+  }
+
+  function react(emoji: string) {
+    const text = JSON.stringify({ type: "reaction", emoji } satisfies ChannelMessage);
+    channels.current.forEach((channel) => channel.readyState === "open" && channel.send(text));
+    float(emoji, "You");
+    setTray(false);
+  }
+
+  /** Host or admin: ask someone to turn their microphone off (only they can turn it back on). */
+  function askToMute(userId: string) {
+    const channel = channels.current.get(userId);
+    if (channel?.readyState !== "open") return;
+    channel.send(JSON.stringify({ type: "mute" } satisfies ChannelMessage));
+    const name = call?.participants.find((seat) => seat.id === userId)?.name;
+    notify(`You muted ${name ?? "them"}`);
+  }
+
+  function openPanel(next: Panel) {
+    setPanel((current) => (current === next ? null : next));
+    if (next === "chat") setUnread(0);
+  }
+
+  async function say(event?: FormEvent) {
+    event?.preventDefault();
+    const current = callRef.current;
+    const text = draft.trim();
+    if (!current || !text || sending) return;
+    setSending(true);
+    try {
+      const line = await chatApi<ChatMessage>(`/calls/${current.id}/messages`, jsonBody("POST", { body: text }));
+      lineIds.current.add(line.id);
+      setLines((items) => (items.some((item) => item.id === line.id) ? items : [...items, line]));
+      setDraft("");
+    } catch (reason) {
+      notify(reason instanceof Error ? reason.message : "Could not send the message.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function draftKeys(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) void say(event);
+  }
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      notify("Full screen is not available here.");
+    }
+  }
+
+  function pickSpeaker(deviceId: string) {
+    setSpeakerId(deviceId);
+    document.querySelectorAll("audio").forEach((element) => {
+      const sink = element as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+      void sink.setSinkId?.(deviceId).catch(() => undefined);
+    });
+  }
+
+  // Someone asked me to mute: only the host or an admin in the call may (checked here too).
+  useEffect(() => {
+    muteRequest.current = (from: string) => {
+      const seat = callRef.current?.participants.find((item) => item.id === from);
+      if (!seat || (seat.role !== "ADMIN" && seat.id !== callRef.current?.started_by_id)) return;
+      if (stateRef.current.mic) {
+        localRef.current?.getAudioTracks().forEach((track) => (track.enabled = false));
+        setMicOn(false);
+        stateRef.current = { ...stateRef.current, mic: false };
+        broadcastState();
+      }
+      notify(`${seat.name} muted you`);
+    };
+  }, [broadcastState, notify]);
+
+  useEffect(() => {
+    const change = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", change);
+    return () => document.removeEventListener("fullscreenchange", change);
+  }, []);
+
+  // Keyboard shortcuts in the call (the same keys as Google Meet).
+  const keys = useRef<Record<string, () => void>>({});
+  useEffect(() => {
+    keys.current = {
+      d: toggleMic,
+      e: () => callKind === "VIDEO" && toggleCamera(),
+      h: toggleHand,
+      c: () => openPanel("chat"),
+      p: () => openPanel("people"),
+      f: () => void toggleFullscreen(),
+    };
+  });
+  useEffect(() => {
+    if (phase !== "incall") return;
+    const press = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.repeat) return;
+      const key = event.key.toLowerCase();
+      const simple = (key === "d" || key === "e") && !event.altKey && !event.shiftKey;
+      const withAlt = ["h", "c", "p", "f"].includes(event.code.replace("Key", "").toLowerCase()) && event.altKey;
+      if (!simple && !withAlt) return;
+      event.preventDefault();
+      keys.current[simple ? key : event.code.replace("Key", "").toLowerCase()]?.();
+    };
+    window.addEventListener("keydown", press);
+    return () => window.removeEventListener("keydown", press);
+  }, [phase]);
+
+  // The chat panel follows the newest line.
+  useEffect(() => {
+    if (panel === "chat") linesEnd.current?.scrollIntoView({ block: "end" });
+  }, [panel, lines]);
+
   // -- view ----------------------------------------------------------------------------------
 
   const others = useMemo(() => (call?.participants ?? []).filter((seat) => seat.id !== me?.id), [call, me]);
@@ -887,7 +1178,17 @@ export function CallRoom({
     return streams;
   }, [remote, local, me]);
   const speaking = useSpeaking(meters, phase === "incall");
+  // Spotlight layout follows whoever else spoke last.
+  useEffect(() => {
+    const talker = [...speaking].find((id) => id !== me?.id);
+    if (!talker) return;
+    const timer = window.setTimeout(() => setLastSpeaker(talker), 0);
+    return () => window.clearTimeout(timer);
+  }, [speaking, me]);
   const presenter = sharing ? me?.id : others.find((seat) => peerState[seat.id]?.sharing)?.id;
+  const myRole = call?.participants.find((seat) => seat.id === me?.id)?.role;
+  const canMute = Boolean(me && call && (call.started_by_id === me.id || myRole === "ADMIN"));
+  const hands = others.filter((seat) => peerState[seat.id]?.hand).map((seat) => seat.id);
   const started = call ? new Date(call.started_at).getTime() : now;
   const hasCamera = Boolean(local?.getVideoTracks().length);
   const linkText = code ? `${typeof window === "undefined" ? "" : window.location.host}/call/${code}` : "";
@@ -1100,6 +1401,7 @@ export function CallRoom({
             mic: micOn,
             mine: true,
             screen: sharing,
+            hand,
           },
         ]
       : []),
@@ -1115,12 +1417,28 @@ export function CallRoom({
         mic: state ? state.mic : true,
         mine: false,
         screen: Boolean(state?.sharing),
+        hand: Boolean(state?.hand),
       };
     }),
   ];
-  const spotlight = presenter ? tiles.find((tile) => tile.id === presenter) : undefined;
-  const strip = spotlight ? tiles.filter((tile) => tile.id !== presenter) : tiles;
+  const pinnedHere = pinned && tiles.some((tile) => tile.id === pinned) ? pinned : undefined;
+  const talker = lastSpeaker && others.some((seat) => seat.id === lastSpeaker) ? lastSpeaker : others[0]?.id;
+  const focusId =
+    layout === "tiled"
+      ? pinnedHere
+      : layout === "spotlight"
+        ? (presenter ?? pinnedHere ?? talker)
+        : (presenter ?? pinnedHere);
+  const spotlight = focusId ? tiles.find((tile) => tile.id === focusId) : undefined;
+  const strip = spotlight ? tiles.filter((tile) => tile.id !== spotlight.id) : tiles;
   const columns = strip.length <= 1 ? 1 : strip.length <= 4 ? 2 : strip.length <= 9 ? 3 : 4;
+  const canPin = tiles.length > 1;
+  const pin = (id: string) => setPinned((current) => (current === id ? null : id));
+  const seats = [...(call?.participants ?? [])].sort(
+    (a, b) => Number(Boolean(peerState[b.id]?.hand)) - Number(Boolean(peerState[a.id]?.hand)),
+  );
+  const startedClock = call ? clock(call.started_at) : "";
+  const host = call?.participants.find((seat) => seat.id === call.started_by_id)?.name ?? info?.host_name;
 
   return (
     <main className={`callroom incall${panel ? " with-panel" : ""}`}>
@@ -1132,6 +1450,8 @@ export function CallRoom({
           ref={(element) => {
             if (element && element.srcObject !== stream) {
               element.srcObject = stream;
+              const sink = element as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+              if (speakerRef.current) void sink.setSinkId?.(speakerRef.current).catch(() => undefined);
               void element.play().catch(() => setSoundOff(true));
             }
           }}
@@ -1142,12 +1462,24 @@ export function CallRoom({
         <section className={`callroom-stage${spotlight ? " spotlight" : ""}`}>
           {spotlight && (
             <div className="callroom-main">
-              <Tile {...spotlight} speaking={speaking.has(spotlight.id)} />
+              <Tile
+                {...spotlight}
+                speaking={speaking.has(spotlight.id)}
+                pinned={pinnedHere === spotlight.id}
+                onPin={canPin ? () => pin(spotlight.id) : undefined}
+              />
             </div>
           )}
           <div className={`callroom-grid cols-${spotlight ? "strip" : columns}`}>
             {strip.map((tile) => (
-              <Tile key={tile.id} {...tile} screen={false} speaking={speaking.has(tile.id)} />
+              <Tile
+                key={tile.id}
+                {...tile}
+                screen={spotlight ? false : tile.screen}
+                speaking={speaking.has(tile.id)}
+                pinned={pinnedHere === tile.id}
+                onPin={canPin ? () => pin(tile.id) : undefined}
+              />
             ))}
             {others.length === 0 && !spotlight && (
               <div className="callroom-alone">
@@ -1164,71 +1496,271 @@ export function CallRoom({
               </div>
             )}
           </div>
+          <div className="callroom-floating" aria-hidden="true">
+            {floating.map((item) => (
+              <span key={item.id} style={{ left: `${item.left}%` }}>
+                <b>{item.emoji}</b>
+                <small>{item.name}</small>
+              </span>
+            ))}
+          </div>
         </section>
 
         {panel && (
-          <aside className="callroom-panel" aria-label="People">
+          <aside className="callroom-panel" aria-label="Call details">
             <header>
-              <strong>People</strong>
-              <button type="button" className="callroom-icon" aria-label="Close" onClick={() => setPanel(false)}>
+              <div className="callroom-tabs" role="tablist" aria-label="Call panel">
+                {(
+                  [
+                    ["people", "People", <Users key="i" />],
+                    ["chat", "Chat", <MessageSquareText key="i" />],
+                    ["info", "Info", <Info key="i" />],
+                  ] as const
+                ).map(([value, label, icon]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="tab"
+                    aria-selected={panel === value}
+                    className={panel === value ? "active" : undefined}
+                    onClick={() => {
+                      setPanel(value);
+                      if (value === "chat") setUnread(0);
+                    }}
+                  >
+                    {icon}
+                    {label}
+                    {value === "chat" && unread > 0 && <span className="callroom-dot">{unread}</span>}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="callroom-icon" aria-label="Close" onClick={() => setPanel(null)}>
                 <X />
               </button>
             </header>
-            {code && (
-              <button type="button" className="callroom-linkbox" onClick={() => void copyLink()}>
-                <span>{linkText}</span>
-                {copied ? <Check /> : <Copy />}
-              </button>
-            )}
-            {lobby.length > 0 && (
-              <>
-                <h2>Waiting to join · {lobby.length}</h2>
+
+            {panel === "people" && (
+              <div className="callroom-panel-body">
+                {code && (
+                  <button type="button" className="callroom-linkbox" onClick={() => void copyLink()}>
+                    <span>{linkText}</span>
+                    {copied ? <Check /> : <Copy />}
+                  </button>
+                )}
+                {lobby.length > 0 && (
+                  <>
+                    <h2>Waiting to join · {lobby.length}</h2>
+                    <ul>
+                      {lobby.map((person) => (
+                        <li key={person.id}>
+                          <Avatar name={person.name} image={person.image} />
+                          <span>
+                            {person.name}
+                            <small>{ROLE_LABEL[person.role]}</small>
+                          </span>
+                          <button type="button" className="callroom-chip" onClick={() => void decide(person, false)}>
+                            Deny
+                          </button>
+                          <button
+                            type="button"
+                            className="callroom-chip primary"
+                            onClick={() => void decide(person, true)}
+                          >
+                            Admit
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                <h2>In the call · {call?.participants.length ?? 0}</h2>
                 <ul>
-                  {lobby.map((person) => (
-                    <li key={person.id}>
-                      <Avatar name={person.name} image={person.image} />
-                      <span>
-                        {person.name}
-                        <small>{ROLE_LABEL[person.role]}</small>
-                      </span>
-                      <button type="button" className="callroom-chip" onClick={() => void decide(person, false)}>
-                        Deny
-                      </button>
-                      <button type="button" className="callroom-chip primary" onClick={() => void decide(person, true)}>
-                        Admit
-                      </button>
-                    </li>
-                  ))}
+                  {seats.map((seat) => {
+                    const mine = seat.id === me?.id;
+                    const mic = mine ? micOn : (peerState[seat.id]?.mic ?? true);
+                    const raised = mine ? hand : Boolean(peerState[seat.id]?.hand);
+                    return (
+                      <li key={seat.id}>
+                        <Avatar name={seat.name} image={seat.image} />
+                        <span>
+                          {seat.name}
+                          {mine ? " (you)" : ""}
+                          <small>
+                            {ROLE_LABEL[seat.role]}
+                            {seat.id === call?.started_by_id ? " · Host" : ""}
+                            {raised ? " · Hand raised" : ""}
+                          </small>
+                        </span>
+                        {raised && <Hand aria-label="Hand raised" className="hand" />}
+                        {canPin && (
+                          <button
+                            type="button"
+                            className="callroom-icon small"
+                            aria-label={pinnedHere === seat.id ? `Unpin ${seat.name}` : `Pin ${seat.name}`}
+                            title={pinnedHere === seat.id ? "Unpin" : "Pin to the main screen"}
+                            onClick={() => pin(seat.id)}
+                          >
+                            {pinnedHere === seat.id ? <PinOff /> : <Pin />}
+                          </button>
+                        )}
+                        {!mine && canMute && mic ? (
+                          <button
+                            type="button"
+                            className="callroom-icon small"
+                            aria-label={`Mute ${seat.name}`}
+                            title={`Mute ${seat.name} (only they can turn it back on)`}
+                            onClick={() => askToMute(seat.id)}
+                          >
+                            <Mic />
+                          </button>
+                        ) : mic ? (
+                          <Mic aria-label="Microphone on" />
+                        ) : (
+                          <MicOff aria-label="Muted" className="off" />
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
-              </>
+              </div>
             )}
-            <h2>In the call · {call?.participants.length ?? 0}</h2>
-            <ul>
-              {(call?.participants ?? []).map((seat) => {
-                const mine = seat.id === me?.id;
-                const mic = mine ? micOn : (peerState[seat.id]?.mic ?? true);
-                return (
-                  <li key={seat.id}>
-                    <Avatar name={seat.name} image={seat.image} />
-                    <span>
-                      {seat.name}
-                      {mine ? " (you)" : ""}
-                      <small>
-                        {ROLE_LABEL[seat.role]}
-                        {seat.id === call?.started_by_id ? " · Host" : ""}
-                      </small>
-                    </span>
-                    {mic ? <Mic aria-label="Microphone on" /> : <MicOff aria-label="Muted" className="off" />}
-                  </li>
-                );
-              })}
-            </ul>
+
+            {panel === "chat" && (
+              <div className="callroom-chat">
+                <p className="callroom-chat-note">
+                  {info?.member
+                    ? "Messages here are saved in the chat as well."
+                    : "Messages are saved in the chat. You see them while you're in the call."}
+                </p>
+                <ul className="callroom-lines" aria-live="polite">
+                  {lines.length === 0 && <li className="callroom-lines-empty">No messages yet. Say hello 👋</li>}
+                  {lines.map((line, index) => {
+                    const previous = lines[index - 1];
+                    const grouped =
+                      previous !== undefined &&
+                      previous.sender.id === line.sender.id &&
+                      new Date(line.created_at).getTime() - new Date(previous.created_at).getTime() < 5 * 60_000;
+                    const mine = line.sender.id === me?.id;
+                    return (
+                      <li key={line.id} className={`${mine ? "mine" : ""}${grouped ? " grouped" : ""}`}>
+                        {!grouped && (
+                          <header>
+                            <strong>{mine ? "You" : line.sender.name}</strong>
+                            <time dateTime={line.created_at}>{clock(line.created_at)}</time>
+                          </header>
+                        )}
+                        {line.deleted ? (
+                          <p className="gone">Message deleted</p>
+                        ) : (
+                          line.body && (
+                            <p>
+                              <Linked text={line.body} />
+                            </p>
+                          )
+                        )}
+                        {!line.deleted &&
+                          line.attachments.map((file) =>
+                            info?.member ? (
+                              <a
+                                key={file.id}
+                                className="callroom-file"
+                                href={`/api/chat/attachments/${file.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <Paperclip /> {file.file_name}
+                              </a>
+                            ) : (
+                              <span key={file.id} className="callroom-file">
+                                <Paperclip /> {file.file_name}
+                              </span>
+                            ),
+                          )}
+                      </li>
+                    );
+                  })}
+                  <li ref={linesEnd} className="callroom-lines-end" aria-hidden="true" />
+                </ul>
+                <form className="callroom-compose" onSubmit={(event) => void say(event)}>
+                  <textarea
+                    rows={1}
+                    value={draft}
+                    maxLength={4000}
+                    placeholder="Send a message"
+                    aria-label="Message everyone in the call"
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={draftKeys}
+                  />
+                  <button
+                    type="submit"
+                    className="callroom-icon send"
+                    aria-label="Send message"
+                    disabled={!draft.trim() || sending}
+                  >
+                    <SendHorizontal />
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {panel === "info" && (
+              <div className="callroom-panel-body">
+                <h2>Meeting details</h2>
+                <dl className="callroom-facts">
+                  <div>
+                    <dt>Meeting</dt>
+                    <dd>{info?.title}</dd>
+                  </div>
+                  {host && (
+                    <div>
+                      <dt>Host</dt>
+                      <dd>{host}</dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt>Started</dt>
+                    <dd>
+                      {startedClock} · {clockSince(started, now)} ago
+                    </dd>
+                  </div>
+                  {code && (
+                    <div>
+                      <dt>Code</dt>
+                      <dd>{code}</dd>
+                    </div>
+                  )}
+                </dl>
+                {code && (
+                  <button type="button" className="callroom-linkbox" onClick={() => void copyLink()}>
+                    <span>{linkText}</span>
+                    {copied ? <Check /> : <Copy />}
+                  </button>
+                )}
+                <p className="muted small">
+                  People in this chat join straight away. Anyone else in the company asks to join and waits until the
+                  host or an admin in the call lets them in.
+                </p>
+                <h2>
+                  <Keyboard /> Keyboard shortcuts
+                </h2>
+                <dl className="callroom-keys">
+                  {SHORTCUTS.map(([combo, what]) => (
+                    <div key={combo}>
+                      <dt>
+                        <kbd>{combo}</kbd>
+                      </dt>
+                      <dd>{what}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
           </aside>
         )}
       </div>
 
       {/* Someone is waiting: answer without opening the panel. */}
-      {lobby.length > 0 && !panel && (
+      {lobby.length > 0 && panel !== "people" && (
         <div className="callroom-knock" role="alertdialog" aria-label="Someone wants to join">
           <Avatar name={lobby[0].name} image={lobby[0].image} />
           <span>
@@ -1242,7 +1774,7 @@ export function CallRoom({
             Admit
           </button>
           {lobby.length > 1 && (
-            <button type="button" className="callroom-chip" onClick={() => setPanel(true)}>
+            <button type="button" className="callroom-chip" onClick={() => setPanel("people")}>
               View all
             </button>
           )}
@@ -1261,6 +1793,88 @@ export function CallRoom({
         ))}
       </div>
 
+      {settings && (
+        <div className="callroom-dialog-backdrop" onClick={() => setSettings(false)}>
+          <section
+            className="callroom-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Call settings"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header>
+              <strong>Settings</strong>
+              <button type="button" className="callroom-icon" aria-label="Close" onClick={() => setSettings(false)}>
+                <X />
+              </button>
+            </header>
+            <h2>Audio and video</h2>
+            <div className="callroom-devices stacked">
+              {mics.length > 0 && (
+                <label>
+                  <span>
+                    <Mic aria-hidden="true" /> Microphone
+                  </span>
+                  <LooplessSelect
+                    value={micId}
+                    options={mics}
+                    onValueChange={(value) => void switchDevice("audio", value)}
+                    ariaLabel="Microphone"
+                  />
+                </label>
+              )}
+              {speakers.length > 0 && (
+                <label>
+                  <span>
+                    <Volume2 aria-hidden="true" /> Speaker
+                  </span>
+                  <LooplessSelect
+                    value={speakerId || speakers[0].value}
+                    options={speakers}
+                    onValueChange={pickSpeaker}
+                    ariaLabel="Speaker"
+                  />
+                </label>
+              )}
+              {callKind === "VIDEO" && cams.length > 0 && (
+                <label>
+                  <span>
+                    <Video aria-hidden="true" /> Camera
+                  </span>
+                  <LooplessSelect
+                    value={camId}
+                    options={cams}
+                    onValueChange={(value) => void switchDevice("video", value)}
+                    ariaLabel="Camera"
+                  />
+                </label>
+              )}
+            </div>
+            <button type="button" className="callroom-button" onClick={() => sounds.join()}>
+              <Volume2 /> Test speaker
+            </button>
+            <h2>
+              <LayoutGrid /> Layout
+            </h2>
+            <div className="callroom-layouts" role="radiogroup" aria-label="Layout">
+              {LAYOUTS.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={layout === item.value}
+                  className={layout === item.value ? "active" : undefined}
+                  onClick={() => setLayout(item.value)}
+                >
+                  <strong>{item.label}</strong>
+                  <small>{item.hint}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+
       <footer className="callroom-bar">
         <div className="callroom-bar-side">
           <strong>{clockSince(started, now)}</strong>
@@ -1271,7 +1885,7 @@ export function CallRoom({
             type="button"
             className={`callroom-round${micOn ? "" : " off"}`}
             aria-label={micOn ? "Turn microphone off" : "Turn microphone on"}
-            title={micOn ? "Turn microphone off" : "Turn microphone on"}
+            title={`${micOn ? "Turn microphone off" : "Turn microphone on"} (Ctrl + D)`}
             onClick={toggleMic}
           >
             {micOn ? <Mic /> : <MicOff />}
@@ -1282,7 +1896,9 @@ export function CallRoom({
                 type="button"
                 className={`callroom-round${camOn && hasCamera ? "" : " off"}`}
                 aria-label={camOn ? "Turn camera off" : "Turn camera on"}
-                title={hasCamera ? (camOn ? "Turn camera off" : "Turn camera on") : "Camera not available"}
+                title={
+                  hasCamera ? `${camOn ? "Turn camera off" : "Turn camera on"} (Ctrl + E)` : "Camera not available"
+                }
                 disabled={!hasCamera}
                 onClick={toggleCamera}
               >
@@ -1299,6 +1915,55 @@ export function CallRoom({
               </button>
             </>
           )}
+          <div className="callroom-react">
+            <button
+              type="button"
+              className={`callroom-round${tray ? " on" : ""}`}
+              aria-label="Send a reaction"
+              aria-expanded={tray}
+              title="Send a reaction"
+              onClick={() => setTray((open) => !open)}
+            >
+              <Smile />
+            </button>
+            {tray && (
+              <div className="callroom-tray" role="menu" aria-label="Reactions">
+                {EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    role="menuitem"
+                    aria-label={`React ${emoji}`}
+                    onClick={() => react(emoji)}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            className={`callroom-round${hand ? " on" : ""}`}
+            aria-label={hand ? "Lower hand" : "Raise hand"}
+            aria-pressed={hand}
+            title={`${hand ? "Lower hand" : "Raise hand"} (Ctrl + Alt + H)`}
+            onClick={toggleHand}
+          >
+            <Hand />
+          </button>
+          <button
+            type="button"
+            className={`callroom-round${settings ? " on" : ""}`}
+            aria-label="Settings"
+            title="Settings: devices and layout"
+            onClick={() => {
+              void refreshDevices();
+              setSettings(true);
+            }}
+          >
+            <Settings />
+          </button>
           <button
             type="button"
             className="callroom-round leave"
@@ -1312,23 +1977,48 @@ export function CallRoom({
         <div className="callroom-bar-side end">
           <button
             type="button"
-            className="callroom-icon"
-            aria-label="Copy meeting link"
-            title="Copy meeting link"
-            onClick={() => void copyLink()}
+            className={`callroom-icon${panel === "info" ? " active" : ""}`}
+            aria-label="Meeting details"
+            title="Meeting details"
+            onClick={() => openPanel("info")}
           >
-            {copied ? <Check /> : <Link2 />}
+            <Info />
           </button>
           <button
             type="button"
-            className={`callroom-icon${panel ? " active" : ""}`}
+            className={`callroom-icon${panel === "people" ? " active" : ""}`}
             aria-label="People"
-            title="People"
-            onClick={() => setPanel((open) => !open)}
+            title="People (Ctrl + Alt + P)"
+            onClick={() => openPanel("people")}
           >
             <Users />
             <span className="callroom-count">{call?.participants.length ?? 0}</span>
-            {lobby.length > 0 && <span className="callroom-badge">{lobby.length}</span>}
+            {lobby.length > 0 ? (
+              <span className="callroom-badge">{lobby.length}</span>
+            ) : hands.length > 0 ? (
+              <span className="callroom-badge hand" aria-label={`${hands.length} raised`}>
+                <Hand />
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className={`callroom-icon${panel === "chat" ? " active" : ""}`}
+            aria-label={unread ? `Chat, ${unread} new` : "Chat"}
+            title="Chat with everyone (Ctrl + Alt + C)"
+            onClick={() => openPanel("chat")}
+          >
+            <MessageSquareText />
+            {unread > 0 && <span className="callroom-badge">{unread}</span>}
+          </button>
+          <button
+            type="button"
+            className="callroom-icon"
+            aria-label={fullscreen ? "Exit full screen" : "Full screen"}
+            title={`${fullscreen ? "Exit full screen" : "Full screen"} (Ctrl + Alt + F)`}
+            onClick={() => void toggleFullscreen()}
+          >
+            {fullscreen ? <Minimize2 /> : <Maximize2 />}
           </button>
         </div>
       </footer>

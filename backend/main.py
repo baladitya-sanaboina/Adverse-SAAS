@@ -49,6 +49,7 @@ from app.api.workspace import portal_router as client_portal_router
 from app.api.workspace import router as workspace_router
 from app.core.settings import settings
 from app.database.connectivity import close_database_pool, open_database_pool
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.tenant import TenantContextMiddleware
 from app.services.authentication_service import AuthenticationError
@@ -363,3 +364,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)

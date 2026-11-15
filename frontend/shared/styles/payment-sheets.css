@@ -1,4 +1,5 @@
-/* Payment sheets as a statement (owner decision 2026-11-14). Theme tokens and status colours. */
+/* Payment sheets (owner decision 2026-11-14), styled like the rest of the app (owner request
+   2026-11-15: chip tabs like Invoices, a summary bar like Payments, the app's table). */
 
 .sheet-book {
   display: grid;
@@ -13,7 +14,7 @@
   font-size: 0.66rem;
 }
 
-/* Sheet tabs, oldest on the left like spreadsheet tabs. */
+/* Sheet tabs, oldest first, as the app's filter chips. */
 .sheet-tabs {
   display: flex;
   gap: 8px;
@@ -23,162 +24,94 @@
 
 .sheet-tabs button {
   flex: 0 0 auto;
-  display: grid;
-  gap: 2px;
-  min-width: 140px;
-  padding: 9px 13px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 9px;
   color: var(--foreground);
   background: var(--surface);
   font-family: inherit;
-  text-align: left;
+  font-size: 0.64rem;
+  font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.sheet-tabs button small {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 500;
+}
+
+.sheet-tabs button:hover {
+  border-color: #b9dcff;
 }
 
 .sheet-tabs button.active {
   border-color: #0876ed;
-  background: color-mix(in srgb, #0876ed 7%, var(--surface));
-  box-shadow: inset 0 0 0 1px #0876ed;
+  color: #065ec1;
+  background: color-mix(in srgb, #0876ed 8%, var(--surface));
 }
 
-.sheet-tabs strong {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 0.66rem;
-  font-weight: 700;
+.dark .sheet-tabs button.active {
+  color: #8cc8ff;
 }
 
-.sheet-tabs strong i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #287150;
-}
-
-.sheet-tabs button.low strong i {
-  background: #c96f05;
-}
-
-.sheet-tabs button.over strong i {
-  background: #b74858;
-}
-
-.sheet-tabs small {
-  color: var(--muted);
-  font-size: 0.58rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-/* One sheet. */
+/* One sheet: a summary bar, then the table. */
 .sheet-page {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-top: 3px solid #287150;
-  border-radius: 12px;
   color: var(--foreground);
+}
+
+.sheet-summary {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 1.6fr);
+  align-items: center;
+  gap: 16px 24px;
+  padding: 15px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
   background: var(--surface);
 }
 
-.sheet-page.low {
-  border-top-color: #c96f05;
-}
-
-.sheet-page.over {
-  border-top-color: #b74858;
-}
-
-.sheet-page-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.sheet-page-head > div {
+.sheet-summary-main {
   display: grid;
   gap: 3px;
+  min-width: 0;
 }
 
-.sheet-page-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sheet-page-title strong {
-  font-size: 0.92rem;
-  font-weight: 700;
-}
-
-.sheet-page-title em {
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 0.56rem;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.sheet-page-title em.open {
-  color: #0876ed;
-  background: color-mix(in srgb, #0876ed 10%, transparent);
-}
-
-.sheet-page-title em.closed {
+.sheet-summary-main > span {
   color: var(--muted);
-  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  font-size: 0.66rem;
+  font-weight: 500;
 }
 
-.sheet-page-head small {
-  color: var(--muted);
-  font-size: 0.62rem;
-  font-weight: 600;
-}
-
-.sheet-page-left {
-  justify-items: end;
-  text-align: right;
-}
-
-.sheet-page-left span {
-  color: var(--muted);
-  font-size: 0.6rem;
-  font-weight: 600;
-}
-
-.sheet-page-left strong {
-  color: #287150;
-  font-size: 1.35rem;
+.sheet-summary-main > strong {
+  font-size: 0.94rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.sheet-page.low .sheet-page-left strong {
-  color: #c96f05;
-}
-
-.sheet-page.over .sheet-page-left strong {
-  color: #b74858;
 }
 
 .sheet-meter {
   display: grid;
-  gap: 6px;
+  gap: 5px;
+  margin-top: 6px;
 }
 
 .sheet-meter > span {
-  height: 8px;
+  height: 6px;
   display: block;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: 5px;
   background: var(--surface-muted);
-  box-shadow: inset 0 0 0 1px var(--border);
 }
 
 .sheet-meter i {
@@ -188,24 +121,19 @@
   background: #0876ed;
 }
 
-.sheet-page.low .sheet-meter i {
-  background: #c96f05;
-}
-
 .sheet-page.over .sheet-meter i {
   background: #b74858;
 }
 
 .sheet-meter small {
   color: var(--muted);
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 600;
 }
 
 .sheet-figures {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
   margin: 0;
 }
 
@@ -213,10 +141,8 @@
   display: grid;
   gap: 3px;
   min-width: 0;
-  padding: 11px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-muted);
+  padding: 2px 16px;
+  border-left: 1px solid var(--border);
 }
 
 .sheet-figures dt {
@@ -228,37 +154,37 @@
 .sheet-figures dd {
   overflow: hidden;
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sheet-figures small {
-  color: var(--muted);
-  font-size: 0.56rem;
-}
-
-/* Statement table. */
+/* Statement table, like the app's other tables. */
 .sheet-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 14px;
+  background: var(--surface);
 }
 
 .sheet-table {
   width: 100%;
   min-width: 560px;
   border-collapse: collapse;
-  font-size: 0.64rem;
+  font-size: 0.65rem;
 }
 
 .sheet-table th,
 .sheet-table td {
-  padding: 10px 12px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border);
   text-align: right;
   white-space: nowrap;
+}
+
+.sheet-table td {
+  height: 52px;
 }
 
 .sheet-table th:nth-child(-n + 2),
@@ -267,23 +193,24 @@
 }
 
 .sheet-table thead th {
+  height: 40px;
   color: var(--muted);
   background: var(--surface-muted);
   font-size: 0.56rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-weight: 800;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .sheet-table td:first-child {
   width: 1%;
   color: var(--muted);
-  font-weight: 600;
 }
 
 .sheet-table td.details {
-  max-width: 320px;
+  max-width: 360px;
   overflow: hidden;
+  font-weight: 600;
   text-overflow: ellipsis;
 }
 
@@ -292,15 +219,20 @@
 }
 
 .sheet-table tbody tr:hover {
-  background: color-mix(in srgb, #0876ed 4%, transparent);
+  background: color-mix(in srgb, var(--surface-muted) 64%, transparent);
 }
 
 .sheet-table td:last-child {
   font-weight: 700;
 }
 
+.sheet-table tfoot td:nth-child(n) {
+  text-align: right;
+}
+
 .sheet-table tfoot th,
-.sheet-table tfoot td {
+.sheet-table tfoot td:nth-child(n) {
+  height: 46px;
   border-bottom: 0;
   background: var(--surface-muted);
   font-weight: 700;
@@ -314,36 +246,26 @@
   color: #b74858;
 }
 
-/* Dark mode: the app's lighter status tones. */
-.dark .sheet-book .plus,
-.dark .sheet-page-left strong {
+.dark .sheet-book .plus {
   color: #86d3a9;
 }
 
-.dark .sheet-book .minus,
-.dark .sheet-page.over .sheet-page-left strong {
+.dark .sheet-book .minus {
   color: #f0a6af;
 }
 
-.dark .sheet-page.low .sheet-page-left strong {
-  color: #f3b766;
-}
-
-.dark .sheet-page-title em.open {
-  color: #8cc8ff;
-}
-
-@media (max-width: 760px) {
-  .sheet-page {
-    padding: 14px;
+@media (max-width: 860px) {
+  .sheet-summary {
+    grid-template-columns: 1fr;
   }
 
   .sheet-figures {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 0;
   }
 
-  .sheet-page-left {
-    justify-items: start;
-    text-align: left;
+  .sheet-figures > div:nth-child(odd) {
+    padding-left: 0;
+    border-left: 0;
   }
 }

@@ -3,9 +3,12 @@ import hashlib
 import hmac
 import os
 
+# OWASP's scrypt setting for 16 MiB of memory: N=2^14, r=8, p=5 (security checklist,
+# 2026-11-15; was p=1). Each hash stores its own settings, so older hashes still verify and are
+# upgraded the next time that person signs in (see needs_rehash).
 SCRYPT_COST = 2**14
 SCRYPT_BLOCK_SIZE = 8
-SCRYPT_PARALLELIZATION = 1
+SCRYPT_PARALLELIZATION = 5
 SALT_BYTES = 16
 
 
@@ -45,3 +48,16 @@ def verify_password(password: str, encoded_hash: str) -> bool:
         return hmac.compare_digest(actual_key, expected_key)
     except (ValueError, TypeError):
         return False
+
+
+def needs_rehash(encoded_hash: str) -> bool:
+    """True when a stored hash was made with weaker settings than the current ones."""
+    try:
+        algorithm, cost, block_size, parallelization, _, _ = encoded_hash.split("$")
+    except ValueError:
+        return True
+    return algorithm != "scrypt" or (int(cost), int(block_size), int(parallelization)) != (
+        SCRYPT_COST,
+        SCRYPT_BLOCK_SIZE,
+        SCRYPT_PARALLELIZATION,
+    )

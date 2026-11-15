@@ -1,6 +1,7 @@
 """Calls and meetings (owner request 2026-11-14), without a database or Redis."""
 
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import patch
@@ -357,6 +358,41 @@ class CallRulesTest(unittest.TestCase):
         with self.assertRaises(AuthenticationError) as other:
             self.service.meet(outsider, code)
         self.assertEqual(other.exception.code, "MEET_NOT_FOUND")
+
+    def test_call_chat_reaches_everyone_in_the_call_and_stays_in_the_chat(
+        self, chat_rt: Any, _: Any, call_rt: Any, __: Any
+    ) -> None:
+        room = self.room(chat_rt)
+        code = self.service.link(context(EMPLOYEE), room.id).code
+        before = self.chat_repo.add_message(COMPANY, room.id, ADMIN.id, "old line", None, [])
+        self.chat_repo.messages_[before] = replace(
+            self.chat_repo.messages_[before], created_at=NOW - timedelta(hours=1)
+        )
+        call = self.service.start(context(EMPLOYEE), room.id, CallStartRequest())
+        with self.assertRaises(AuthenticationError) as not_in:
+            self.service.say(context(ADMIN), call.id, "hello")  # in the chat, not in the call
+        self.assertEqual(not_in.exception.code, "NOT_IN_CALL")
+
+        said = self.service.say(context(EMPLOYEE), call.id, "  hello all  ")
+        self.assertEqual(said.body, "hello all")
+        sent = next(c for c in call_rt.publish.call_args_list if c.args[1] == "call.chat")
+        self.assertEqual(sent.args[0], [EMPLOYEE.id])
+
+        # Someone let in from the lobby can read and write while they are in the call.
+        self.service.knock(context(MANAGER), code)
+        self.service.decide(context(EMPLOYEE), call.id, MANAGER.id, True)
+        self.service.join(context(MANAGER), call.id)
+        self.service.say(context(MANAGER), call.id, "thanks")
+        lines = [m.body for m in self.service.messages(context(MANAGER), call.id).items]
+        self.assertNotIn("old line", lines)  # written before the call started
+        self.assertIn("hello all", lines)
+        self.assertIn("thanks", lines)
+        told = [c for c in call_rt.publish.call_args_list if c.args[1] == "chat.message"]
+        self.assertTrue(any(MANAGER.id not in c.args[0] for c in told))  # chat members only
+
+        self.service.leave(context(MANAGER), call.id)
+        with self.assertRaises(AuthenticationError):
+            self.service.messages(context(MANAGER), call.id)
 
 
 if __name__ == "__main__":

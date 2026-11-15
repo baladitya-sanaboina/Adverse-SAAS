@@ -1,0 +1,302 @@
+/* Availability panel on the dashboards (owner request 2026-11-15). Sizes follow the dashboard
+   panels; status colours are the ones Chat already uses. */
+
+.availability-body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
+  gap: 18px 28px;
+}
+
+.availability-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  display: inline-block;
+  border-radius: 50%;
+  background: #8e8e93;
+}
+
+.availability-dot.available {
+  background: #2fa66a;
+}
+
+.availability-dot.busy {
+  background: #b74858;
+}
+
+.availability-dot.away {
+  background: #c96f05;
+}
+
+/* Your status */
+.availability-me {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.availability-label {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.availability-label small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 500;
+}
+
+.availability-choices {
+  display: grid;
+  gap: 8px;
+}
+
+.availability-choices button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 9px 1fr;
+  align-items: center;
+  gap: 2px 10px;
+  padding: 10px 34px 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--foreground);
+  background: var(--surface);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.availability-choices button:hover {
+  background: var(--surface-muted);
+}
+
+.availability-choices button.active {
+  border-color: #0876ed;
+  background: color-mix(in srgb, #0876ed 7%, var(--surface));
+  box-shadow: inset 0 0 0 1px #0876ed;
+}
+
+.availability-choices button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.availability-choices b {
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.availability-choices small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 500;
+}
+
+.availability-tick {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 15px;
+  height: 15px;
+  color: #0876ed;
+  transform: translateY(-50%);
+}
+
+.dark .availability-tick {
+  color: #8cc8ff;
+}
+
+/* People */
+.availability-list {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.availability-group {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.availability-people {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 4px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.availability-people li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 7px 0;
+}
+
+.availability-face {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #fff;
+  background: #0876ed;
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.availability-face img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.availability-face .availability-dot {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--surface);
+}
+
+.availability-people li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.availability-people strong {
+  overflow: hidden;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.availability-people small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 500;
+}
+
+.availability-people em {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.availability-people em.available {
+  color: #287150;
+}
+
+.availability-people em.busy {
+  color: #b74858;
+}
+
+.availability-people em.away {
+  color: #c96f05;
+}
+
+.dark .availability-people em.available {
+  color: #6fd3a0;
+}
+
+.dark .availability-people em.busy {
+  color: #f0a6af;
+}
+
+.dark .availability-people em.away {
+  color: #f5b862;
+}
+
+.availability-message {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: #0876ed;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.dark .availability-message {
+  color: #8cc8ff;
+}
+
+.availability-message:hover {
+  background: var(--surface-muted);
+}
+
+.availability-message:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.availability-message svg {
+  width: 15px;
+  height: 15px;
+}
+
+.availability-more {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.availability-error {
+  margin: 0;
+  color: #b74858;
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+/* What each status means */
+.availability-legend {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+}
+
+.availability-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 500;
+}
+
+.availability-legend b {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .availability-body {
+    grid-template-columns: 1fr;
+  }
+}

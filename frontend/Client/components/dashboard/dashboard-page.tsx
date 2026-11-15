@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCheck, Hourglass, PiggyBank, ReceiptText, Wallet } from "lucide-react";
 import { DashHeader, DashLoading, MonthBars, Panel, PanelHead, Tile, todayText } from "./role-dashboard-ui";
+import { AvailabilityPanel } from "@/components/chat/availability-panel";
 import "@/styles/client-portal.css";
 
 type PricingModeCode = "PER_VIDEO" | "PER_PIECE" | "MONTHLY_FIXED" | "MONTHLY_PACKAGE" | "COMMISSION_PER_DELIVERABLE";
@@ -380,6 +381,8 @@ export function DashboardPage() {
             </div>
           </Panel>
         </section>
+
+        <AvailabilityPanel />
       </div>
     </div>
   );

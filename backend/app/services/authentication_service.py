@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from datetime import UTC, datetime, timedelta
 
 from app.core.settings import settings
@@ -22,7 +23,9 @@ from app.services.jwt_service import (
     create_refresh_token,
     decode_token,
 )
-from app.services.password_service import verify_password
+from app.services.password_service import hash_password, needs_rehash, verify_password
+
+logger = logging.getLogger(__name__)
 
 
 class AuthenticationError(Exception):
@@ -162,6 +165,14 @@ class AuthenticationService:
             )
             raise AuthenticationError(403, "COMPANY_INACTIVE", "Company is not active.")
         self._enforce_maintenance(user.role)
+        if needs_rehash(user.password_hash):
+            # Made with older, weaker settings: store a fresh hash while we have the password.
+            try:
+                self.repository.update_password_hash(
+                    user.id, hash_password(request.password.get_secret_value())
+                )
+            except Exception:  # noqa: BLE001 - sign-in must not fail over the upgrade
+                logger.warning("Password hash upgrade failed for %s", user.id, exc_info=True)
         session_expiry = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_expiry_days)
         self.repository.clear_login_protection(user.id)
         session_id = self.repository.create_session(

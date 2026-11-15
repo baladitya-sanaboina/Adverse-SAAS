@@ -6,6 +6,8 @@
  * received from a client) opens a new sheet; the previous sheet closes the day before and
  * whatever was left, plus or minus, is carried into the new one. Old sheets stay with their dates.
  * Shown like a statement: sheet tabs, a summary, then Date | Details | Paid in | Used | Balance.
+ * Styled like the rest of the app (owner request 2026-11-15): chip tabs, a summary bar like
+ * Payments, and the app's table.
  * Used on Manager earnings and sheets, the Admin's manager view and sheets page, Admin client
  * details and Client billing.
  */
@@ -74,13 +76,10 @@ export function PaymentSheets({
               type="button"
               role="tab"
               aria-selected={item.index === sheet.index}
-              className={`${item.index === sheet.index ? "active " : ""}${tone(item)}`}
+              className={item.index === sheet.index ? "active" : undefined}
               onClick={() => setChosen(item.index)}
             >
-              <strong>
-                <i aria-hidden="true" />
-                Sheet {item.index}
-              </strong>
+              Sheet {item.index}
               <small>
                 {date(item.start)} – {item.end ? date(item.end) : "now"}
               </small>
@@ -116,70 +115,61 @@ function SheetPage({
   const usedOut = sheet.lines.reduce((sum, line) => sum + Math.max(-Number(line.amount), 0), 0);
   const noPayment = Number(sheet.paid) === 0 && carried === 0;
 
+  const headline = noPayment
+    ? "No payment yet"
+    : closed
+      ? `${money(Math.abs(left), currency)} ${left < 0 ? "owed, carried" : "carried"} to sheet ${sheet.index + 1}`
+      : left < 0
+        ? `Over by ${money(-left, currency)}`
+        : `${money(left, currency)} left`;
+
   return (
     <section className={`sheet-page ${state}`} role="tabpanel" aria-label={`Sheet ${sheet.index}`}>
-      <header className="sheet-page-head">
-        <div>
-          <span className="sheet-page-title">
-            <strong>Sheet {sheet.index}</strong>
-            <em className={closed ? "closed" : "open"}>{closed ? "Closed" : "Open"}</em>
-          </span>
-          <small>
-            {date(sheet.start)} – {sheet.end ? date(sheet.end) : "now"}
-          </small>
-        </div>
-        <div className="sheet-page-left">
+      <div className="sheet-summary">
+        <div className="sheet-summary-main">
           <span>
-            {noPayment
-              ? "No payment yet"
-              : closed
-                ? `Carried to sheet ${sheet.index + 1}`
-                : left < 0
-                  ? "Over by"
-                  : "Left"}
+            Sheet {sheet.index} · {closed ? "Closed" : "Open"} · {date(sheet.start)} –{" "}
+            {sheet.end ? date(sheet.end) : "now"}
           </span>
-          <strong>{money(Math.abs(left), currency)}</strong>
+          <strong className={left < 0 && !noPayment ? "minus" : undefined}>{headline}</strong>
+          <div className="sheet-meter">
+            <span aria-hidden="true">
+              <i style={{ width: `${Math.min(percent, 100)}%` }} />
+            </span>
+            <small>
+              {noPayment
+                ? `${sheet.items} ${sheet.items === 1 ? itemWord : `${itemWord}s`} done, nothing paid yet`
+                : `${percent}% used`}
+              {sheet.ran_out_on && !noPayment ? ` · money ran out on ${date(sheet.ran_out_on)}` : ""}
+            </small>
+          </div>
         </div>
-      </header>
-
-      <div className="sheet-meter">
-        <span aria-hidden="true">
-          <i style={{ width: `${Math.min(percent, 100)}%` }} />
-        </span>
-        <small>
-          {noPayment
-            ? `${sheet.items} ${sheet.items === 1 ? itemWord : `${itemWord}s`} done, nothing paid yet`
-            : `${percent}% used`}
-          {sheet.ran_out_on && !noPayment ? ` · money ran out on ${date(sheet.ran_out_on)}` : ""}
-        </small>
+        <dl className="sheet-figures">
+          <div>
+            <dt>Carried in</dt>
+            <dd className={carried < 0 ? "minus" : undefined}>
+              {carried === 0 ? "—" : `${carried < 0 ? "−" : "+"}${money(Math.abs(carried), currency)}`}
+            </dd>
+          </div>
+          <div>
+            <dt>Paid in</dt>
+            <dd>{money(sheet.paid, currency)}</dd>
+          </div>
+          <div>
+            <dt>
+              Used · {sheet.items} {sheet.items === 1 ? itemWord : `${itemWord}s`}
+            </dt>
+            <dd>{money(sheet.used, currency)}</dd>
+          </div>
+          <div>
+            <dt>Balance</dt>
+            <dd className={left < 0 ? "minus" : undefined}>
+              {left < 0 ? "−" : ""}
+              {money(Math.abs(left), currency)}
+            </dd>
+          </div>
+        </dl>
       </div>
-
-      <dl className="sheet-figures">
-        <div>
-          <dt>Carried in</dt>
-          <dd className={carried < 0 ? "minus" : undefined}>
-            {carried === 0 ? "—" : `${carried < 0 ? "−" : "+"}${money(Math.abs(carried), currency)}`}
-          </dd>
-        </div>
-        <div>
-          <dt>Paid in</dt>
-          <dd className="plus">{money(sheet.paid, currency)}</dd>
-        </div>
-        <div>
-          <dt>Used</dt>
-          <dd>{money(sheet.used, currency)}</dd>
-          <small>
-            {sheet.items} {sheet.items === 1 ? itemWord : `${itemWord}s`}
-          </small>
-        </div>
-        <div>
-          <dt>Balance</dt>
-          <dd className={left < 0 ? "minus" : "plus"}>
-            {left < 0 ? "−" : ""}
-            {money(Math.abs(left), currency)}
-          </dd>
-        </div>
-      </dl>
 
       <div className="sheet-table-wrap">
         <table className="sheet-table">

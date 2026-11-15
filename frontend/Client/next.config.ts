@@ -17,10 +17,20 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: "camera=(self), microphone=(self), display-capture=(self), geolocation=()",
   },
+  // No plugins, no <base> tricks, forms post only here, and no other site may frame the app.
+  {
+    key: "Content-Security-Policy",
+    value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+  },
+  // Over HTTPS in production: browsers keep using HTTPS for a year.
+  ...(process.env.NODE_ENV === "production"
+    ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }]
+    : []),
 ];
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  poweredByHeader: false,
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

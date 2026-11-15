@@ -84,6 +84,16 @@ export const sounds = {
     tone(659, 0.12, 0.12, 0.1);
     tone(784, 0.24, 0.24, 0.1);
   },
+  /** Someone raised a hand. */
+  hand() {
+    tone(784, 0, 0.12, 0.09, "triangle");
+    tone(1046, 0.12, 0.2, 0.09, "triangle");
+  },
+  /** A line in the call's chat. */
+  message() {
+    tone(988, 0, 0.08, 0.07);
+    tone(1318, 0.08, 0.16, 0.07);
+  },
   /** The call ended or I left. */
   end() {
     tone(659, 0, 0.16, 0.1);

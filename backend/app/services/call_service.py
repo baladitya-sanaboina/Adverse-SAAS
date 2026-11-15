@@ -26,6 +26,8 @@ from app.schemas.chat import (
     CallParticipantResponse,
     CallResponse,
     CallStartRequest,
+    ChatMessageResponse,
+    ChatMessagesResponse,
     LobbyResponse,
     MeetInfoResponse,
     MeetingListResponse,
@@ -41,6 +43,9 @@ from app.services.chat_service import ROLES, ChatService, chat_service
 from app.services.notification_service import notification_service
 
 logger = logging.getLogger(__name__)
+
+# The call's chat panel shows at most this many lines from the call.
+CALL_CHAT_LIMIT = 200
 
 
 def _utc(moment: datetime) -> datetime:
@@ -305,6 +310,69 @@ class CallService:
                 "data": request.data,
             },
         )
+
+    # -- chat inside the call (owner request 2026-11-15) ---------------------------------------
+
+    def _seated(self, call: CallRow, user_id: UUID) -> None:
+        if call.ended_at is not None or not any(
+            seat.user_id == user_id for seat in self.repository.seats(call.id)
+        ):
+            raise AuthenticationError(409, "NOT_IN_CALL", "You are no longer in this call.")
+
+    def messages(self, context: AuthContext, call_id: UUID) -> ChatMessagesResponse:
+        """The chat lines written since the call started, for the people in the call."""
+        _, _, row, call = self._live(call_id, context)
+        self._seated(call, context.user_id)
+        since = _naive_utc(_utc(call.started_at))
+        rows = [
+            item
+            for item in self.chat.repository.messages(row.id, None, CALL_CHAT_LIMIT)
+            if _naive_utc(_utc(item.created_at)) >= since
+        ]
+        return ChatMessagesResponse(items=self.chat._messages(rows), has_more=False)
+
+    def say(self, context: AuthContext, call_id: UUID, body: str) -> ChatMessageResponse:
+        """Write in the call's chat. The line is saved in the chat too, so members see it later;
+        people admitted from the lobby (not members) can write while they are in the call."""
+        company_id, role, row, call = self._live(call_id, context)
+        self._seated(call, context.user_id)
+        text = body.strip()
+        if not text:
+            raise AuthenticationError(422, "EMPTY_MESSAGE", "Write a message.")
+        if self._member(company_id, role, context.user_id, row):
+            message = self.chat.send(context, row.id, text, None, [])
+        else:
+            message_id = self.chat.repository.add_message(
+                company_id, row.id, context.user_id, text, None, []
+            )
+            saved = self.chat.repository.message(company_id, message_id)
+            if saved is None:
+                raise AuthenticationError(500, "MESSAGE_NOT_SAVED", "The message was not saved.")
+            message = self.chat._messages([saved])[0]
+            members = self.chat._audience(company_id, row)
+            realtime.publish(
+                members,
+                "chat.message",
+                {
+                    "conversation_id": str(row.id),
+                    "title": row.title or row.client_name or "",
+                    "type": row.type,
+                    "message": message.model_dump(mode="json"),
+                },
+            )
+            notification_service.notify_chat(
+                company_id,
+                members,
+                row.id,
+                row.title or row.client_name or "Chat",
+                f"{message.sender.name}: {text[:120]}",
+            )
+        realtime.publish(
+            [seat.user_id for seat in self.repository.seats(call_id)],
+            "call.chat",
+            {"call_id": str(call_id), "message": message.model_dump(mode="json")},
+        )
+        return message
 
     # -- meet links and the lobby -------------------------------------------------------------
 

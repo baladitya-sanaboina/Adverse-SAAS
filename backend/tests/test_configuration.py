@@ -49,6 +49,20 @@ class ConfigurationTests(unittest.TestCase):
                 _env_file=None,
             )
 
+    def test_api_docs_are_off_in_production(self):
+        configuration = Settings(
+            **{
+                **BASE_CONFIGURATION,
+                "environment": "production",
+                "jwt_secret": "a-real-secret-value-that-is-long-enough-123",
+                "smtp_host": "smtp.example.com",
+                "smtp_from_email": "team@example.com",
+                "swagger_enabled": True,
+            },
+            _env_file=None,
+        )
+        self.assertFalse(configuration.swagger_enabled)
+
 
 if __name__ == "__main__":
     unittest.main()

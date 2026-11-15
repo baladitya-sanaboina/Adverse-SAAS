@@ -309,3 +309,11 @@ class AdmissionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     admit: bool
+
+
+class CallMessageRequest(BaseModel):
+    """A line typed in the call's chat panel (text only)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = Field(min_length=1, max_length=4000)

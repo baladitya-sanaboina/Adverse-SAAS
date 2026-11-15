@@ -1,11 +1,10 @@
 # Exact versions the backend container runs today (checked with pip-audit on 2026-11-14).
 # Raise a version on purpose and run the tests; unpinned installs could pull a breaking release.
+# SQLAlchemy and Alembic were removed 2026-11-15: unused (raw psycopg; Prisma runs migrations).
 fastapi==0.162.7
 email-validator==2.3.0
 pydantic-settings==2.16.3
 uvicorn[standard]==0.54.0
-sqlalchemy==2.1.8
-alembic==1.20.1
 psycopg[binary]==3.3.9
 psycopg_pool==3.3.3
 redis==8.1.0

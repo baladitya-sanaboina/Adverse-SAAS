@@ -22,6 +22,7 @@ import { STATUS_LABELS, api, errorText, formatDate, money as formatMoney, query 
 import type { ReportPeriod, TaskStatus } from "@/lib/production/types";
 import { STATUS_TEXT, ownerLine, type SheetsOverview } from "@/components/sheets/sheet-types";
 import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
+import { AvailabilityPanel } from "@loopless-shared/chat/availability-panel";
 import "@/styles/production.css";
 
 // Password asked before the Admin dashboard shows money (owner request 2026-11-14). Change it with
@@ -297,6 +298,8 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
         <AttentionPanel data={data} />
         <TeamPanel data={data} />
       </section>
+
+      <AvailabilityPanel />
 
       <SheetAlertsPanel currency={data.currency} />
       <BudgetPanel data={data} />

@@ -101,6 +101,15 @@ class AuthenticationRepository:
                     (user_id,),
                 )
 
+    def update_password_hash(self, user_id: UUID, password_hash: str) -> None:
+        """Store a stronger hash of the same password (made right after a correct sign-in)."""
+        with database_pool.connection(timeout=2) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    'UPDATE "users" SET password_hash = %s, updated_at = NOW() WHERE id = %s',
+                    (password_hash, user_id),
+                )
+
     def recent_failed_logins(self, email: str, ip_address: str | None, since: datetime) -> int:
         with database_pool.connection(timeout=2) as connection:
             with connection.cursor() as cursor:

@@ -24,6 +24,7 @@ import { MoneyPrivacy, PrivacyToggle, usePrivateMoney } from "../production/priv
 import type { EmployeeSalary, ManagerEarnings, Paged, TaskStatus } from "../production/types";
 import type { WorkerTask, WorkspaceDashboard } from "./types";
 import { useLiveRefresh } from "../realtime/realtime";
+import { AvailabilityPanel } from "../chat/availability-panel";
 
 type Role = "MANAGER" | "EMPLOYEE";
 type Me = { user: { name: string }; company: { name: string } | null };
@@ -310,6 +311,8 @@ function WorkspaceDashboardContent({ role }: { role: Role }) {
               </div>
             </Panel>
           </section>
+
+          <AvailabilityPanel />
         </div>
       )}
     </div>

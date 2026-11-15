@@ -77,6 +77,8 @@ class Settings(BaseSettings):
                 raise ValueError("JWT_SECRET must be replaced for production")
             if not self.smtp_host or not self.smtp_from_email:
                 raise ValueError("SMTP_HOST and SMTP_FROM_EMAIL are required in production")
+            # The interactive API docs list every route; never publish them in production.
+            self.swagger_enabled = False
         return self
 
     @property

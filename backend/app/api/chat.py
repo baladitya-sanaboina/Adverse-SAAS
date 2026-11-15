@@ -13,6 +13,7 @@ from app.middleware.authentication import AuthenticatedContext
 from app.schemas.chat import (
     ActiveCallResponse,
     AdmissionRequest,
+    CallMessageRequest,
     CallResponse,
     CallStartRequest,
     ChatMessageResponse,
@@ -300,6 +301,29 @@ def decline_call(call_id: UUID, context: AuthenticatedContext) -> Response:
 def signal_call(call_id: UUID, request: SignalRequest, context: AuthenticatedContext) -> Response:
     call_service.signal(context, call_id, request)
     return Response(status_code=204)
+
+
+@router.get(
+    "/calls/{call_id}/messages",
+    response_model=ChatMessagesResponse,
+    summary="The call's chat: lines written since the call started (people in the call)",
+    responses=ERRORS,
+)
+def call_messages(call_id: UUID, context: AuthenticatedContext) -> ChatMessagesResponse:
+    return call_service.messages(context, call_id)
+
+
+@router.post(
+    "/calls/{call_id}/messages",
+    response_model=ChatMessageResponse,
+    status_code=201,
+    summary="Write in the call's chat (saved in the chat as well)",
+    responses=ERRORS,
+)
+def call_say(
+    call_id: UUID, request: CallMessageRequest, context: AuthenticatedContext
+) -> ChatMessageResponse:
+    return call_service.say(context, call_id, request.body)
 
 
 # -- meet links and the lobby (owner request 2026-11-14) ---------------------------------------
