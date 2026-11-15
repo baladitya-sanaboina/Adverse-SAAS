@@ -112,6 +112,7 @@ model Company {
   invoices            Invoice[]
   clientPackages      ClientPackage[]
   mailMessages        MailMessage[]
+  mailTickets         MailTicket[]
   documentTemplates   DocumentTemplate[]
   onboardingPackets   OnboardingPacket[]
   calendarEntries     ContentCalendarEntry[]
@@ -517,6 +518,8 @@ model User {
   invoicesCreated         Invoice[]                @relation("InvoiceCreator")
   clientPackagesCreated   ClientPackage[]          @relation("ClientPackageCreator")
   mailSent                MailMessage[]            @relation("MailSender")
+  mailTicketsRaised       MailTicket[]             @relation("MailTicketRaiser")
+  mailTicketsAssigned     MailTicket[]             @relation("MailTicketAssignee")
   mailReceived            MailRecipient[]
   templatesUpdated        DocumentTemplate[]       @relation("TemplateEditor")
   onboardingPackets       OnboardingPacket[]       @relation("PacketRecipient")
@@ -1794,7 +1797,6 @@ model ChatMeeting {
   @@map("chat_meetings")
 }
 
-
 /// Internal mailbox inside Chat (owner request 2026-11-15). sender null = the app itself.
 model MailMessage {
   id              String           @id @default(uuid()) @db.Uuid
@@ -1807,6 +1809,10 @@ model MailMessage {
   body            String           @default("")
   link            String           @default("") @db.VarChar(300)
   senderDeletedAt DateTime?        @map("sender_deleted_at")
+  status          String           @default("SENT") @db.VarChar(12)
+  scheduledAt     DateTime?        @map("scheduled_at")
+  senderStarredAt DateTime?        @map("sender_starred_at")
+  senderPurgedAt  DateTime?        @map("sender_purged_at")
   createdAt       DateTime         @default(now()) @map("created_at")
   company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   sender          User?            @relation("MailSender", fields: [senderId], references: [id], onDelete: SetNull)
@@ -1815,18 +1821,23 @@ model MailMessage {
 
   @@index([companyId, threadId, createdAt])
   @@index([senderId, createdAt])
+  @@index([status, scheduledAt])
   @@map("mail_messages")
 }
 
 model MailRecipient {
-  id        String      @id @default(uuid()) @db.Uuid
-  messageId String      @map("message_id") @db.Uuid
-  userId    String      @map("user_id") @db.Uuid
-  readAt    DateTime?   @map("read_at")
-  deletedAt DateTime?   @map("deleted_at")
-  createdAt DateTime    @default(now()) @map("created_at")
-  message   MailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String      @id @default(uuid()) @db.Uuid
+  messageId  String      @map("message_id") @db.Uuid
+  userId     String      @map("user_id") @db.Uuid
+  kind       String      @default("TO") @db.VarChar(3)
+  readAt     DateTime?   @map("read_at")
+  starredAt  DateTime?   @map("starred_at")
+  archivedAt DateTime?   @map("archived_at")
+  deletedAt  DateTime?   @map("deleted_at")
+  purgedAt   DateTime?   @map("purged_at")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  message    MailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, userId])
   @@index([userId, deletedAt, createdAt])
@@ -1846,7 +1857,6 @@ model MailAttachment {
   @@index([messageId])
   @@map("mail_attachments")
 }
-
 
 /// Editable text of onboarding documents (owner request 2026-11-15); defaults live in code.
 model DocumentTemplate {
@@ -1896,4 +1906,27 @@ model OnboardingPacket {
   @@index([companyId, audience, createdAt])
   @@index([clientId])
   @@map("onboarding_packets")
+}
+
+/// A problem raised from mail (owner request 2026-11-15). The conversation is the mail thread.
+model MailTicket {
+  id         String    @id @default(uuid()) @db.Uuid
+  companyId  String    @map("company_id") @db.Uuid
+  number     Int
+  threadId   String    @unique @map("thread_id") @db.Uuid
+  subject    String    @db.VarChar(200)
+  priority   String    @default("NORMAL") @db.VarChar(10)
+  status     String    @default("OPEN") @db.VarChar(12)
+  raisedById String?   @map("raised_by_id") @db.Uuid
+  assigneeId String?   @map("assignee_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @default(now()) @map("updated_at")
+  closedAt   DateTime? @map("closed_at")
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  raisedBy   User?     @relation("MailTicketRaiser", fields: [raisedById], references: [id], onDelete: SetNull)
+  assignee   User?     @relation("MailTicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@map("mail_tickets")
 }

@@ -161,11 +161,27 @@ def _loop(stop: threading.Event) -> None:
         stop.wait(CHECK_SECONDS)
 
 
+MAIL_CHECK_SECONDS = 20
+
+
+def _mail_loop(stop: threading.Event) -> None:
+    """Scheduled mail goes out within about 20 seconds of its time. The release is one atomic
+    UPDATE ... RETURNING, so several workers never send the same mail twice."""
+    from app.services.mail_service import mail_service
+
+    while not stop.wait(MAIL_CHECK_SECONDS):
+        try:
+            mail_service.release_due()
+        except Exception:  # noqa: BLE001 - try again at the next check
+            logger.warning("Scheduled mail check failed", exc_info=True)
+
+
 _stop = threading.Event()
 
 
 def start() -> None:
     threading.Thread(target=_loop, args=(_stop,), name="reminders", daemon=True).start()
+    threading.Thread(target=_mail_loop, args=(_stop,), name="mail-schedule", daemon=True).start()
 
 
 def stop() -> None:
