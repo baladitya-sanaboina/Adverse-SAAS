@@ -2289,3 +2289,170 @@
     bottom: 76px;
   }
 }
+
+/* Attach menu: pick a document, image or video (owner request 2026-11-15). */
+.chat-attach {
+  position: relative;
+}
+
+.chat-attach-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  display: grid;
+  gap: 2px;
+  min-width: 230px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 14px 34px rgb(15 23 42 / 0.16);
+}
+
+.chat-attach-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--foreground);
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-attach-menu button:hover,
+.chat-attach-menu button:focus-visible {
+  background: var(--surface-muted);
+  outline: 0;
+}
+
+.chat-attach-menu button svg {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  border-radius: 9px;
+  color: #0876ed;
+  background: color-mix(in srgb, #0876ed 10%, var(--surface));
+}
+
+.chat-attach-menu span {
+  display: grid;
+  gap: 1px;
+}
+
+.chat-attach-menu strong {
+  font-size: 0.66rem;
+}
+
+.chat-attach-menu small {
+  color: var(--muted);
+  font-size: 0.56rem;
+}
+
+.chat-attach-menu p {
+  margin: 4px 10px 4px;
+  color: var(--muted);
+  font-size: 0.54rem;
+}
+
+/* Call lines in the chat: Join while the call runs, Missed call + Call back. */
+.chat-callline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(340px, 100%);
+  margin: 8px auto;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.chat-callline-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #0876ed;
+  background: color-mix(in srgb, #0876ed 10%, var(--surface));
+}
+
+.chat-callline-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.chat-callline.live .chat-callline-icon {
+  color: #fff;
+  background: #2fa66a;
+  animation: chat-callline-pulse 1.6s ease-in-out infinite;
+}
+
+.chat-callline.missed .chat-callline-icon {
+  color: #c2414f;
+  background: color-mix(in srgb, #c2414f 10%, var(--surface));
+}
+
+.chat-callline-text {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+
+.chat-callline-text strong {
+  font-size: 0.66rem;
+}
+
+.chat-callline.missed .chat-callline-text strong {
+  color: #c2414f;
+}
+
+.chat-callline-text small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.56rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-callline-action {
+  flex: none;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: #2fa66a;
+  font-family: inherit;
+  font-size: 0.6rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.chat-callline-action.ghost {
+  color: #0876ed;
+  background: color-mix(in srgb, #0876ed 10%, var(--surface));
+}
+
+@keyframes chat-callline-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(47 166 106 / 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(47 166 106 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-callline.live .chat-callline-icon {
+    animation: none;
+  }
+}

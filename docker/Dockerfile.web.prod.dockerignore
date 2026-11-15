@@ -1,0 +1,7 @@
+# The build context is frontend/; keep dev builds, local env files and dependencies out.
+**/node_modules
+**/.next
+**/.env.local
+**/.env.development
+**/*.tsbuildinfo
+**/_shared

@@ -22,6 +22,15 @@ MAX_TASK_FILE_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB: long videos can be large.
 _CHUNK_BYTES = 1024 * 1024
 
 
+def _size_label(size: int) -> str:
+    """1048576 -> "1 MB", 2147483648 -> "2 GB"."""
+    for unit, scale in (("GB", 1024**3), ("MB", 1024**2), ("KB", 1024)):
+        if size >= scale:
+            value = size / scale
+            return f"{value:.0f} {unit}" if value == int(value) else f"{value:.1f} {unit}"
+    return f"{size} bytes"
+
+
 @dataclass(frozen=True)
 class StoredFile:
     storage_path: str
@@ -54,7 +63,7 @@ class TaskFileStorage:
                         raise AuthenticationError(
                             413,
                             "FILE_TOO_LARGE",
-                            f"Files can be at most {self.max_bytes // (1024 * 1024 * 1024)} GB.",
+                            f"Files can be at most {_size_label(self.max_bytes)}.",
                         )
                     handle.write(chunk)
         except BaseException:

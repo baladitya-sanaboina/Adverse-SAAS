@@ -66,6 +66,17 @@ class ChatReplyRef(BaseModel):
     preview: str
 
 
+class ChatCallLine(BaseModel):
+    """A call line in the chat: STARTED shows Join while the call runs; ENDED shows the length,
+    or "Missed call" to people who never joined."""
+
+    id: UUID
+    kind: str
+    event: Literal["STARTED", "ENDED"]
+    running: bool
+    joined: list[UUID] = []
+
+
 class ChatReactionResponse(BaseModel):
     emoji: str
     user_ids: list[UUID]
@@ -82,6 +93,7 @@ class ChatMessageResponse(BaseModel):
     edited: bool
     deleted: bool
     created_at: datetime
+    call: ChatCallLine | None = None
 
 
 class ChatMessagesResponse(BaseModel):

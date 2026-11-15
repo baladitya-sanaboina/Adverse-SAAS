@@ -1643,11 +1643,15 @@ model ChatMessage {
   senderId       String           @map("sender_id") @db.Uuid
   body           String           @default("") @db.VarChar(4000)
   replyToId      String?          @map("reply_to_id") @db.Uuid
+  callId         String?          @map("call_id") @db.Uuid
+  callEvent      String?          @map("call_event") @db.VarChar(10)
+  callJoined     Json?            @map("call_joined")
   editedAt       DateTime?        @map("edited_at")
   deletedAt      DateTime?        @map("deleted_at")
   createdAt      DateTime         @default(now()) @map("created_at")
   company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  call           ChatCall?        @relation(fields: [callId], references: [id], onDelete: SetNull)
   sender         User             @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: Restrict)
   replyTo        ChatMessage?     @relation("ChatReply", fields: [replyToId], references: [id], onDelete: SetNull)
   replies        ChatMessage[]    @relation("ChatReply")
@@ -1723,6 +1727,7 @@ model ChatCall {
   startedBy      User                  @relation("ChatCallStarter", fields: [startedById], references: [id], onDelete: Cascade)
   participants   ChatCallParticipant[]
   admissions     ChatCallAdmission[]
+  lines          ChatMessage[]
 
   @@index([conversationId, endedAt])
   @@map("chat_calls")

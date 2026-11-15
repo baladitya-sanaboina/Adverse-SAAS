@@ -1,0 +1,25 @@
+# Production image for one of the four Next.js apps (APP=Admin|Manager|Employee|Client).
+# Built by docker-compose.prod.yml with context frontend/. The app's .env.production is read at
+# build time (NEXT_PUBLIC_ values are baked into the browser code). See docs/Deployment.md.
+FROM node:20-alpine AS build
+ARG APP
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY ${APP}/package.json ${APP}/package-lock.json ./
+RUN npm ci
+COPY ${APP}/ ./
+# Same layout as the dev containers: the shared code sits inside the app as _shared.
+COPY shared/ ./_shared/
+RUN test -f .env.production || (echo "Missing frontend/${APP}/.env.production: copy .env.production.example and fill it in." && exit 1)
+RUN npm run build -- --webpack
+
+FROM node:20-alpine
+ARG PORT=3000
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=${PORT}
+COPY --from=build --chown=node:node /app ./
+USER node
+EXPOSE ${PORT}
+CMD ["sh", "-c", "npx next start --hostname 0.0.0.0 --port ${PORT}"]

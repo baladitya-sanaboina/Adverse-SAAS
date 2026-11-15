@@ -508,8 +508,8 @@ export default function LoginRegisterPage({ initialMode = "login" }: { initialMo
             <button className={`interactive-submit ${success ? "success" : ""}`} type="submit" disabled={loading}>
               {success
                 ? mode === "login"
-                  ? "Welcome! ✓"
-                  : "OTP sent ✓"
+                  ? "Welcome!"
+                  : "OTP sent"
                 : loading
                   ? "Loading..."
                   : mode === "login"

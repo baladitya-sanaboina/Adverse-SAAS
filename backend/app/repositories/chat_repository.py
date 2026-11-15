@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -75,6 +76,13 @@ class MessageRow:
     edited_at: datetime | None
     deleted_at: datetime | None
     created_at: datetime
+    # A call line ("Video call started"): its call, STARTED/ENDED, who joined, the call's kind
+    # and whether it is still running.
+    call_id: UUID | None = None
+    call_event: str | None = None
+    call_joined: list[str] | None = None
+    call_kind: str | None = None
+    call_ended_at: datetime | None = None
 
 
 _USER_ROLE = "JOIN roles r ON r.id = u.role_id"
@@ -101,12 +109,13 @@ LEFT JOIN users su ON su.id = lm.sender_id
 _MESSAGE_SELECT = """
 SELECT m.id, m.conversation_id, m.sender_id, su.name, sr.code, su.profile_image_url, m.body,
   m.reply_to_id, ru.name, rm.body, rm.deleted_at IS NOT NULL, m.edited_at, m.deleted_at,
-  m.created_at
+  m.created_at, m.call_id, m.call_event, m.call_joined, cc.kind::text, cc.ended_at
 FROM chat_messages m
 JOIN users su ON su.id = m.sender_id
 JOIN roles sr ON sr.id = su.role_id
 LEFT JOIN chat_messages rm ON rm.id = m.reply_to_id
 LEFT JOIN users ru ON ru.id = rm.sender_id
+LEFT JOIN chat_calls cc ON cc.id = m.call_id
 """
 
 
@@ -405,13 +414,26 @@ class ChatRepository:
         body: str,
         reply_to_id: UUID | None,
         files: list[tuple[str, str, str, int]],
+        call: tuple[UUID, str, list[str] | None] | None = None,
     ) -> UUID:
         message_id = uuid4()
+        call_id, call_event, joined = call if call else (None, None, None)
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO chat_messages (id, company_id, conversation_id, sender_id, body, "
-                "reply_to_id) VALUES (%s, %s, %s, %s, %s, %s) RETURNING created_at",
-                (message_id, company_id, conversation_id, sender_id, body, reply_to_id),
+                "reply_to_id, call_id, call_event, call_joined) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb) RETURNING created_at",
+                (
+                    message_id,
+                    company_id,
+                    conversation_id,
+                    sender_id,
+                    body,
+                    reply_to_id,
+                    call_id,
+                    call_event,
+                    json.dumps(joined) if joined is not None else None,
+                ),
             )
             for name, path, mime, size in files:
                 cursor.execute(

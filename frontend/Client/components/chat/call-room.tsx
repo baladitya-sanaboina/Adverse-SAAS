@@ -13,7 +13,7 @@
  * 3. In the call: audio and video go browser to browser (WebRTC, one connection per pair).
  *    The server only says who is in the call and passes offers, answers and network candidates.
  *    A small data channel per pair carries mic / camera / screen-share / raised-hand state for
- *    the tiles, emoji reactions, and "please mute" from the host or an admin.
+ *    the tiles, reactions, and "please mute" from the host or an admin.
  * 4. More in the call (owner request 2026-11-15: "in call UI enka advanced, meeting and chat
  *    same layout lo"): the chat beside the video (saved in the chat as well), raise hand,
  *    reactions, pin, layouts, settings with speaker choice, full screen and keyboard shortcuts.
@@ -24,6 +24,13 @@ import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   ArrowLeft,
   Check,
+  Flame,
+  HandHeart,
+  Heart,
+  Laugh,
+  PartyPopper,
+  Star,
+  ThumbsUp,
   Copy,
   Hand,
   Info,
@@ -94,7 +101,19 @@ type Floating = { id: number; emoji: string; name: string; left: number };
 /** What goes over a data channel besides the state: a reaction, or "please mute" from the host. */
 type ChannelMessage = { type: "reaction"; emoji: string } | { type: "mute" };
 
-const EMOJIS = ["👍", "❤️", "😂", "😮", "👏", "🎉", "🙏", "🔥"] as const;
+// Reactions are the app's own line icons, not emojis (owner request 2026-11-15).
+const REACTION_ICONS = {
+  like: { label: "Like", Icon: ThumbsUp },
+  love: { label: "Love", Icon: Heart },
+  haha: { label: "Haha", Icon: Laugh },
+  agree: { label: "Agree", Icon: Check },
+  star: { label: "Great", Icon: Star },
+  party: { label: "Celebrate", Icon: PartyPopper },
+  thanks: { label: "Thanks", Icon: HandHeart },
+  fire: { label: "Fire", Icon: Flame },
+} as const;
+type ReactionKey = keyof typeof REACTION_ICONS;
+const REACTION_KEYS = Object.keys(REACTION_ICONS) as ReactionKey[];
 const LAYOUTS: { value: Layout; label: string; hint: string }[] = [
   { value: "auto", label: "Auto", hint: "Everyone in a grid; whoever presents goes big" },
   { value: "tiled", label: "Tiled", hint: "Everyone the same size" },
@@ -110,7 +129,8 @@ const SHORTCUTS: [string, string][] = [
 ];
 
 // Public STUN servers so two browsers can find each other. People behind strict office or mobile
-// networks also need a TURN relay (not set up yet).
+// networks also need the TURN relay: the backend adds it with short-lived credentials when it is
+// set up (production), and this list is the fallback.
 const ICE: RTCConfiguration = {
   iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }],
 };
@@ -472,6 +492,19 @@ export function CallRoom({
   const [lastSpeaker, setLastSpeaker] = useState<string | null>(null);
 
   const peers = useRef(new Map<string, RTCPeerConnection>());
+  const iceRef = useRef<RTCConfiguration>(ICE);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/chat/ice-servers", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: RTCConfiguration | null) => {
+        if (live && body?.iceServers?.length) iceRef.current = body;
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
   const channels = useRef(new Map<string, RTCDataChannel>());
   const queued = useRef(new Map<string, RTCIceCandidateInit[]>());
   const localRef = useRef<MediaStream | null>(null);
@@ -673,7 +706,7 @@ export function CallRoom({
         }
         const name = callRef.current?.participants.find((seat) => seat.id === userId)?.name ?? "Someone";
         if (parsed.type === "reaction") {
-          if ((EMOJIS as readonly string[]).includes(parsed.emoji)) float(parsed.emoji, name);
+          if ((REACTION_KEYS as string[]).includes(parsed.emoji)) float(parsed.emoji, name);
           return;
         }
         if (parsed.type === "mute") {
@@ -713,7 +746,7 @@ export function CallRoom({
     (userId: string, initiator: boolean) => {
       const existing = peers.current.get(userId);
       if (existing) return existing;
-      const connection = new RTCPeerConnection(ICE);
+      const connection = new RTCPeerConnection(iceRef.current);
       const stream = localRef.current;
       stream?.getTracks().forEach((track) => connection.addTrack(track, stream));
       // While I share my screen, newcomers get the screen instead of the camera.
@@ -1656,7 +1689,14 @@ export function CallRoom({
           <div className="callroom-floating" aria-hidden="true">
             {floating.map((item) => (
               <span key={item.id} style={{ left: `${item.left}%` }}>
-                <b>{item.emoji}</b>
+                {(() => {
+                  const Icon = REACTION_ICONS[item.emoji as ReactionKey]?.Icon;
+                  return Icon ? (
+                    <b className={`callroom-reaction ${item.emoji}`}>
+                      <Icon />
+                    </b>
+                  ) : null;
+                })()}
                 <small>{item.name}</small>
               </span>
             ))}
@@ -1801,7 +1841,7 @@ export function CallRoom({
                     : "Messages are saved in the chat. You see them while you're in the call."}
                 </p>
                 <ul className="callroom-lines" aria-live="polite">
-                  {lines.length === 0 && <li className="callroom-lines-empty">No messages yet. Say hello 👋</li>}
+                  {lines.length === 0 && <li className="callroom-lines-empty">No messages yet. Say hello.</li>}
                   {lines.map((line, index) => {
                     const previous = lines[index - 1];
                     const grouped =
@@ -2147,17 +2187,22 @@ export function CallRoom({
             </button>
             {tray && (
               <div className="callroom-tray" role="menu" aria-label="Reactions">
-                {EMOJIS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    role="menuitem"
-                    aria-label={`React ${emoji}`}
-                    onClick={() => react(emoji)}
-                  >
-                    {emoji}
-                  </button>
-                ))}
+                {REACTION_KEYS.map((key) => {
+                  const { label, Icon } = REACTION_ICONS[key];
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      role="menuitem"
+                      className={`callroom-reaction ${key}`}
+                      aria-label={label}
+                      title={label}
+                      onClick={() => react(key)}
+                    >
+                      <Icon />
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

@@ -148,7 +148,7 @@ class FakeRepository:
     def message(self, company_id: UUID, message_id: UUID) -> MessageRow | None:
         return self.messages_.get(message_id)
 
-    def add_message(self, company_id, conversation_id, sender_id, body, reply_to_id, files):  # type: ignore[no-untyped-def]
+    def add_message(self, company_id, conversation_id, sender_id, body, reply_to_id, files, call=None):  # type: ignore[no-untyped-def]
         message_id = uuid4()
         sender = PEOPLE[sender_id]
         self.messages_[message_id] = MessageRow(
@@ -166,6 +166,11 @@ class FakeRepository:
             None,
             None,
             NOW,
+            call[0] if call else None,
+            call[1] if call else None,
+            call[2] if call else None,
+            "VIDEO" if call else None,
+            None,
         )
         return message_id
 

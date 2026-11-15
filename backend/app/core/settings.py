@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # The same mail about the same thing is not sent again within this window (owner request
     # 2026-11-15: a task submitted, sent back and submitted again mails once).
     mail_repeat_window_minutes: int = Field(default=30, ge=0, le=1440)
+    # Meet relay (coturn with use-auth-secret). Empty TURN_URLS = STUN only, fine on most home
+    # networks; strict office or mobile networks need the relay. Example:
+    # TURN_URLS=turn:turn.example.com:3478?transport=udp,turns:turn.example.com:5349
+    turn_urls: str = ""
+    turn_secret: SecretStr = SecretStr("")
+    turn_ttl_seconds: int = Field(default=6 * 3600, ge=300, le=86400)
 
     cors_origins: str = (
         "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"

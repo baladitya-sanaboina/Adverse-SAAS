@@ -40,6 +40,14 @@ export type ChatMessage = {
   edited: boolean;
   deleted: boolean;
   created_at: string;
+  // A call line ("Video call started"); see CallLine in chat-page.
+  call?: {
+    id: string;
+    kind: "AUDIO" | "VIDEO";
+    event: "STARTED" | "ENDED";
+    running: boolean;
+    joined: string[];
+  } | null;
 };
 
 export const STATUS_LABELS: Record<ChatStatus, string> = {

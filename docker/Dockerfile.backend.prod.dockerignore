@@ -1,0 +1,11 @@
+# Keep secrets, local data and tooling out of the production API image.
+.env
+.env.*
+.venv
+__pycache__
+**/__pycache__
+node_modules
+storage
+private-storage
+tests
+prisma

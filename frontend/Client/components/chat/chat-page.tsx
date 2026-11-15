@@ -22,6 +22,7 @@ import {
   Contact,
   Download,
   FileText,
+  Film,
   ImagePlus,
   Info,
   Link2,
@@ -32,6 +33,8 @@ import {
   Paperclip,
   Pencil,
   Phone,
+  PhoneIncoming,
+  PhoneMissed,
   RefreshCw,
   Reply,
   Search,
@@ -233,7 +236,7 @@ export function ChatPage({ role }: { role: ChatRole }) {
                 id: data.message.id,
                 sender_id: data.message.sender.id,
                 sender_name: data.message.sender.name,
-                preview: data.message.body || (data.message.attachments.length ? "📎 File" : ""),
+                preview: data.message.body || (data.message.attachments.length ? "Attachment" : ""),
                 created_at: data.message.created_at,
               },
               unread: data.own || open ? chat.unread : chat.unread + 1,
@@ -1072,6 +1075,18 @@ function Thread({
   const [divider, setDivider] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [activeCall, setActiveCall] = useState<CallInfo | null>(null);
+
+  // Esc closes this chat (owner request 2026-11-15), unless something on top of it handles Esc
+  // first: a dialog, a menu, the call window, or the composer cancelling a reply or an edit.
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"], [aria-modal="true"], .callroom, [data-chat-menu]')) return;
+      onBack();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onBack]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [scheduling, setScheduling] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
@@ -1256,8 +1271,18 @@ function Thread({
     }
   }
 
+  // Owner request 2026-11-15: chat files must be under 1 MB (the server checks it too).
   function addFiles(list: FileList | File[]) {
-    const picked = Array.from(list);
+    const all = Array.from(list);
+    const big = all.filter((file) => file.size >= CHAT_FILE_LIMIT);
+    const picked = all.filter((file) => file.size < CHAT_FILE_LIMIT);
+    if (big.length) {
+      onError(
+        big.length === 1
+          ? `${big[0].name} is ${fileSize(big[0].size)}. Files in chat must be under 1 MB.`
+          : `${big.length} files are 1 MB or larger. Files in chat must be under 1 MB.`,
+      );
+    }
     if (picked.length) setFiles((current) => [...current, ...picked].slice(0, 10));
   }
 
@@ -1418,7 +1443,7 @@ function Thread({
               <OrbitLoader size={56} label="Loading messages" />
             </div>
           ) : messages.length === 0 ? (
-            <div className="chat-empty">No messages yet. Say hello 👋</div>
+            <div className="chat-empty">No messages yet. Say hello.</div>
           ) : (
             messages.map((message, index) => {
               const day = dayLabel(message.created_at);
@@ -1432,6 +1457,26 @@ function Thread({
                 previous &&
                 previous.sender.id === message.sender.id &&
                 new Date(message.created_at).getTime() - new Date(previous.created_at).getTime() < 5 * 60_000;
+              if (message.call && !message.deleted) {
+                return (
+                  <div key={message.id} id={`chat-msg-${message.id}`}>
+                    {showDay && (
+                      <div className="chat-day">
+                        <span>{day}</span>
+                      </div>
+                    )}
+                    <CallLine
+                      message={message}
+                      me={me.id}
+                      running={activeCall?.id === message.call.id}
+                      onJoin={() =>
+                        message.call && joinCall(message.call.id, chat.id, message.call.kind, chat.title)
+                      }
+                      onCallBack={() => message.call && startCall(chat.id, message.call.kind, chat.title)}
+                    />
+                  </div>
+                );
+              }
               return (
                 <div key={message.id} id={`chat-msg-${message.id}`}>
                   {showDay && (
@@ -1826,6 +1871,155 @@ function Thread({
   );
 }
 
+// What the attach menu offers (owner request 2026-11-15): pick the kind first, files under 1 MB.
+const CHAT_FILE_LIMIT = 1024 * 1024;
+const ATTACH_KINDS = [
+  {
+    key: "document",
+    label: "Document",
+    hint: "PDF, Word, Excel, PowerPoint, text",
+    accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp,.zip",
+    Icon: FileText,
+  },
+  { key: "image", label: "Image", hint: "JPG, PNG, WebP, GIF", accept: "image/*", Icon: ImagePlus },
+  { key: "video", label: "Video", hint: "Short clips under 1 MB", accept: "video/*", Icon: Film },
+] as const;
+
+function AttachMenu({ onFiles }: { onFiles: (files: FileList) => void }) {
+  const [open, setOpen] = useState(false);
+  const [accept, setAccept] = useState<string>("");
+  const input = useRef<HTMLInputElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (event: MouseEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const key = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", away);
+    window.addEventListener("keydown", key, true);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      window.removeEventListener("keydown", key, true);
+    };
+  }, [open]);
+
+  return (
+    <div className="chat-attach" ref={root} data-chat-menu={open ? "" : undefined}>
+      <button
+        type="button"
+        className="chat-icon-button"
+        aria-label="Attach"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Attach a document, image or video (under 1 MB)"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Paperclip />
+      </button>
+      {open && (
+        <div className="chat-attach-menu" role="menu">
+          {ATTACH_KINDS.map(({ key, label, hint, accept: types, Icon }) => (
+            <button
+              key={key}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setAccept(types);
+                setOpen(false);
+                // Let the accept list update before the picker opens.
+                window.setTimeout(() => input.current?.click(), 0);
+              }}
+            >
+              <Icon aria-hidden="true" />
+              <span>
+                <strong>{label}</strong>
+                <small>{hint}</small>
+              </span>
+            </button>
+          ))}
+          <p>Each file must be under 1 MB.</p>
+        </div>
+      )}
+      <input
+        ref={input}
+        type="file"
+        multiple
+        hidden
+        accept={accept}
+        aria-label="Attach files"
+        onChange={(event) => {
+          if (event.target.files) onFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
+// A call line in the chat (owner request 2026-11-15): Join while the call runs, "Missed call"
+// with Call back for people who never joined, otherwise the call's length.
+function CallLine({
+  message,
+  me,
+  running,
+  onJoin,
+  onCallBack,
+}: {
+  message: ChatMessage;
+  me: string;
+  running: boolean;
+  onJoin: () => void;
+  onCallBack: () => void;
+}) {
+  const call = message.call;
+  if (!call) return null;
+  const label = call.kind === "VIDEO" ? "Video call" : "Voice call";
+  const time = new Date(message.created_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+  const missed = call.event === "ENDED" && !call.joined.includes(me);
+  const live = call.event === "STARTED" && running;
+  const Icon = missed ? PhoneMissed : live ? PhoneIncoming : call.kind === "VIDEO" ? Video : Phone;
+  let title: string;
+  let detail: string;
+  if (call.event === "STARTED") {
+    title = live ? `${label} in progress` : `${label} started`;
+    detail = `${message.sender.name.split(" ")[0]} · ${time}`;
+  } else if (missed) {
+    title = `Missed ${label.toLowerCase()}`;
+    detail = `From ${message.sender.name.split(" ")[0]} · ${time}`;
+  } else {
+    title = `${label} ended`;
+    detail = `${message.body.split("·")[1]?.trim() ?? ""}${message.body.includes("·") ? " · " : ""}${time}`;
+  }
+  return (
+    <div className={`chat-callline${missed ? " missed" : ""}${live ? " live" : ""}`}>
+      <span className="chat-callline-icon">
+        <Icon aria-hidden="true" />
+      </span>
+      <span className="chat-callline-text">
+        <strong>{title}</strong>
+        <small>{detail}</small>
+      </span>
+      {live && (
+        <button type="button" className="chat-callline-action" onClick={onJoin}>
+          Join
+        </button>
+      )}
+      {missed && (
+        <button type="button" className="chat-callline-action ghost" onClick={onCallBack}>
+          Call back
+        </button>
+      )}
+    </div>
+  );
+}
+
 function PendingFile({ file, onRemove }: { file: File; onRemove: () => void }) {
   const image = file.type.startsWith("image/");
   const [url] = useState(() => (image ? URL.createObjectURL(file) : ""));
@@ -1921,7 +2115,7 @@ function Composer({
           {editing ? <Pencil /> : <Reply />}
           <span>
             <strong>{editing ? "Editing your message" : `Replying to ${reply?.sender.name}`}</strong>
-            <small>{(editing ?? reply)?.body || "📎 File"}</small>
+            <small>{(editing ?? reply)?.body || "Attachment"}</small>
           </span>
           <button
             type="button"
@@ -1944,20 +2138,7 @@ function Composer({
         </ul>
       )}
       <div className="chat-composer-row">
-        {!editing && (
-          <label className="chat-icon-button" title="Attach files (up to 25 MB each); you can also drop or paste them">
-            <Paperclip />
-            <input
-              type="file"
-              multiple
-              aria-label="Attach files"
-              onChange={(event) => {
-                if (event.target.files) onFiles(event.target.files);
-                event.target.value = "";
-              }}
-            />
-          </label>
-        )}
+        {!editing && <AttachMenu onFiles={onFiles} />}
         <textarea
           ref={box}
           rows={1}
@@ -1978,6 +2159,7 @@ function Composer({
               void send();
             }
             if (event.key === "Escape" && (reply || editing)) {
+              event.preventDefault();
               setText("");
               onCancel();
             }

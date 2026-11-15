@@ -12,11 +12,17 @@ host or an admin who is in the call admits them; that admission is for that one 
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import logging
+import time
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from app.core.settings import settings
 from app.repositories.call_repository import CallRepository, CallRow, MeetingRow
 from app.repositories.chat_repository import ConversationRow
 from app.repositories.finance_repository import FinanceRepository
@@ -46,6 +52,17 @@ logger = logging.getLogger(__name__)
 
 # The call's chat panel shows at most this many lines from the call.
 CALL_CHAT_LIMIT = 200
+STUN = ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]
+
+
+def turn_credentials(
+    user_id: UUID, secret: str, ttl_seconds: int, now: float | None = None
+) -> tuple[str, str]:
+    """coturn's use-auth-secret scheme: the username carries its own expiry and the password is
+    an HMAC of it, so nothing is stored and a leaked pair stops working after the TTL."""
+    username = f"{int((now or time.time()) + ttl_seconds)}:{user_id}"
+    digest = hmac.new(secret.encode(), username.encode(), hashlib.sha1).digest()
+    return username, base64.b64encode(digest).decode()
 
 
 def _utc(moment: datetime) -> datetime:
@@ -76,6 +93,18 @@ class CallService:
 
     # -- helpers -------------------------------------------------------------------------------
 
+    def ice_servers(self, context: AuthContext) -> dict[str, Any]:
+        """STUN always; the TURN relay too when it is set up (production)."""
+        servers: list[dict[str, Any]] = [{"urls": STUN}]
+        urls = [url.strip() for url in settings.turn_urls.split(",") if url.strip()]
+        secret = settings.turn_secret.get_secret_value()
+        if urls and secret:
+            username, credential = turn_credentials(
+                context.user_id, secret, settings.turn_ttl_seconds
+            )
+            servers.append({"urls": urls, "username": username, "credential": credential})
+        return {"iceServers": servers}
+
     def _access(
         self, context: AuthContext, conversation_id: UUID
     ) -> tuple[UUID, str, ConversationRow]:
@@ -104,9 +133,18 @@ class CallService:
             code=call.meet_code,
         )
 
-    def _post(self, company_id: UUID, row: ConversationRow, sender_id: UUID, body: str) -> None:
+    def _post(
+        self,
+        company_id: UUID,
+        row: ConversationRow,
+        sender_id: UUID,
+        body: str,
+        call: tuple[UUID, str, list[str] | None] | None = None,
+    ) -> None:
         """Write a call line into the chat ("Video call started") and send it live."""
-        message_id = self.chat.repository.add_message(company_id, row.id, sender_id, body, None, [])
+        message_id = self.chat.repository.add_message(
+            company_id, row.id, sender_id, body, None, [], call
+        )
         saved = self.chat.repository.message(company_id, message_id)
         if saved is None:
             return
@@ -183,7 +221,8 @@ class CallService:
             company_id,
             row,
             call.started_by_id,
-            f"📞 {label} ended · {_minutes(call.started_at, ended.ended_at or datetime.utcnow())}",
+            f"{label} ended · {_minutes(call.started_at, ended.ended_at or datetime.utcnow())}",
+            (call.id, "ENDED", [str(user) for user in self.repository.ever_joined(call.id)]),
         )
         joined = self.repository.ever_joined(call.id)
         starter = self.chat.repository.person(company_id, call.started_by_id)
@@ -217,7 +256,9 @@ class CallService:
         if created:
             me = self.chat.repository.person(company_id, context.user_id)
             label = "Video call" if call.kind == "VIDEO" else "Call"
-            self._post(company_id, row, context.user_id, f"📞 {label} started")
+            self._post(
+                company_id, row, context.user_id, f"{label} started", (call.id, "STARTED", None)
+            )
             realtime.publish(
                 [u for u in self.chat._audience(company_id, row) if u != context.user_id],
                 "call.ring",

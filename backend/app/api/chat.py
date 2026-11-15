@@ -52,6 +52,11 @@ ERRORS: dict[int | str, dict[str, Any]] = {
 }
 
 
+@router.get("/ice-servers", summary="Servers a meet uses to connect people", responses=ERRORS)
+def ice_servers(context: AuthenticatedContext) -> dict[str, Any]:
+    return call_service.ice_servers(context)
+
+
 @router.get(
     "/people", response_model=PeopleResponse, summary="People I can chat with", responses=ERRORS
 )

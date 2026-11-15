@@ -29,6 +29,7 @@ from app.repositories.chat_repository import (
 from app.schemas.authentication import AuthContext
 from app.schemas.chat import (
     ChatAttachmentResponse,
+    ChatCallLine,
     ChatLastMessage,
     ChatMemberResponse,
     ChatMessageResponse,
@@ -53,7 +54,8 @@ from app.services.task_file_storage import TaskFileStorage
 
 logger = logging.getLogger(__name__)
 
-MAX_CHAT_FILE_BYTES = 25 * 1024 * 1024
+# Owner request 2026-11-15: chat files must be under 1 MB.
+MAX_CHAT_FILE_BYTES = 1024 * 1024
 MAX_FILES = 10
 ROLES = {
     "COMPANY_ADMIN": "ADMIN",
@@ -77,7 +79,7 @@ def _preview(body: str, files: int, deleted: bool) -> str:
     text = " ".join(body.split())
     if text:
         return text[:120]
-    return "📎 File" if files == 1 else f"📎 {files} files"
+    return "Attachment" if files == 1 else f"{files} attachments"
 
 
 class ChatService:
@@ -245,6 +247,17 @@ class ChatService:
                 edited=row.edited_at is not None and row.deleted_at is None,
                 deleted=row.deleted_at is not None,
                 created_at=_utc(row.created_at),
+                call=(
+                    ChatCallLine(
+                        id=row.call_id,
+                        kind=row.call_kind or "VIDEO",
+                        event="ENDED" if row.call_event == "ENDED" else "STARTED",
+                        running=row.call_ended_at is None,
+                        joined=[UUID(str(user)) for user in (row.call_joined or [])],
+                    )
+                    if row.call_id
+                    else None
+                ),
             )
             for row in rows
         ]

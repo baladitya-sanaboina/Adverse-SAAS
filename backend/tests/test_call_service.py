@@ -16,7 +16,7 @@ from app.schemas.chat import (
     SignalRequest,
 )
 from app.services.authentication_service import AuthenticationError
-from app.services.call_service import CallService
+from app.services.call_service import CallService, turn_credentials
 from app.services.chat_service import ChatService
 from tests.test_chat_service import (
     ADMIN,
@@ -237,8 +237,16 @@ class CallRulesTest(unittest.TestCase):
         self.assertIsNone(self.calls.calls[call.id].ended_at)
         self.service.leave(context(EMPLOYEE), call.id)
         self.assertIsNotNone(self.calls.calls[call.id].ended_at)
-        bodies = [m.body for m in self.chat_repo.messages_.values()]
-        self.assertTrue(any(b.startswith("📞 Call ended · 12 min") for b in bodies), bodies)
+        lines = list(self.chat_repo.messages_.values())
+        bodies = [m.body for m in lines]
+        self.assertTrue(any(b.startswith("Call ended · 12 min") for b in bodies), bodies)
+        self.assertFalse(any("📞" in b for b in bodies))
+        # The chat's call lines link to the call: started, then ended with who joined.
+        self.assertEqual([m.call_event for m in lines], ["STARTED", "ENDED"])
+        self.assertTrue(all(m.call_id == call.id for m in lines))
+        self.assertEqual(set(lines[1].call_joined or []), {str(EMPLOYEE.id), str(CLIENT.id)})
+        shaped = self.chat._messages(lines)
+        self.assertEqual(shaped[1].call and shaped[1].call.event, "ENDED")
         missed = notes.notify.call_args
         self.assertEqual((missed.args[1], missed.args[2]), ([ADMIN.id], "chat.missed_call"))
 
@@ -393,6 +401,42 @@ class CallRulesTest(unittest.TestCase):
         self.service.leave(context(MANAGER), call.id)
         with self.assertRaises(AuthenticationError):
             self.service.messages(context(MANAGER), call.id)
+
+
+class TurnCredentialsTest(unittest.TestCase):
+    def test_short_lived_hmac_pair_that_coturn_accepts(self) -> None:
+        import base64
+        import hashlib
+        import hmac
+
+        person = uuid4()
+        username, credential = turn_credentials(person, "s3cret", 3600, now=1_000_000)
+        self.assertEqual(username, f"1003600:{person}")
+        expected = hmac.new(b"s3cret", username.encode(), hashlib.sha1).digest()
+        self.assertEqual(base64.b64decode(credential), expected)
+
+    def test_stun_only_until_the_relay_is_set_up(self) -> None:
+        with patch("app.services.call_service.settings") as config:
+            config.turn_urls = ""
+            config.turn_secret.get_secret_value.return_value = ""
+            servers = CallService(object(), FakeCalls(), FakeFinance()).ice_servers(  # type: ignore[arg-type]
+                context(MANAGER)
+            )[
+                "iceServers"
+            ]
+            self.assertEqual(len(servers), 1)
+            config.turn_urls = "turn:turn.example.com:3478, turns:turn.example.com:5349"
+            config.turn_secret.get_secret_value.return_value = "s3cret"
+            config.turn_ttl_seconds = 600
+            servers = CallService(object(), FakeCalls(), FakeFinance()).ice_servers(  # type: ignore[arg-type]
+                context(MANAGER)
+            )[
+                "iceServers"
+            ]
+            self.assertEqual(
+                servers[1]["urls"], ["turn:turn.example.com:3478", "turns:turn.example.com:5349"]
+            )
+            self.assertTrue(servers[1]["username"].endswith(str(MANAGER.id)))
 
 
 if __name__ == "__main__":

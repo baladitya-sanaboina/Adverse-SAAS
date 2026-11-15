@@ -571,9 +571,29 @@
 }
 
 .callroom-floating b {
-  font-size: 2.3rem;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.45);
   line-height: 1;
 }
+
+.callroom-floating b svg {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+/* Reaction icons (no emojis, 2026-11-15): one colour each, on the dark call surface. */
+.callroom-reaction.like { color: #6cb6ff; }
+.callroom-reaction.love { color: #ff7a90; }
+.callroom-reaction.haha { color: #ffd166; }
+.callroom-reaction.agree { color: #6fdc9b; }
+.callroom-reaction.star { color: #ffc94d; }
+.callroom-reaction.party { color: #c49bff; }
+.callroom-reaction.thanks { color: #ff9f6e; }
+.callroom-reaction.fire { color: #ff8a3d; }
 
 .callroom-floating small {
   padding: 0.1rem 0.5rem;
@@ -1212,6 +1232,11 @@
   font-size: 1.4rem;
   cursor: pointer;
   transition: transform 0.1s ease;
+}
+
+.callroom-tray button svg {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .callroom-tray button:hover {

@@ -1,0 +1,30 @@
+# HTTPS for the four apps. Caddy gets and renews the certificates by itself; point each domain's
+# DNS A record at this server first. Live updates (server-sent events) are flushed immediately.
+{
+	email {$ACME_EMAIL}
+}
+
+(app) {
+	encode zstd gzip
+	header -Server
+}
+
+{$ADMIN_DOMAIN} {
+	import app
+	reverse_proxy admin:3000
+}
+
+{$MANAGER_DOMAIN} {
+	import app
+	reverse_proxy manager:3001
+}
+
+{$EMPLOYEE_DOMAIN} {
+	import app
+	reverse_proxy employee:3002
+}
+
+{$CLIENT_DOMAIN} {
+	import app
+	reverse_proxy client:3003
+}
