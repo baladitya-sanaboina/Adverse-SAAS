@@ -64,6 +64,7 @@ import {
 } from "./chat-types";
 import { STATUS_EVENT, announceStatus } from "./topbar-status";
 import "../styles/chat.css";
+import { OrbitLoader } from "../branding/orbit-loader";
 
 type Folder = "INBOX" | "CLIENTS" | "TEAM" | "DIRECT";
 type Tab = "ALL" | "UNREAD" | "MINE";
@@ -356,7 +357,7 @@ export function ChatPage({ role }: { role: ChatRole }) {
                 </div>
               ) : chats === null ? (
                 <div className="chat-empty">
-                  <RefreshCw className="spin" /> Loading chats…
+                  <OrbitLoader size={48} label="Loading chats" />
                 </div>
               ) : visible.length === 0 && found.length === 0 ? (
                 <div className="chat-empty">
@@ -1331,7 +1332,7 @@ function Thread({
           )}
           {messages === null ? (
             <div className="chat-empty">
-              <RefreshCw className="spin" /> Loading messages…
+              <OrbitLoader size={56} label="Loading messages" />
             </div>
           ) : messages.length === 0 ? (
             <div className="chat-empty">No messages yet. Say hello 👋</div>

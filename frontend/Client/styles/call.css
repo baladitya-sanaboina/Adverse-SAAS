@@ -24,6 +24,10 @@
   flex: none;
 }
 
+.callroom .orbit-loader {
+  --orbit-gap: var(--background);
+}
+
 .callroom .muted {
   color: var(--muted);
 }

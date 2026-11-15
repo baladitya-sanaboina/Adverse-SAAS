@@ -53,6 +53,7 @@ import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { subscribeRealtime } from "@/lib/realtime";
 import { chatApi, clock, initials, jsonBody, type ChatMessage } from "./chat-types";
 import { audioContext, repeat, sounds, unlockSounds } from "./call-sounds";
+import { OrbitLoader } from "@/components/loader/orbit-loader";
 import "@/styles/call.css";
 
 type Kind = "AUDIO" | "VIDEO";
@@ -1197,7 +1198,7 @@ export function CallRoom({
   if (phase === "loading" || phase === "joining") {
     return (
       <main className="callroom center">
-        <span className="callroom-spinner" aria-hidden="true" />
+        <OrbitLoader size={72} label={phase === "joining" ? "Joining" : "Opening the call"} />
         <p>{phase === "joining" ? "Joining…" : "Opening the call…"}</p>
       </main>
     );
@@ -1328,7 +1329,7 @@ export function CallRoom({
             <>
               <h1>Asking to join…</h1>
               <p>You&apos;ll join when someone in the call lets you in.</p>
-              <span className="callroom-spinner" aria-hidden="true" />
+              <OrbitLoader size={56} label="Waiting to be let in" />
               <button type="button" className="callroom-button" onClick={() => void cancelAsk()}>
                 Cancel
               </button>

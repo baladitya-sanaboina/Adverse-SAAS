@@ -14,6 +14,7 @@ import { Check, MessageCircle, UsersRound } from "lucide-react";
 import { STATUS_LABELS, chatApi, initials, jsonBody, type ChatPerson, type ChatStatus } from "./chat-types";
 import { STATUS_EVENT, announceStatus } from "./topbar-status";
 import "@/styles/availability.css";
+import { OrbitLoader } from "@/components/loader/orbit-loader";
 
 type People = { me: ChatPerson; people: ChatPerson[] };
 
@@ -180,7 +181,9 @@ export function AvailabilityPanel() {
         <section className="availability-list" aria-label={onlyAdmins ? "Your team" : "People"}>
           {error && <p className="availability-error">{error}</p>}
           {!data && !error ? (
-            <p className="production-dash-empty">Loading…</p>
+            <div className="orbit-loader-block">
+              <OrbitLoader size={48} label="Loading who is around" />
+            </div>
           ) : people.length === 0 ? (
             <p className="production-dash-empty">
               <UsersRound aria-hidden="true" />

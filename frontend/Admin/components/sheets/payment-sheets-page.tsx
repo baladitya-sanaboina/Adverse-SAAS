@@ -7,7 +7,7 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Contact, Plus, RefreshCw, UsersRound, Wallet } from "lucide-react";
+import { Contact, Plus, UsersRound, Wallet } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { api, errorText, formatDate, money } from "@/lib/production/client";
 import { PaymentSheets } from "@loopless-shared/production/payment-sheets";
@@ -16,6 +16,7 @@ import { STATUS_TEXT, ownerLine, type SheetOwner, type SheetsOverview } from "./
 import "@/styles/organization.css";
 import "@/styles/production.css";
 import "@/styles/payment-sheets-page.css";
+import { OrbitLoader } from "@loopless-shared/branding/orbit-loader";
 
 type Tab = "MANAGER" | "CLIENT";
 
@@ -99,7 +100,7 @@ export function PaymentSheetsPage() {
             </div>
           ) : !data ? (
             <div className="sheets-page-state">
-              <RefreshCw className="spin" /> Loading payment sheets…
+              <OrbitLoader size={56} label="Loading payment sheets" />
             </div>
           ) : owners.length === 0 ? (
             <div className="sheets-page-state">

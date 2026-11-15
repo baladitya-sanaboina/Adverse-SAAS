@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { OrbitLoader } from "../branding/orbit-loader";
 
 /** Form field using the shared management-field styles (label, control, inline error or hint). */
 export function Field({
@@ -54,10 +55,8 @@ export function Panel({
 
 export function TableSkeleton() {
   return (
-    <div className="organization-skeleton">
-      {[1, 2, 3].map((row) => (
-        <i key={row} />
-      ))}
+    <div className="orbit-loader-block">
+      <OrbitLoader size={56} />
     </div>
   );
 }

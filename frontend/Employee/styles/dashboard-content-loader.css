@@ -7,3 +7,5 @@
 @media(max-width:720px){.dashboard-content-loader{min-height:calc(100vh - 64px);padding-top:80px}}
 @media(prefers-reduced-motion:reduce){.dashboard-content-loader__spinner{animation:none}}
 
+
+.dashboard-content-loader .orbit-loader{--orbit-gap:var(--surface-muted)}

@@ -13,6 +13,7 @@ import { useLiveRefresh } from "../realtime/realtime";
 import { MeetingCard, localDay, meetingTime, useMeetings, type CalendarMeeting } from "./meetings";
 import type { CalendarEntry } from "./content-calendar";
 import "../styles/content-calendar.css";
+import { OrbitLoader } from "../branding/orbit-loader";
 
 type StaffTask = {
   id: string;
@@ -198,7 +199,7 @@ export function WorkCalendarPage() {
             </div>
           ) : tasks === null ? (
             <div className="cal-state">
-              <RefreshCw className="spin" /> Loading your calendar…
+              <OrbitLoader size={56} label="Loading your calendar" />
             </div>
           ) : (
             <div className="cal-month-layout">

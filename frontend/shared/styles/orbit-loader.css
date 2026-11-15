@@ -1,0 +1,119 @@
+/* Orbit loader (owner request 2026-11-15). Brand blue in both themes, like the logo. */
+
+.orbit-loader {
+  --orbit-blue: #0876ed;
+  --orbit-gap: var(--surface, #fff);
+  width: var(--orbit-size, 64px);
+  height: var(--orbit-size, 64px);
+  display: inline-block;
+  flex: none;
+}
+
+.orbit-loader svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.orbit-loader-track {
+  fill: none;
+  stroke: var(--orbit-blue);
+  stroke-width: 3.5;
+  opacity: 0.14;
+}
+
+.orbit-loader-ring {
+  fill: none;
+  stroke: var(--orbit-blue);
+  stroke-width: 3.5;
+  stroke-linecap: butt;
+  stroke-dasharray: 1;
+  transform: rotate(-90deg);
+  transform-origin: 50px 50px;
+  animation: orbit-loader-fill 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.orbit-loader-ring.inner {
+  animation-delay: 0.12s;
+}
+
+.orbit-loader-sun {
+  fill: var(--orbit-blue);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: orbit-loader-pulse 1.6s ease-in-out infinite;
+}
+
+.orbit-loader-path {
+  transform-origin: 50px 50px;
+}
+
+.orbit-loader-path.p1 {
+  animation: orbit-loader-spin 1.6s linear infinite;
+}
+
+.orbit-loader-path.p2 {
+  animation: orbit-loader-spin 2.4s linear infinite reverse;
+}
+
+.orbit-loader-path.p3 {
+  animation: orbit-loader-spin 3.2s linear infinite;
+}
+
+.orbit-loader-dot {
+  fill: var(--orbit-blue);
+  stroke: var(--orbit-gap);
+  stroke-width: 4;
+  paint-order: stroke;
+}
+
+/* The rings fill round, hold for a moment, then empty forwards and start again. */
+@keyframes orbit-loader-fill {
+  0% {
+    stroke-dashoffset: 1;
+  }
+  55%,
+  70% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -1;
+  }
+}
+
+@keyframes orbit-loader-pulse {
+  0%,
+  100% {
+    transform: scale(0.82);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes orbit-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A centred block for a page or a section that is still loading. */
+.orbit-loader-block {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  padding: 32px 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit-loader-ring {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+
+  .orbit-loader-sun,
+  .orbit-loader-path {
+    animation-duration: 6s;
+  }
+}

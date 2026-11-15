@@ -30,6 +30,7 @@ import { useLiveRefresh } from "@/lib/realtime";
 import { CalendarSheet } from "./calendar-sheet";
 import { MeetingCard, localDay, meetingTime, useMeetings } from "./meetings";
 import "@/styles/content-calendar.css";
+import { OrbitLoader } from "@/components/loader/orbit-loader";
 
 type Role = "ADMIN" | "CLIENT";
 type TaskStatus =
@@ -451,7 +452,7 @@ export function ContentCalendarPage({ role }: { role: Role }) {
             </div>
           ) : entries === null ? (
             <div className="cal-state">
-              <RefreshCw className="spin" /> Loading the calendar…
+              <OrbitLoader size={56} label="Loading the calendar" />
             </div>
           ) : view === "sheet" ? (
             <CalendarSheet

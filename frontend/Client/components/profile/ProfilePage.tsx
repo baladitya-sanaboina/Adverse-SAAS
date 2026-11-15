@@ -122,7 +122,8 @@ export function ProfilePage({ initialTab = "profile" }: { initialTab?: Tab }) {
       if (!response.ok) throw new Error(data.detail ?? "Password change failed.");
       setMessage(data.message);
       setTimeout(() => {
-        window.location.href = "/login";
+        // A full page load (not client navigation): the old session is gone after a password change.
+        window.location.href = new URL("/login", window.location.origin).href;
       }, 900);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Password change failed.");

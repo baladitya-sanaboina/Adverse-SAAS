@@ -22,6 +22,7 @@ import type { AdminTask, ClientBudget, ClientPayment, Paged, PaymentList, TaskSt
 import { PaymentSheets, type Sheet } from "@loopless-shared/production/payment-sheets";
 import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
 import "@/styles/client-work.css";
+import { OrbitLoader } from "@loopless-shared/branding/orbit-loader";
 
 type Invoice = {
   id: string;
@@ -172,7 +173,7 @@ export function ClientWorkPanel({ clientId }: { clientId: string }) {
         </div>
       ) : tasks === null ? (
         <div className="client-work-state">
-          <RefreshCw className="spin" /> Loading this client&apos;s videos…
+          <OrbitLoader size={56} label="Loading this client's videos" />
         </div>
       ) : (
         <>
