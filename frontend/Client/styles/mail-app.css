@@ -2283,3 +2283,182 @@
     animation: none;
   }
 }
+
+/* -- mail and calendar (2026-11-15) -------------------------------------------------------- */
+.mailx-side-link {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 34px;
+  margin-top: 6px;
+  padding: 0 14px 0 20px;
+  border: 0;
+  border-radius: 0 999px 999px 0;
+  color: var(--foreground);
+  background: none;
+  font-size: 0.7rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mailx-side-link:hover {
+  background: var(--surface-muted);
+}
+
+.mailx-side-link svg {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.mailx-meeting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, #23885a 7%, var(--surface));
+  font-size: 0.62rem;
+}
+
+.mailx-meeting > svg {
+  width: 16px;
+  height: 16px;
+  color: #23885a;
+}
+
+.mailx-meeting input[type="date"],
+.mailx-meeting input[type="time"] {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--foreground);
+  background: var(--surface);
+  font: inherit;
+  color-scheme: light dark;
+}
+
+.mailx-meeting label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.mailx-meeting label input {
+  accent-color: #23885a;
+}
+
+.mailx-meeting small {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.56rem;
+}
+
+.mailx-meeting-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 16px 54px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid #23885a;
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.mailx-meeting-date {
+  display: grid;
+  justify-items: center;
+  width: 48px;
+  padding: 4px 0;
+  border-radius: 10px;
+  color: #23885a;
+  background: color-mix(in srgb, #23885a 10%, var(--surface));
+}
+
+.mailx-meeting-date small {
+  font-size: 0.52rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.mailx-meeting-date b {
+  font-size: 1rem;
+  line-height: 1.1;
+}
+
+.mailx-meeting-card > div {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 200px;
+}
+
+.mailx-meeting-card > div strong {
+  font-size: 0.74rem;
+}
+
+.mailx-meeting-card > div small {
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.mailx-meeting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.mailx-rsvp {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.mailx-rsvp button {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--foreground);
+  background: none;
+  font-size: 0.6rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mailx-rsvp button.active {
+  color: #fff;
+  background: var(--mx-accent);
+}
+
+.mailx-join {
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: #23885a;
+  font-size: 0.62rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mailx-join:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .mailx-meeting-card {
+    margin-left: 0;
+  }
+}

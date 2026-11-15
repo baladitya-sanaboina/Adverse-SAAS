@@ -30,6 +30,8 @@ import {
   ArchiveRestore,
   ArrowLeft,
   CalendarClock,
+  CalendarDays,
+  CalendarPlus,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -67,6 +69,7 @@ import {
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { getBrandLogo } from "@/lib/branding";
 import { subscribeRealtime } from "@/lib/realtime";
+import { startCall } from "@/components/chat/call-manager";
 import { OrbitLoader } from "@/components/loader/orbit-loader";
 import {
   PRIORITY_LABEL,
@@ -81,6 +84,7 @@ import {
   type Conversation,
   type Counts,
   type ListResponse,
+  type MeetingCard,
   type MailItem,
   type Person,
   type Priority,
@@ -109,6 +113,7 @@ type Draft = {
   replyTo: string | null;
   forwardOf: string | null;
   ticket: Priority | null;
+  meeting: { day: string; start: string; end: string; video: boolean } | null;
 };
 
 type Toast = { id: number; text: string; undo?: () => void; open?: string; tone?: "error" };
@@ -156,6 +161,7 @@ function newDraft(partial: Partial<Draft> = {}): Draft {
     replyTo: null,
     forwardOf: null,
     ticket: null,
+    meeting: null,
     ...partial,
   };
 }
@@ -272,6 +278,7 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
   const [scheduling, setScheduling] = useState<{ draft: Draft; inline: boolean } | null>(null);
   const searchBox = useRef<HTMLInputElement>(null);
   const pending = useRef(0);
+  const prefill = useRef<string[]>([]);
   const toastSeq = useRef(0);
 
   const isAdmin = me?.role === "ADMIN";
@@ -348,13 +355,26 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
       const message = params.get("m");
       if (message) setOpenId(message);
       if (params.get("compose") === "ticket") setCompose(newDraft({ ticket: "NORMAL" }));
-      else if (params.get("compose")) setCompose(newDraft());
+      else if (params.get("compose")) {
+        // ?to=<ids>&subject=… (for example "Email people" from the calendar).
+        const wantedTo = (params.get("to") ?? "").split(",").filter(Boolean);
+        prefill.current = wantedTo;
+        setCompose(newDraft({ subject: params.get("subject") ?? "" }));
+      }
       void fetch("/api/chat/people", { cache: "no-store" })
         .then((response) => (response.ok ? response.json() : null))
         .then((body: { me?: Person } | null) => body?.me && setMe(body.me))
         .catch(() => undefined);
       void mailApi<{ people: Person[] }>("/people")
-        .then((body) => setPeople(body.people))
+        .then((body) => {
+          setPeople(body.people);
+          const wanted = prefill.current;
+          if (wanted.length) {
+            prefill.current = [];
+            const chosen = body.people.filter((person) => wanted.includes(person.id));
+            setCompose((current) => (current ? { ...current, to: chosen } : current));
+          }
+        })
         .catch(() => undefined);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -605,7 +625,34 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
       if (when) form.append("scheduled_at", when.toISOString());
       if (draft.ticket && draft.mode === "new") form.append("ticket_priority", draft.ticket);
       draft.files.forEach((file) => form.append("files", file));
-      return mailApi<Thread>("", { method: "POST", body: form });
+      const result = await mailApi<Thread>("", { method: "POST", body: form });
+      if (draft.meeting && draft.mode === "new" && !when) {
+        // The mail is the invitation: the calendar event links to this conversation.
+        const meeting = draft.meeting;
+        const start = new Date(`${meeting.day}T${meeting.start}`);
+        let end = new Date(`${meeting.day}T${meeting.end}`);
+        if (end <= start) end = new Date(end.getTime() + 864e5);
+        await fetch("/api/agenda/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: draft.subject.trim() || "Meeting",
+            notes: draft.body.slice(0, 2000),
+            starts_at: start.toISOString(),
+            ends_at: end.toISOString(),
+            video: meeting.video,
+            attendee_ids: [...draft.to, ...draft.cc, ...draft.bcc].map((person) => person.id),
+            mail_thread_id: result.thread_id,
+            invite: false,
+          }),
+        }).then(async (response) => {
+          if (!response.ok) {
+            const body = (await response.json().catch(() => ({}))) as { detail?: string };
+            throw new Error(`The mail went, but the meeting was not added: ${body.detail ?? "please add it in the calendar."}`);
+          }
+        });
+      }
+      return result;
     },
     [],
   );
@@ -643,7 +690,13 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
           .then((result) => {
             const first = result.items[result.items.length - 1];
             toast({
-              text: when ? "Mail scheduled" : result.ticket ? `Ticket ${result.ticket.code} raised` : "Message sent",
+              text: when
+                ? "Mail scheduled"
+                : result.ticket
+                  ? `Ticket ${result.ticket.code} raised`
+                  : draft.meeting
+                    ? "Sent, and the meeting is on everyone's calendar"
+                    : "Message sent",
               open: first?.id,
             });
             if (openId && result.thread_id === thread?.thread_id) void loadThread(openId, false);
@@ -858,6 +911,11 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
             <small>Report a problem to the admin</small>
           </span>
         </button>
+        {me && me.role !== "CLIENT" && (
+          <button type="button" className="mailx-side-link" onClick={() => openApp("/agenda")}>
+            <CalendarDays aria-hidden="true" /> Calendar
+          </button>
+        )}
         <p className="mailx-side-note">
           {me?.role === "CLIENT"
             ? "Mail here goes to the Adverse team."
@@ -1474,6 +1532,8 @@ function ThreadView({
           )}
         </h1>
 
+        {thread.event && <MeetingBanner event={thread.event} onError={onError} />}
+
         {thread.ticket && (
           <TicketBar ticket={thread.ticket} people={people} isAdmin={isAdmin} onChange={(change) => onTicket(thread.ticket as Ticket, change)} />
         )}
@@ -1727,6 +1787,83 @@ function MessageCard({
 }
 
 // ---------------------------------------------------------------------------------------------
+
+/** Open a page of the app in the tab that opened Mail (or a new one). */
+function openApp(path: string): void {
+  try {
+    if (window.opener && !window.opener.closed && window.opener.location.origin === window.location.origin) {
+      window.opener.location.href = path;
+      window.opener.focus();
+      return;
+    }
+  } catch {
+    // Not reachable: open a new tab instead.
+  }
+  window.open(path, "_blank", "noopener");
+}
+
+function MeetingBanner({ event, onError }: { event: MeetingCard; onError: (reason: unknown) => void }) {
+  const [answer, setAnswer] = useState(event.my_response);
+  // When the conversation was opened; Join is checked against it (it reopens on refresh).
+  const [now] = useState(() => Date.now());
+  const start = new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(event.starts_at) ? event.starts_at : `${event.starts_at}Z`);
+  const end = new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(event.ends_at) ? event.ends_at : `${event.ends_at}Z`);
+  const open = now >= start.getTime() - 10 * 60_000 && now <= end.getTime();
+  const going = event.attendees.filter((item) => item.response === "YES").length;
+
+  async function respond(response: "YES" | "NO" | "MAYBE") {
+    try {
+      const result = await fetch(`/api/agenda/events/${event.id}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response }),
+      });
+      if (!result.ok) throw new Error("Could not save your answer.");
+      setAnswer(response);
+    } catch (reason) {
+      onError(reason);
+    }
+  }
+
+  return (
+    <div className="mailx-meeting-card">
+      <span className="mailx-meeting-date" aria-hidden="true">
+        <small>{start.toLocaleDateString("en-IN", { month: "short" })}</small>
+        <b>{start.getDate()}</b>
+      </span>
+      <div>
+        <strong>{event.title}</strong>
+        <small>
+          {event.all_day
+            ? start.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })
+            : `${start.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })} · ${start.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })} – ${end.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}`}
+          {event.video ? " · Video call" : ""}
+          {event.location ? ` · ${event.location}` : ""}
+          {` · ${going + 1} going`}
+        </small>
+      </div>
+      <span className="mailx-meeting-actions">
+        {answer !== null && (
+          <span className="mailx-rsvp" role="group" aria-label="Going?">
+            {(["YES", "MAYBE", "NO"] as const).map((value) => (
+              <button key={value} type="button" className={answer === value ? "active" : undefined} aria-pressed={answer === value} onClick={() => void respond(value)}>
+                {value === "YES" ? "Yes" : value === "NO" ? "No" : "Maybe"}
+              </button>
+            ))}
+          </span>
+        )}
+        {event.video && event.conversation_id && (
+          <button type="button" className="mailx-join" disabled={!open} title={open ? "Join the call" : "Opens 10 minutes before the start"} onClick={() => event.conversation_id && startCall(event.conversation_id, "VIDEO", event.title)}>
+            Join
+          </button>
+        )}
+        <button type="button" className="mailx-tool" onClick={() => openApp(`/agenda?event=${event.id}`)}>
+          <CalendarDays aria-hidden="true" /> Calendar
+        </button>
+      </span>
+    </div>
+  );
+}
 
 function TicketBar({
   ticket,
@@ -2220,6 +2357,40 @@ function Composer({
         </ul>
       )}
       {draft.mode === "forward" && <p className="mailx-hint">Files from the original mail go with it.</p>}
+      {draft.meeting && (
+        <div className="mailx-meeting">
+          <CalendarPlus aria-hidden="true" />
+          <strong>Meeting</strong>
+          <input
+            type="date"
+            aria-label="Meeting date"
+            value={draft.meeting.day}
+            onChange={(event) => update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), day: event.target.value } })}
+          />
+          <input
+            type="time"
+            aria-label="Meeting start"
+            value={draft.meeting.start}
+            onChange={(event) => update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), start: event.target.value } })}
+          />
+          <span>to</span>
+          <input
+            type="time"
+            aria-label="Meeting end"
+            value={draft.meeting.end}
+            onChange={(event) => update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), end: event.target.value } })}
+          />
+          <label>
+            <input
+              type="checkbox"
+              checked={draft.meeting.video}
+              onChange={(event) => update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), video: event.target.checked } })}
+            />
+            Video call
+          </label>
+          <small>Everyone in To, Cc and Bcc gets it on their calendar, with a reminder 10 minutes before.</small>
+        </div>
+      )}
       {problem && (
         <p className="mailx-problem" role="alert">
           {problem}
@@ -2257,6 +2428,31 @@ function Composer({
           <Paperclip />
         </button>
         <input ref={fileInput} type="file" multiple hidden onChange={addFiles} />
+        {draft.mode === "new" && me && me.role !== "CLIENT" && !isTicket && (
+          <button
+            type="button"
+            className={`mailx-icon${draft.meeting ? " on" : ""}`}
+            aria-label={draft.meeting ? "Remove the meeting" : "Add a meeting"}
+            aria-pressed={Boolean(draft.meeting)}
+            title={draft.meeting ? "Remove the meeting" : "Add a meeting to the calendar"}
+            onClick={() => {
+              if (draft.meeting) return update({ meeting: null });
+              const start = new Date(Date.now() + 864e5);
+              start.setHours(10, 0, 0, 0);
+              const pad = (value: number) => String(value).padStart(2, "0");
+              update({
+                meeting: {
+                  day: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`,
+                  start: "10:00",
+                  end: "10:30",
+                  video: true,
+                },
+              });
+            }}
+          >
+            <CalendarPlus />
+          </button>
+        )}
         {draft.mode === "new" && me?.role && (
           <button
             type="button"

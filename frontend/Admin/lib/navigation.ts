@@ -1,4 +1,5 @@
 import {
+  CalendarClock,
   CalendarDays,
   ChartColumn,
   ChartNoAxesCombined,
@@ -31,6 +32,8 @@ export const navigationItems = [
   { href: "/chat", label: "Chat", icon: MessagesSquare },
   // Mail opens in its own tab (owner request 2026-11-15).
   { href: "/mail", label: "Mail", icon: Mail, newTab: true },
+  // Events, meetings, deadlines and todos (owner request 2026-11-15).
+  { href: "/agenda", label: "Calendar", icon: CalendarClock },
   // Admin-only money pages: gated by role permission, not by the subscription plan.
   { href: "/payments", label: "Payments", icon: Wallet, module: "FINANCE" },
   { href: "/sheets", label: "Payment Sheets", icon: NotebookTabs, module: "FINANCE" },

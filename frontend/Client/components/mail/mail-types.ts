@@ -88,7 +88,26 @@ export type ListResponse = {
   total_pages: number;
   unread: Counts;
 };
-export type Thread = { thread_id: string; subject: string; items: MailItem[]; ticket: Ticket | null };
+export type MeetingCard = {
+  id: string;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  all_day: boolean;
+  video: boolean;
+  conversation_id: string | null;
+  location: string;
+  owner: Person;
+  attendees: { person: Person; response: "PENDING" | "YES" | "NO" | "MAYBE" }[];
+  my_response: "PENDING" | "YES" | "NO" | "MAYBE" | null;
+};
+export type Thread = {
+  thread_id: string;
+  subject: string;
+  items: MailItem[];
+  ticket: Ticket | null;
+  event?: MeetingCard | null; // a meeting planned from this conversation (staff calendar)
+};
 
 export const ROLE_LABEL: Record<Role, string> = {
   ADMIN: "Admin",
