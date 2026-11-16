@@ -16,7 +16,13 @@ import "@/styles/auth/loopless-purple-theme.css";
 import "@/styles/invitation-acceptance.css";
 
 type ThemeMode = "dark" | "light";
-type InvitationDetails = { email: string; company_name: string; expires_at: string };
+type InvitationDetails = {
+  email: string;
+  company_name: string;
+  expires_at: string;
+  role_code: "COMPANY_EMPLOYEE" | "COMPANY_CLIENT";
+  login_url: string;
+};
 const THEME_STORAGE_KEY = "loopless-theme";
 
 function passwordError(value: string) {
@@ -116,6 +122,17 @@ export function InvitationAcceptancePage({ token }: { token: string }) {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail ?? "Unable to accept this invitation.");
+      if (data && typeof data === "object" && "login_url" in data && typeof data.login_url === "string") {
+        setDetails((current) =>
+          current
+            ? {
+                ...current,
+                login_url: data.login_url,
+                role_code: data.role_code === "COMPANY_CLIENT" ? "COMPANY_CLIENT" : current.role_code,
+              }
+            : current,
+        );
+      }
       setAccepted(true);
       setMessage(data.message);
     } catch (error) {
@@ -126,6 +143,14 @@ export function InvitationAcceptancePage({ token }: { token: string }) {
   }
 
   if (!themeReady) return <ThemeLoader />;
+
+  const continueHref = details?.login_url ?? "/login";
+  const continueLabel =
+    details?.role_code === "COMPANY_CLIENT"
+      ? "Continue to client login"
+      : details?.role_code === "COMPANY_EMPLOYEE"
+        ? "Continue to employee login"
+        : "Continue to login";
 
   return (
     <main className={`interactive-auth ${theme}`}>
@@ -173,9 +198,9 @@ export function InvitationAcceptancePage({ token }: { token: string }) {
               <CheckCircle2 />
               <strong>Account created successfully</strong>
               <span>{message}</span>
-              <Link className="interactive-submit" href="/login">
-                Continue to login
-              </Link>
+              <a className="interactive-submit" href={continueHref}>
+                {continueLabel}
+              </a>
             </div>
           ) : details ? (
             <form className="auth-form-transition" onSubmit={submit} noValidate>

@@ -2,14 +2,25 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator, model_validator
 
 InvitationStatus = Literal["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]
+InvitationRoleCode = Literal["COMPANY_EMPLOYEE", "COMPANY_CLIENT"]
 
 
 class InvitationCreate(BaseModel):
     email: EmailStr
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    role_code: InvitationRoleCode = "COMPANY_EMPLOYEE"
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
 
 class InvitationResponse(BaseModel):
@@ -17,6 +28,7 @@ class InvitationResponse(BaseModel):
     email: EmailStr
     company_name: str
     invited_by_name: str
+    role_code: InvitationRoleCode
     status: InvitationStatus
     expires_at: datetime
     accepted_at: datetime | None
@@ -32,6 +44,8 @@ class InvitationValidationResponse(BaseModel):
     valid: bool
     email: EmailStr
     company_name: str
+    role_code: InvitationRoleCode
+    login_url: str
     expires_at: datetime
 
 
@@ -67,6 +81,8 @@ class InvitationAcceptedResponse(BaseModel):
     )
     email: EmailStr
     company_name: str
+    role_code: InvitationRoleCode
+    login_url: str
 
 
 class InvitationActionResponse(BaseModel):

@@ -53,6 +53,10 @@ class InvitationService:
         return InvitationResponse(**record.__dict__)
 
     @staticmethod
+    def _login_url(role_code: str) -> str:
+        return settings.login_url(role_code)
+
+    @staticmethod
     def _new_token() -> tuple[str, str, datetime]:
         token = secrets.token_urlsafe(48)
         return (
@@ -64,9 +68,20 @@ class InvitationService:
     def create(self, context: AuthContext, request: InvitationCreate) -> InvitationResponse:
         company_id = self._authorize(context, "CREATE")
         token, token_hash, expires_at = self._new_token()
+        invited_name = request.name.strip() if request.name else None
+        provisioned_password_hash = (
+            hash_password(secrets.token_urlsafe(32)) if invited_name is not None else None
+        )
         try:
             record = self.repository.create(
-                company_id, context.user_id, str(request.email).lower(), token_hash, expires_at
+                company_id,
+                context.user_id,
+                str(request.email).lower(),
+                token_hash,
+                expires_at,
+                request.role_code,
+                invited_name,
+                provisioned_password_hash,
             )
         except InvitationConflict as error:
             code = str(error)
@@ -102,7 +117,7 @@ class InvitationService:
         if not found:
             self.repository.audit_validation_failure(None, "INVALID_TOKEN")
             raise AuthenticationError(400, "INVALID_INVITATION", "Invitation link is invalid.")
-        record, _, _ = found
+        record, _, _, _ = found
         if record.status == "EXPIRED":
             self.repository.audit_validation_failure(found, "EXPIRED_TOKEN")
             raise AuthenticationError(410, "INVITATION_EXPIRED", "Invitation has expired.")
@@ -115,6 +130,8 @@ class InvitationService:
             valid=True,
             email=record.email,
             company_name=record.company_name,
+            role_code=record.role_code,
+            login_url=self._login_url(record.role_code),
             expires_at=record.expires_at,
         )
 
@@ -158,7 +175,12 @@ class InvitationService:
             raise AuthenticationError(
                 400, "INVALID_INVITATION", "Invitation is no longer available."
             )
-        return InvitationAcceptedResponse(email=accepted[0], company_name=accepted[1])
+        return InvitationAcceptedResponse(
+            email=accepted[0],
+            company_name=accepted[1],
+            role_code=accepted[2],
+            login_url=self._login_url(accepted[2]),
+        )
 
     def is_ready(self) -> bool:
         return self.repository.is_ready()

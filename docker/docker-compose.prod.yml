@@ -1,13 +1,16 @@
 # Production stack: Caddy (HTTPS) in front of the four apps, the API, Postgres, Redis and a TURN
 # relay for meets. Run from this folder:
 #   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
-# Full steps: docs/Deployment.md. Nothing here publishes Postgres, Redis or the API to the internet.
+# Full steps: docs/Deployment.md. Nothing here publishes Postgres or Redis to the internet.
 name: adverse
 
 x-web: &web
   restart: unless-stopped
   environment:
-    BACKEND_INTERNAL_URL: http://backend:8000
+    BACKEND_INTERNAL_URL: http://host.docker.internal:8000
+    NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=160}
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   depends_on:
     backend:
       condition: service_healthy
@@ -16,15 +19,13 @@ services:
   caddy:
     image: caddy:2.8-alpine
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+    network_mode: host
     environment:
       ADMIN_DOMAIN: ${ADMIN_DOMAIN}
       MANAGER_DOMAIN: ${MANAGER_DOMAIN}
       EMPLOYEE_DOMAIN: ${EMPLOYEE_DOMAIN}
       CLIENT_DOMAIN: ${CLIENT_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
@@ -38,44 +39,54 @@ services:
 
   admin:
     <<: *web
+    ports:
+      - "3000:3000"
     build:
       context: ../frontend
       dockerfile: ../docker/Dockerfile.web.prod
-      args: { APP: Admin, PORT: "3000" }
+      args: { APP: Admin, PORT: "3000", NODE_BUILD_OPTIONS: "${NODE_BUILD_OPTIONS:---max-old-space-size=384}" }
 
   manager:
     <<: *web
+    ports:
+      - "3001:3001"
     build:
       context: ../frontend
       dockerfile: ../docker/Dockerfile.web.prod
-      args: { APP: Manager, PORT: "3001" }
+      args: { APP: Manager, PORT: "3001", NODE_BUILD_OPTIONS: "${NODE_BUILD_OPTIONS:---max-old-space-size=384}" }
 
   employee:
     <<: *web
+    ports:
+      - "3002:3002"
     build:
       context: ../frontend
       dockerfile: ../docker/Dockerfile.web.prod
-      args: { APP: Employee, PORT: "3002" }
+      args: { APP: Employee, PORT: "3002", NODE_BUILD_OPTIONS: "${NODE_BUILD_OPTIONS:---max-old-space-size=384}" }
 
   client:
     <<: *web
+    ports:
+      - "3003:3003"
     build:
       context: ../frontend
       dockerfile: ../docker/Dockerfile.web.prod
-      args: { APP: Client, PORT: "3003" }
+      args: { APP: Client, PORT: "3003", NODE_BUILD_OPTIONS: "${NODE_BUILD_OPTIONS:---max-old-space-size=384}" }
 
   backend:
     build:
       context: ../backend
       dockerfile: ../docker/Dockerfile.backend.prod
     restart: unless-stopped
+    ports:
+      - "8000:8000"
     env_file: ../backend/.env.production
     environment:
       ENVIRONMENT: production
       DATABASE_URL: postgresql://adverse:${POSTGRES_PASSWORD}@postgres:5432/adverse
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       TURN_SECRET: ${TURN_SECRET}
-      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
     volumes:
       - backend_storage:/app/storage
       - backend_private:/app/private-storage
@@ -87,11 +98,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import socket; sock = socket.create_connection(('127.0.0.1', 8000), 5); sock.close()"]
       interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+      timeout: 10s
+      retries: 12
+      start_period: 45s
 
   migrations:
     build:
@@ -108,6 +119,18 @@ services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
+    command:
+      [
+        "postgres",
+        "-c",
+        "shared_buffers=${POSTGRES_SHARED_BUFFERS:-96MB}",
+        "-c",
+        "effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-256MB}",
+        "-c",
+        "maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-64MB}",
+        "-c",
+        "max_connections=${POSTGRES_MAX_CONNECTIONS:-40}"
+      ]
     environment:
       POSTGRES_DB: adverse
       POSTGRES_USER: adverse
@@ -123,7 +146,18 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    command:
+      [
+        "redis-server",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "${REDIS_MAXMEMORY:-64mb}",
+        "--maxmemory-policy",
+        "allkeys-lru"
+      ]
     volumes:
       - redis_data:/data
     healthcheck:

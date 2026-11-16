@@ -567,7 +567,31 @@ export function ClientManagementPage({
         }
         throw new Error(messageFrom(data, "Unable to save client."));
       }
-      setNotice(`Client ${editing ? "updated" : "created"} successfully.`);
+      let nextNotice = `Client ${editing ? "updated" : "created"} successfully.`;
+      if (!editing && form.email.trim() && !data.account_user_id) {
+        try {
+          const inviteResponse = await fetch("/api/company/invitations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: form.name.trim(),
+              email: form.email.trim(),
+              role_code: "COMPANY_CLIENT",
+            }),
+          });
+          const inviteData = await inviteResponse.json();
+          if (!inviteResponse.ok) {
+            throw new Error(messageFrom(inviteData, "Unable to send the client activation email."));
+          }
+          nextNotice = `Client created successfully. Activation email sent to ${form.email.trim()}.`;
+        } catch (inviteReason) {
+          nextNotice =
+            inviteReason instanceof Error
+              ? `Client created, but activation email was not sent: ${inviteReason.message}`
+              : "Client created, but activation email was not sent.";
+        }
+      }
+      setNotice(nextNotice);
       if (initialClientId && editing) {
         await loadDetail(initialClientId);
         setMode("view");

@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { Mail, MailPlus, RefreshCw, RotateCw, X } from "lucide-react";
+import { Mail, MailPlus, RefreshCw, RotateCw, UserRound, X } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { ManagementModal } from "@/components/foundation/management-modal";
@@ -18,6 +18,8 @@ export function InvitationsPage() {
     [loading, setLoading] = useState(true),
     [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false),
+    [name, setName] = useState(""),
+    [nameError, setNameError] = useState(""),
     [email, setEmail] = useState(""),
     [emailError, setEmailError] = useState(""),
     [error, setError] = useState(""),
@@ -43,13 +45,15 @@ export function InvitationsPage() {
   }, [load]);
   async function invite(e: React.FormEvent) {
     e.preventDefault();
+    const nextNameError = !name.trim() ? "Full name is required." : name.trim().length < 2 ? "Enter at least 2 characters." : "";
     const validation = !email.trim()
       ? "Email is required."
       : !/^\S+@\S+\.\S+$/.test(email.trim())
         ? "Please enter a valid email address."
         : "";
+    setNameError(nextNameError);
     setEmailError(validation);
-    if (validation) {
+    if (nextNameError || validation) {
       return;
     }
     setSaving(true);
@@ -58,14 +62,16 @@ export function InvitationsPage() {
       const r = await fetch("/api/company/invitations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim() }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail);
       setOpen(false);
+      setName("");
       setEmail("");
+      setNameError("");
       setEmailError("");
-      setNotice("Invitation sent successfully.");
+      setNotice(`Activation email sent to ${d.email}.`);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to send invitation.");
@@ -105,6 +111,7 @@ export function InvitationsPage() {
               className="registration-primary-action"
               onClick={() => {
                 setError("");
+                setNameError("");
                 setEmailError("");
                 setOpen(true);
               }}
@@ -193,11 +200,31 @@ export function InvitationsPage() {
         {error && <div className="management-form-message">{error}</div>}
         <form id="invite-user-form" onSubmit={invite}>
           <label className="management-field">
+            <span>Full name</span>
+            <span className="management-input">
+              <UserRound aria-hidden="true" />
+              <input
+                autoFocus
+                type="text"
+                autoComplete="name"
+                value={name}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setName(value);
+                  setNameError(!value.trim() ? "Full name is required." : value.trim().length < 2 ? "Enter at least 2 characters." : "");
+                  setError("");
+                }}
+                aria-invalid={Boolean(nameError)}
+                placeholder="Employee full name"
+              />
+            </span>
+            {nameError && <small>{nameError}</small>}
+          </label>
+          <label className="management-field">
             <span>Email address</span>
             <span className="management-input">
               <Mail aria-hidden="true" />
               <input
-                autoFocus
                 type="email"
                 autoComplete="email"
                 value={email}

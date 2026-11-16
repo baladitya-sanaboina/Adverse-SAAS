@@ -1188,6 +1188,8 @@ model CompanyInvitation {
   invitedBy  String           @map("invited_by") @db.Uuid
   tokenHash  String           @unique @map("token_hash")
   expiresAt  DateTime         @map("expires_at")
+  roleCode   String           @default("COMPANY_EMPLOYEE") @map("role_code")
+  userId     String?          @map("user_id") @db.Uuid
   acceptedAt DateTime?        @map("accepted_at")
   status     InvitationStatus @default(PENDING)
   createdAt  DateTime         @default(now()) @map("created_at")
@@ -1195,6 +1197,8 @@ model CompanyInvitation {
 
   @@index([companyId, status])
   @@index([companyId, email])
+  @@index([companyId, roleCode])
+  @@index([userId])
   @@index([expiresAt])
   @@map("company_invitations")
 }

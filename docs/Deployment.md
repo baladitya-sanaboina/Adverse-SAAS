@@ -6,9 +6,9 @@ This guide is for the person who sets up the production server. It runs everythi
 
 | Service | What it does | Reachable from the internet |
 | --- | --- | --- |
-| `caddy` | HTTPS for the four app domains; gets and renews certificates | Yes: 80, 443 |
+| `caddy` | HTTPS for the four app domains and the API; gets and renews certificates | Yes: 80, 443 |
 | `admin`, `manager`, `employee`, `client` | The four Next.js apps (`next build` + `next start`) | Only through Caddy |
-| `backend` | FastAPI, several workers, no code reload | No (the apps call it on the internal network) |
+| `backend` | FastAPI, one or more workers, no code reload | Only through Caddy on the API domain |
 | `migrations` | Applies Prisma migrations, then exits | No |
 | `postgres`, `redis` | Data and live events; password protected | No |
 | `coturn` | TURN relay so meets work on strict office/mobile networks | Yes: 3478 UDP+TCP, 49160-49200 UDP |
@@ -22,22 +22,22 @@ Files are in `docker/`:
 
 ## Server
 
-- **Size:** Ubuntu 22.04/24.04 with at least 4 GB RAM and 2 CPUs (8 GB is better while building the images).
+- **Size:** Ubuntu 22.04/24.04 or Oracle Linux 9 with at least 4 GB RAM and 2 CPUs (8 GB is better while building the images). The compose file has tiny-VPS defaults, but four Next.js apps plus the API, Postgres and Redis still run much better with at least 4 GB.
 - **Docker:** Docker Engine with the compose plugin.
-- **DNS:** an A record for each app domain pointing at the server, for example `admin.`, `manager.`, `team.` and `client.` under your domain.
+- **DNS:** an A record for each app domain plus the API domain pointing at the server, for example `admin.`, `manager.`, `employee.`, `client.` and `api.` under your domain.
 - **Firewall:** open 80/tcp, 443/tcp, 443/udp, 3478/tcp, 3478/udp and 49160-49200/udp. Leave everything else closed.
 
 ## First deploy
 
 1. Copy the repository to the server, for example `git clone` into `/opt/adverse`.
-2. Create the four env files from their examples and fill them in. All of them are git-ignored:
-   - `docker/.env.production`: domains, Postgres/Redis passwords, TURN secret and public IP. Make each secret with `openssl rand -base64 36`.
+2. Create the production env files from their examples and fill them in. All of them are git-ignored:
+   - `docker/.env.production`: domains, Postgres/Redis passwords, TURN secret, public IP and tiny-VPS tuning values. Make each secret with `openssl rand -base64 36`.
    - `backend/.env.production`:
      - `JWT_SECRET`
      - SMTP (Gmail App Password)
      - `CORS_ORIGINS`: the four `https://` domains, in the order Admin, Manager, Employee, Client
      - `TURN_URLS` pointing at your domain
-   - `frontend/<App>/.env.production` for each of Admin, Manager, Employee and Client: the four app URLs. These values are built into the browser code, so never put secrets in them.
+   - `frontend/<App>/.env.production` for each of Admin, Manager, Employee and Client: the four app URLs plus the public API URL. These values are built into the browser code, so never put secrets in them.
 3. Build and start:
 
    ```bash
@@ -47,7 +47,7 @@ Files are in `docker/`:
 
 4. Check that everything is up:
    - `docker compose --env-file .env.production -f docker-compose.prod.yml ps`
-   - Open each domain. The first visit can take a few seconds while Caddy gets its certificate.
+   - Open each domain, plus `https://api.your-domain.example/health`. The first visit can take a few seconds while Caddy gets its certificate.
 
 The migrations run before the API starts. Development test accounts are never created in production (`ENVIRONMENT=production`).
 

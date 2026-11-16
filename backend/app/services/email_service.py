@@ -348,22 +348,22 @@ class EmailService:
 
     def send_invitation(self, email: str, *, company_name: str, invitation_url: str) -> None:
         message = EmailMessage()
-        message["Subject"] = f"You're invited to join {company_name} on Adverse"
+        message["Subject"] = f"Set up your {company_name} access on Adverse"
         message["From"] = settings.smtp_from_email or settings.smtp_username
         message["To"] = email
         message.set_content(
-            f"You've been invited to join {company_name} with {email}. "
-            f"Create your account using this secure link: {invitation_url}"
+            f"Your {company_name} access for {email} is almost ready. "
+            f"Use this secure link to set your password and activate the account: {invitation_url}"
         )
         message.add_alternative(
             branded_email_html(
-                eyebrow="Company invitation",
-                title=f"Join {company_name}",
+                eyebrow="Account setup",
+                title=f"Set up your {company_name} access",
                 description=(
-                    f"Your company administrator invited {email} to join {company_name} on Adverse. "
-                    "Create your account to continue."
+                    f"Your company administrator prepared access for {email} in {company_name}. "
+                    "Set your password to activate the account and continue."
                 ),
-                action_label="Accept invitation",
+                action_label="Set up access",
                 action_url=invitation_url,
                 expiry_minutes=settings.invitation_expiry_hours * 60,
             ),

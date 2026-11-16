@@ -1,12 +1,16 @@
+# syntax=docker/dockerfile:1.7
+
 # Production image for one of the four Next.js apps (APP=Admin|Manager|Employee|Client).
 # Built by docker-compose.prod.yml with context frontend/. The app's .env.production is read at
 # build time (NEXT_PUBLIC_ values are baked into the browser code). See docs/Deployment.md.
 FROM node:20-alpine AS build
 ARG APP
+ARG NODE_BUILD_OPTIONS=--max-old-space-size=384
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NODE_OPTIONS=${NODE_BUILD_OPTIONS}
 COPY ${APP}/package.json ${APP}/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline
 COPY ${APP}/ ./
 # Same layout as the dev containers: the shared code sits inside the app as _shared.
 COPY shared/ ./_shared/

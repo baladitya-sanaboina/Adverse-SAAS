@@ -31,6 +31,7 @@ class InvitationServiceTests(unittest.TestCase):
             email="invitee@example.com",
             company_name="Tenant A",
             invited_by_name="Company Admin",
+            role_code="COMPANY_EMPLOYEE",
             status="PENDING",
             expires_at=now + timedelta(hours=48),
             accepted_at=None,
@@ -45,12 +46,20 @@ class InvitationServiceTests(unittest.TestCase):
     def test_create_is_tenant_bound_and_stores_only_hash(
         self, send_email: MagicMock, _: MagicMock
     ) -> None:
-        response = self.service.create(self.context, InvitationCreate(email=self.record.email))
+        response = self.service.create(
+            self.context, InvitationCreate(email=self.record.email, name="Invited Employee")
+        )
         self.assertEqual(response.email, self.record.email)
-        company_id, actor_id, email, token_hash, _ = self.repository.create.call_args.args
+        self.assertEqual(response.role_code, "COMPANY_EMPLOYEE")
+        company_id, actor_id, email, token_hash, _, role_code, invited_name, password_hash = (
+            self.repository.create.call_args.args
+        )
         self.assertEqual(company_id, self.company_id)
         self.assertEqual(actor_id, self.user_id)
         self.assertEqual(email, self.record.email)
+        self.assertEqual(role_code, "COMPANY_EMPLOYEE")
+        self.assertEqual(invited_name, "Invited Employee")
+        self.assertTrue(password_hash)
         self.assertEqual(len(token_hash), 64)
         self.assertNotIn(token_hash, send_email.call_args.kwargs["invitation_url"])
         send_email.assert_called_once()
@@ -59,7 +68,7 @@ class InvitationServiceTests(unittest.TestCase):
     def test_duplicate_pending_invitation_returns_conflict(self, _: MagicMock) -> None:
         self.repository.create.side_effect = InvitationConflict("INVITATION_EXISTS")
         with self.assertRaises(AuthenticationError) as raised:
-            self.service.create(self.context, InvitationCreate(email=self.record.email))
+            self.service.create(self.context, InvitationCreate(email=self.record.email, name="Test"))
         self.assertEqual(raised.exception.status_code, 409)
 
     def test_non_admin_cannot_manage_invitations(self) -> None:
@@ -81,15 +90,19 @@ class InvitationServiceTests(unittest.TestCase):
         self.assertEqual(invalid.exception.status_code, 400)
 
         expired = InvitationRecord(**{**self.record.__dict__, "status": "EXPIRED"})
-        self.repository.find_by_hash.return_value = (expired, self.company_id, self.user_id)
+        self.repository.find_by_hash.return_value = (expired, self.company_id, self.user_id, None)
         with self.assertRaises(AuthenticationError) as expired_error:
             self.service.validate("y" * 40)
         self.assertEqual(expired_error.exception.status_code, 410)
 
     @patch("app.services.invitation_service.hash_password", return_value="secure-hash")
     def test_accept_creates_user_from_invitation_tenant(self, hash_password: MagicMock) -> None:
-        self.repository.find_by_hash.return_value = (self.record, self.company_id, self.user_id)
-        self.repository.accept.return_value = (self.record.email, self.record.company_name)
+        self.repository.find_by_hash.return_value = (self.record, self.company_id, self.user_id, None)
+        self.repository.accept.return_value = (
+            self.record.email,
+            self.record.company_name,
+            self.record.role_code,
+        )
         request = InvitationAcceptRequest(
             token="secure-token-that-is-long-enough-for-validation",
             name="Invited Employee",
@@ -103,6 +116,8 @@ class InvitationServiceTests(unittest.TestCase):
         )
         hash_password.assert_called_once_with("StrongPassword@123")
         self.assertEqual(response.email, self.record.email)
+        self.assertEqual(response.role_code, self.record.role_code)
+        self.assertIn("/login", response.login_url)
 
     def test_accept_schema_rejects_weak_or_mismatched_password(self) -> None:
         with self.assertRaises(ValidationError):

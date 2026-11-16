@@ -100,7 +100,7 @@ class Settings(BaseSettings):
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
-    def password_reset_url(self, role: str, token: str) -> str:
+    def role_origin(self, role: str, purpose: str) -> str:
         role_index = {
             "PLATFORM_OWNER": 0,
             "DEVELOPER": 0,
@@ -111,24 +111,17 @@ class Settings(BaseSettings):
         }.get(role, 0)
         origins = self.allowed_origins
         if not origins:
-            raise ValueError("At least one CORS origin is required for password recovery")
-        origin = origins[role_index] if len(origins) > role_index else origins[0]
-        return f"{origin}/reset-password?token={token}"
+            raise ValueError(f"At least one CORS origin is required for {purpose}")
+        return origins[role_index] if len(origins) > role_index else origins[0]
+
+    def password_reset_url(self, role: str, token: str) -> str:
+        return f"{self.role_origin(role, 'password recovery')}/reset-password?token={token}"
 
     def email_verification_url(self, role: str, token: str) -> str:
-        role_index = {
-            "PLATFORM_OWNER": 0,
-            "DEVELOPER": 0,
-            "COMPANY_ADMIN": 0,
-            "COMPANY_MANAGER": 1,
-            "COMPANY_EMPLOYEE": 2,
-            "COMPANY_CLIENT": 3,
-        }.get(role, 0)
-        origins = self.allowed_origins
-        if not origins:
-            raise ValueError("At least one CORS origin is required for email verification")
-        origin = origins[role_index] if len(origins) > role_index else origins[0]
-        return f"{origin}/verify-email?token={token}"
+        return f"{self.role_origin(role, 'email verification')}/verify-email?token={token}"
+
+    def login_url(self, role: str) -> str:
+        return f"{self.role_origin(role, 'login')}/login"
 
     def invitation_url(self, token: str) -> str:
         origins = self.allowed_origins

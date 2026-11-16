@@ -178,159 +178,157 @@ const subscriptionPlans = [
 ] as const;
 
 async function main() {
-  await prisma.$transaction(async (transaction) => {
-    for (const role of roles) {
-      await transaction.role.upsert({
-        where: { code: role.code },
-        update: { name: role.name, isSystem: true },
-        create: { ...role, isSystem: true },
-      });
-    }
+  for (const role of roles) {
+    await prisma.role.upsert({
+      where: { code: role.code },
+      update: { name: role.name, isSystem: true },
+      create: { ...role, isSystem: true },
+    });
+  }
 
-    for (const module of modules) {
-      await transaction.module.upsert({
-        where: { code: module.code },
-        update: { name: module.name },
-        create: module,
-      });
-    }
+  for (const module of modules) {
+    await prisma.module.upsert({
+      where: { code: module.code },
+      update: { name: module.name },
+      create: module,
+    });
+  }
 
-    for (const permission of permissions) {
-      await transaction.permission.upsert({
-        where: { code: permission.code },
-        update: { name: permission.name },
-        create: permission,
-      });
-    }
+  for (const permission of permissions) {
+    await prisma.permission.upsert({
+      where: { code: permission.code },
+      update: { name: permission.name },
+      create: permission,
+    });
+  }
 
-    const roleRecords = await transaction.role.findMany();
-    const moduleRecords = await transaction.module.findMany();
-    const permissionRecords = await transaction.permission.findMany();
-    const roleIds = new Map(roleRecords.map((role) => [role.code, role.id]));
-    const moduleIds = new Map(
-      moduleRecords.map((module) => [module.code, module.id]),
-    );
-    const permissionIds = new Map(
-      permissionRecords.map((permission) => [permission.code, permission.id]),
-    );
+  const roleRecords = await prisma.role.findMany();
+  const moduleRecords = await prisma.module.findMany();
+  const permissionRecords = await prisma.permission.findMany();
+  const roleIds = new Map(roleRecords.map((role) => [role.code, role.id]));
+  const moduleIds = new Map(
+    moduleRecords.map((module) => [module.code, module.id]),
+  );
+  const permissionIds = new Map(
+    permissionRecords.map((permission) => [permission.code, permission.id]),
+  );
 
-    for (const [roleCode, modulePermissions] of Object.entries(
-      permissionMatrix,
+  for (const [roleCode, modulePermissions] of Object.entries(
+    permissionMatrix,
+  )) {
+    for (const [moduleCode, actionCodes] of Object.entries(
+      modulePermissions,
     )) {
-      for (const [moduleCode, actionCodes] of Object.entries(
-        modulePermissions,
-      )) {
-        for (const actionCode of actionCodes) {
-          const roleId = roleIds.get(roleCode);
-          const moduleId = moduleIds.get(moduleCode);
-          const permissionId = permissionIds.get(actionCode);
-          if (!roleId || !moduleId || !permissionId)
-            throw new Error("Invalid RBAC seed mapping");
+      for (const actionCode of actionCodes) {
+        const roleId = roleIds.get(roleCode);
+        const moduleId = moduleIds.get(moduleCode);
+        const permissionId = permissionIds.get(actionCode);
+        if (!roleId || !moduleId || !permissionId)
+          throw new Error("Invalid RBAC seed mapping");
 
-          await transaction.rolePermission.upsert({
-            where: {
-              roleId_moduleId_permissionId: { roleId, moduleId, permissionId },
-            },
-            update: {},
-            create: { roleId, moduleId, permissionId },
-          });
-        }
+        await prisma.rolePermission.upsert({
+          where: {
+            roleId_moduleId_permissionId: { roleId, moduleId, permissionId },
+          },
+          update: {},
+          create: { roleId, moduleId, permissionId },
+        });
       }
     }
+  }
 
-    for (const plan of subscriptionPlans) {
-      const record = await transaction.subscriptionPlan.upsert({
-        where: { code: plan.code },
-        update: {
-          name: plan.name,
-          description: plan.description,
-          monthlyPrice: plan.monthlyPrice,
-          yearlyPrice: plan.yearlyPrice,
-          displayOrder: plan.displayOrder,
-        },
-        create: {
-          name: plan.name,
-          code: plan.code,
-          description: plan.description,
-          monthlyPrice: plan.monthlyPrice,
-          yearlyPrice: plan.yearlyPrice,
-          displayOrder: plan.displayOrder,
-        },
-      });
-      await transaction.subscriptionPlanFeature.deleteMany({
-        where: { planId: record.id },
-      });
-      await transaction.subscriptionPlanLimit.deleteMany({
-        where: { planId: record.id },
-      });
-      await transaction.subscriptionPlanFeature.createMany({
-        data: plan.features.map((featureCode) => ({
-          planId: record.id,
-          featureCode,
-          enabled: true,
-        })),
-      });
-      await transaction.subscriptionPlanLimit.createMany({
-        data: Object.entries(plan.limits).map(([limitCode, value]) => ({
-          planId: record.id,
-          limitCode,
-          value: value === null ? null : BigInt(value),
-        })),
-      });
-    }
+  for (const plan of subscriptionPlans) {
+    const record = await prisma.subscriptionPlan.upsert({
+      where: { code: plan.code },
+      update: {
+        name: plan.name,
+        description: plan.description,
+        monthlyPrice: plan.monthlyPrice,
+        yearlyPrice: plan.yearlyPrice,
+        displayOrder: plan.displayOrder,
+      },
+      create: {
+        name: plan.name,
+        code: plan.code,
+        description: plan.description,
+        monthlyPrice: plan.monthlyPrice,
+        yearlyPrice: plan.yearlyPrice,
+        displayOrder: plan.displayOrder,
+      },
+    });
+    await prisma.subscriptionPlanFeature.deleteMany({
+      where: { planId: record.id },
+    });
+    await prisma.subscriptionPlanLimit.deleteMany({
+      where: { planId: record.id },
+    });
+    await prisma.subscriptionPlanFeature.createMany({
+      data: plan.features.map((featureCode) => ({
+        planId: record.id,
+        featureCode,
+        enabled: true,
+      })),
+    });
+    await prisma.subscriptionPlanLimit.createMany({
+      data: Object.entries(plan.limits).map(([limitCode, value]) => ({
+        planId: record.id,
+        limitCode,
+        value: value === null ? null : BigInt(value),
+      })),
+    });
+  }
 
-    if (process.env.NODE_ENV !== "production") {
-      const demoCompany = await transaction.company.findFirst({
-        where: { code: "TEST_COMPANY" },
-      });
-      if (demoCompany) {
-        for (const name of [
-          "Engineering",
-          "Human Resources",
-          "Finance",
-          "Sales",
-        ]) {
-          await transaction.department.upsert({
-            where: { companyId_name: { companyId: demoCompany.id, name } },
-            update: {},
-            create: {
-              companyId: demoCompany.id,
-              name,
-              description: `${name} department`,
-            },
-          });
-        }
-        for (const branch of [
-          {
-            name: "Hyderabad",
-            code: "HYD",
-            city: "Hyderabad",
-            state: "Telangana",
+  if (process.env.NODE_ENV !== "production") {
+    const demoCompany = await prisma.company.findFirst({
+      where: { code: "TEST_COMPANY" },
+    });
+    if (demoCompany) {
+      for (const name of [
+        "Engineering",
+        "Human Resources",
+        "Finance",
+        "Sales",
+      ]) {
+        await prisma.department.upsert({
+          where: { companyId_name: { companyId: demoCompany.id, name } },
+          update: {},
+          create: {
+            companyId: demoCompany.id,
+            name,
+            description: `${name} department`,
           },
-          {
-            name: "Bangalore",
-            code: "BLR",
-            city: "Bangalore",
-            state: "Karnataka",
+        });
+      }
+      for (const branch of [
+        {
+          name: "Hyderabad",
+          code: "HYD",
+          city: "Hyderabad",
+          state: "Telangana",
+        },
+        {
+          name: "Bangalore",
+          code: "BLR",
+          city: "Bangalore",
+          state: "Karnataka",
+        },
+        {
+          name: "Chennai",
+          code: "CHE",
+          city: "Chennai",
+          state: "Tamil Nadu",
+        },
+      ]) {
+        await prisma.branch.upsert({
+          where: {
+            companyId_code: { companyId: demoCompany.id, code: branch.code },
           },
-          {
-            name: "Chennai",
-            code: "CHE",
-            city: "Chennai",
-            state: "Tamil Nadu",
-          },
-        ]) {
-          await transaction.branch.upsert({
-            where: {
-              companyId_code: { companyId: demoCompany.id, code: branch.code },
-            },
-            update: {},
-            create: { companyId: demoCompany.id, country: "India", ...branch },
-          });
-        }
+          update: {},
+          create: { companyId: demoCompany.id, country: "India", ...branch },
+        });
       }
     }
-  });
+  }
 }
 
 main()

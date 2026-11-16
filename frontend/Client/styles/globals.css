@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  --font-poppins: "Poppins", Arial, Helvetica, sans-serif;
   --background: #F8FBFF;
   --surface: #ffffff;
   --surface-muted: #EEF7FF;

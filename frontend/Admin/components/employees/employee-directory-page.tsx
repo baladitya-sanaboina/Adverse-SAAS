@@ -73,6 +73,17 @@ export function EmployeeDirectoryPage() {
     return () => window.clearTimeout(timer);
   }, [query.search, search, setQuery]);
 
+  useEffect(() => {
+    const invite = searchParams.get("invite");
+    const email = searchParams.get("email");
+    if (invite !== "sent" || !email) return;
+    setNotice(`Activation email sent to ${email}.`);
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("invite");
+    next.delete("email");
+    router.replace(`${pathname}${next.size ? `?${next}` : ""}`, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");

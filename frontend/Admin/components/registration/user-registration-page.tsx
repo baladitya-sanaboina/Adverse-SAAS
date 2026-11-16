@@ -35,6 +35,7 @@ export function UserRegistrationPage({
 }) {
   const router = useRouter();
   const title = kind === "employee" ? "Employee" : "Client";
+  const invitationMode = kind === "employee";
   const [values, setValues] = useState(empty);
   const [errors, setErrors] = useState<Partial<Record<keyof Fields, string>>>({});
   const [status, setStatus] = useState("");
@@ -49,6 +50,9 @@ export function UserRegistrationPage({
     confirm_password: false,
   });
   const endpoint = kind === "employee" ? "employees" : "clients";
+  const formFields = invitationMode
+    ? (["name", "email"] as (keyof Fields)[])
+    : (["name", "email", "password", "confirm_password"] as (keyof Fields)[]);
   const returnToList = () => (returnHref ? router.push(returnHref) : setMode("list"));
   const loadList = useCallback(async () => {
     setListLoading(true);
@@ -80,7 +84,7 @@ export function UserRegistrationPage({
   const submit = async (event?: React.FormEvent) => {
     event?.preventDefault();
     const next = Object.fromEntries(
-      (Object.keys(values) as (keyof Fields)[]).map((key) => [key, validate(key, values[key], values)]),
+      formFields.map((key) => [key, validate(key, values[key], values)]),
     );
     setErrors(next);
     if (Object.values(next).some(Boolean)) return;
@@ -91,20 +95,31 @@ export function UserRegistrationPage({
     setLoading(true);
     setStatus("");
     try {
-      const response = await fetch(`/api/registration/${endpoint}`, {
+      const response = await fetch(invitationMode ? "/api/company/invitations" : `/api/registration/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify(
+          invitationMode
+            ? { name: values.name.trim(), email: values.email.trim(), role_code: "COMPANY_EMPLOYEE" }
+            : values,
+        ),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail ?? `${title} creation failed.`);
-      setStatus(`${title} ${data.email} created successfully.`);
+      if (!response.ok) throw new Error(data.detail ?? `${title} ${invitationMode ? "invitation" : "creation"} failed.`);
+      setStatus(
+        invitationMode ? `Activation email sent to ${data.email}.` : `${title} ${data.email} created successfully.`,
+      );
       setValues(empty);
+      if (invitationMode && returnHref) {
+        router.push(`${returnHref}?invite=sent&email=${encodeURIComponent(data.email)}`);
+        setConfirmCreate(false);
+        return;
+      }
       await loadList();
       returnToList();
       setConfirmCreate(false);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : `${title} creation failed.`);
+      setStatus(error instanceof Error ? error.message : `${title} ${invitationMode ? "invitation" : "creation"} failed.`);
       setConfirmCreate(false);
     } finally {
       setLoading(false);
@@ -132,7 +147,7 @@ export function UserRegistrationPage({
                   window.setTimeout(() => setFormLoading(false), 350);
                 }}
               >
-                <Plus aria-hidden="true" /> Create {title.toLowerCase()}
+                <Plus aria-hidden="true" /> {invitationMode ? `Invite ${title.toLowerCase()}` : `Create ${title.toLowerCase()}`}
               </button>
             ) : (
               <button type="button" className="registration-back-action" onClick={returnToList}>
@@ -201,12 +216,16 @@ export function UserRegistrationPage({
                 </div>
                 <div>
                   <span>NEW {title.toUpperCase()}</span>
-                  <h2>Create {title.toLowerCase()} account</h2>
-                  <p>Add the account details below. Access is controlled by the company role and permissions.</p>
+                  <h2>{invitationMode ? `Send ${title.toLowerCase()} activation email` : `Create ${title.toLowerCase()} account`}</h2>
+                  <p>
+                    {invitationMode
+                      ? `Create the ${title.toLowerCase()} profile and send a secure email so they can set their own password.`
+                      : "Add the account details below. Access is controlled by the company role and permissions."}
+                  </p>
                 </div>
               </header>
               <form noValidate onSubmit={submit}>
-                {(["name", "email", "password", "confirm_password"] as (keyof Fields)[]).map((key) => {
+                {formFields.map((key) => {
                   const passwordField = key === "password" || key === "confirm_password";
                   const visible = passwordField ? visiblePasswords[key] : false;
                   const FieldIcon = key === "name" ? UserRound : key === "email" ? Mail : LockKeyhole;
@@ -254,7 +273,7 @@ export function UserRegistrationPage({
                   </button>
                   <button type="submit" className="registration-form-submit" disabled={loading}>
                     {loading && <i className="registration-spinner" aria-hidden="true" />}
-                    {loading ? "Creating…" : `Create ${title}`}
+                    {loading ? (invitationMode ? "Sending…" : "Creating…") : invitationMode ? "Send activation email" : `Create ${title}`}
                   </button>
                 </div>
                 {status && <div className="registration-status">{status}</div>}
@@ -265,9 +284,13 @@ export function UserRegistrationPage({
       </div>
       <ConfirmationDialog
         open={confirmCreate}
-        title={`Create this ${title.toLowerCase()} account?`}
-        description={`The ${title.toLowerCase()} will receive the role and permissions defined for this company.`}
-        confirmLabel={`Create ${title}`}
+        title={invitationMode ? `Send ${title.toLowerCase()} activation email?` : `Create this ${title.toLowerCase()} account?`}
+        description={
+          invitationMode
+            ? `The ${title.toLowerCase()} will receive a secure mail to activate the account and set a password.`
+            : `The ${title.toLowerCase()} will receive the role and permissions defined for this company.`
+        }
+        confirmLabel={invitationMode ? "Send email" : `Create ${title}`}
         loading={loading}
         onCancel={() => setConfirmCreate(false)}
         onConfirm={() => void submit()}
