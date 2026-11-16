@@ -81,6 +81,7 @@ class InvitationService:
                 expires_at,
                 request.role_code,
                 invited_name,
+                request.phone_number,
                 provisioned_password_hash,
             )
         except InvitationConflict as error:

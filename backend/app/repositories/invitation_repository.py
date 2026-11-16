@@ -1,7 +1,6 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 from uuid import UUID, uuid4
 
 from psycopg import Cursor
@@ -71,8 +70,14 @@ class InvitationRepository:
 
     @staticmethod
     def _ensure_employee_profile(
-        cursor: Cursor[object], company_id: UUID, user_id: UUID, role_id: UUID, status: str
+        cursor: Cursor[object],
+        company_id: UUID,
+        user_id: UUID,
+        role_id: UUID,
+        status: str,
+        role_code: str,
     ) -> None:
+        employee_code_prefix = "MGR" if role_code == RoleCode.COMPANY_MANAGER else "EMP"
         cursor.execute(
             "SELECT id FROM employees WHERE company_id=%s AND user_id=%s LIMIT 1",
             (company_id, user_id),
@@ -80,8 +85,8 @@ class InvitationRepository:
         row = cursor.fetchone()
         if row:
             cursor.execute(
-                "UPDATE employees SET status=%s,updated_at=NOW() WHERE id=%s",
-                (status, row[0]),
+                "UPDATE employees SET status=%s,role_id=%s,updated_at=NOW() WHERE id=%s",
+                (status, role_id, row[0]),
             )
             return
         cursor.execute(
@@ -92,7 +97,7 @@ class InvitationRepository:
                 uuid4(),
                 company_id,
                 user_id,
-                f"EMP-{str(user_id).replace('-', '')[:8].upper()}",
+                f"{employee_code_prefix}-{str(user_id).replace('-', '')[:8].upper()}",
                 role_id,
                 status,
             ),
@@ -124,6 +129,7 @@ class InvitationRepository:
         expires_at: datetime,
         role_code: str,
         invited_name: str | None = None,
+        phone_number: str | None = None,
         provisioned_password_hash: str | None = None,
     ) -> InvitationRecord:
         self._expire()
@@ -132,14 +138,16 @@ class InvitationRepository:
                 cursor.execute(
                     'SELECT u.id,u.status::text,r.code,u.company_id FROM "users" u '
                     'JOIN "roles" r ON r.id=u.role_id WHERE LOWER(u.email)=LOWER(%s) '
-                    'ORDER BY u.created_at ASC LIMIT 1',
+                    "ORDER BY u.created_at ASC LIMIT 1",
                     (email,),
                 )
                 existing = cursor.fetchone()
                 user_id: UUID | None = None
                 role_id: UUID | None = None
                 if existing is not None:
-                    existing_user_id, existing_status, existing_role_code, existing_company_id = existing
+                    existing_user_id, existing_status, existing_role_code, existing_company_id = (
+                        existing
+                    )
                     reusable = (
                         existing_status == "PENDING_VERIFICATION"
                         and existing_role_code == role_code
@@ -149,24 +157,29 @@ class InvitationRepository:
                         raise InvitationConflict("USER_EXISTS")
                     user_id = existing_user_id
                     role_id = self._role_id(cursor, role_code)
-                    if invited_name:
+                    if invited_name or phone_number:
                         cursor.execute(
-                            'UPDATE "users" SET name=%s,updated_at=NOW() WHERE id=%s',
-                            (invited_name, user_id),
+                            'UPDATE "users" SET name=COALESCE(%s,name),phone_number=COALESCE(%s,phone_number),updated_at=NOW() '
+                            "WHERE id=%s",
+                            (invited_name, phone_number, user_id),
                         )
-                    if role_code == RoleCode.COMPANY_EMPLOYEE:
-                        self._ensure_employee_profile(cursor, company_id, user_id, role_id, "PENDING")
+                    if role_code in {RoleCode.COMPANY_EMPLOYEE, RoleCode.COMPANY_MANAGER}:
+                        self._ensure_employee_profile(
+                            cursor, company_id, user_id, role_id, "PENDING", role_code
+                        )
                     elif role_code == RoleCode.COMPANY_CLIENT:
                         self._link_client_account_if_match(cursor, company_id, user_id, email)
                 elif invited_name:
                     if provisioned_password_hash is None:
-                        raise RuntimeError("Provisioned password hash is required when creating a pending account.")
+                        raise RuntimeError(
+                            "Provisioned password hash is required when creating a pending account."
+                        )
                     role_id = self._role_id(cursor, role_code)
                     user_id = uuid4()
                     cursor.execute(
                         'INSERT INTO "users" '
-                        "(id, name, email, password_hash, status, company_id, role_id, created_at, updated_at) "
-                        "VALUES (%s, %s, LOWER(%s), %s, 'PENDING_VERIFICATION', %s, %s, NOW(), NOW())",
+                        "(id, name, email, password_hash, status, company_id, role_id, phone_number, created_at, updated_at) "
+                        "VALUES (%s, %s, LOWER(%s), %s, 'PENDING_VERIFICATION', %s, %s, %s, NOW(), NOW())",
                         (
                             user_id,
                             invited_name,
@@ -174,6 +187,7 @@ class InvitationRepository:
                             provisioned_password_hash,
                             company_id,
                             role_id,
+                            phone_number,
                         ),
                     )
                     cursor.execute(
@@ -182,8 +196,10 @@ class InvitationRepository:
                         "VALUES (%s, 'USER_CREATED', %s, %s, %s, %s, NOW())",
                         (uuid4(), actor_id, user_id, company_id, role_code),
                     )
-                    if role_code == RoleCode.COMPANY_EMPLOYEE:
-                        self._ensure_employee_profile(cursor, company_id, user_id, role_id, "PENDING")
+                    if role_code in {RoleCode.COMPANY_EMPLOYEE, RoleCode.COMPANY_MANAGER}:
+                        self._ensure_employee_profile(
+                            cursor, company_id, user_id, role_id, "PENDING", role_code
+                        )
                     elif role_code == RoleCode.COMPANY_CLIENT:
                         self._link_client_account_if_match(cursor, company_id, user_id, email)
                 invitation_id = uuid4()
@@ -205,7 +221,9 @@ class InvitationRepository:
                 details: dict[str, object] = {"email": email, "role": role_code}
                 if user_id is not None:
                     details["provisioned_user_id"] = str(user_id)
-                self._audit(cursor, invitation_id, company_id, actor_id, "USER_INVITATION_CREATED", details)
+                self._audit(
+                    cursor, invitation_id, company_id, actor_id, "USER_INVITATION_CREATED", details
+                )
             record = self.get(company_id, invitation_id)
             if record is None:
                 raise RuntimeError("Invitation insert returned no record.")
@@ -213,7 +231,9 @@ class InvitationRepository:
         except UniqueViolation as error:
             raise InvitationConflict("INVITATION_EXISTS") from error
 
-    def find_by_hash(self, token_hash: str) -> tuple[InvitationRecord, UUID, UUID, UUID | None] | None:
+    def find_by_hash(
+        self, token_hash: str
+    ) -> tuple[InvitationRecord, UUID, UUID, UUID | None] | None:
         self._expire()
         with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
             cursor.execute(self._select + "WHERE i.token_hash=%s", (token_hash,))
@@ -290,21 +310,31 @@ class InvitationRepository:
                 row = cursor.fetchone()
                 if not row:
                     return None
-                invitation_id, company_id, email, role_code, provisioned_user_id, status, expires_at = row
+                (
+                    invitation_id,
+                    company_id,
+                    email,
+                    role_code,
+                    provisioned_user_id,
+                    status,
+                    expires_at,
+                ) = row
                 if status != "PENDING" or expires_at <= datetime.now(expires_at.tzinfo):
                     return None
                 role_id = self._role_id(cursor, role_code)
                 if provisioned_user_id is not None:
                     user_id = provisioned_user_id
                     cursor.execute(
-                        'UPDATE "users" SET name=%s,password_hash=%s,status=\'ACTIVE\',updated_at=NOW() '
-                        'WHERE id=%s RETURNING id',
+                        "UPDATE \"users\" SET name=%s,password_hash=%s,status='ACTIVE',updated_at=NOW() "
+                        "WHERE id=%s RETURNING id",
                         (name, password_hash, user_id),
                     )
                     if cursor.fetchone() is None:
                         return None
-                    if role_code == RoleCode.COMPANY_EMPLOYEE:
-                        self._ensure_employee_profile(cursor, company_id, user_id, role_id, "ACTIVE")
+                    if role_code in {RoleCode.COMPANY_EMPLOYEE, RoleCode.COMPANY_MANAGER}:
+                        self._ensure_employee_profile(
+                            cursor, company_id, user_id, role_id, "ACTIVE", role_code
+                        )
                     elif role_code == RoleCode.COMPANY_CLIENT:
                         self._link_client_account_if_match(cursor, company_id, user_id, email)
                 else:
@@ -315,8 +345,10 @@ class InvitationRepository:
                         "VALUES(%s,%s,LOWER(%s),%s,'ACTIVE',%s,%s,NOW(),NOW())",
                         (user_id, name, email, password_hash, company_id, role_id),
                     )
-                    if role_code == RoleCode.COMPANY_EMPLOYEE:
-                        self._ensure_employee_profile(cursor, company_id, user_id, role_id, "ACTIVE")
+                    if role_code in {RoleCode.COMPANY_EMPLOYEE, RoleCode.COMPANY_MANAGER}:
+                        self._ensure_employee_profile(
+                            cursor, company_id, user_id, role_id, "ACTIVE", role_code
+                        )
                     elif role_code == RoleCode.COMPANY_CLIENT:
                         self._link_client_account_if_match(cursor, company_id, user_id, email)
                 cursor.execute(

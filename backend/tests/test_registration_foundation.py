@@ -45,6 +45,7 @@ class FakeRegistrationRepository:
         }
         self.emails: set[str] = set()
         self.password_hashes: dict[str, str] = {}
+        self.phone_numbers: dict[str, str | None] = {}
         self.audit_events: list[tuple[str, UUID, UUID | None, str | None]] = []
 
     def find_actor(self, actor_id: UUID):
@@ -71,10 +72,12 @@ class FakeRegistrationRepository:
         password_hash: str,
         role_code: str,
         company_id: UUID | None,
+        phone_number: str | None,
     ) -> CreatedUserRecord:
         user_id = uuid4()
         self.emails.add(email)
         self.password_hashes[email] = password_hash
+        self.phone_numbers[email] = phone_number
         self.audit_events.append(("USER_CREATED", actor_id, company_id, role_code))
         return CreatedUserRecord(
             user_id,
@@ -133,6 +136,7 @@ class FakeRegistrationRepository:
             password_hash=admin_password_hash,
             role_code="COMPANY_ADMIN",
             company_id=company.id,
+            phone_number=None,
         )
         return company, admin
 
@@ -165,6 +169,13 @@ def user_payload(email: str) -> dict[str, object]:
         "email": email,
         "password": STRONG_PASSWORD,
         "confirm_password": STRONG_PASSWORD,
+    }
+
+
+def tenant_user_payload(email: str) -> dict[str, object]:
+    return {
+        **user_payload(email),
+        "phone_number": "+91 98765 43210",
     }
 
 
@@ -206,20 +217,22 @@ class RegistrationFoundationTests(unittest.TestCase):
     def test_company_admin_creates_employee_and_client(self):
         employee = self.service.create_employee(
             CreateEmployeeRequest(
-                **user_payload("employee@example.com"),
+                **tenant_user_payload("employee@example.com"),
             ),
             COMPANY_ADMIN_ID,
             COMPANY_ID,
         )
         client = self.service.create_client(
             CreateClientRequest(
-                **user_payload("client@example.com"),
+                **tenant_user_payload("client@example.com"),
             ),
             COMPANY_ADMIN_ID,
             COMPANY_ID,
         )
         self.assertEqual(employee.role, "COMPANY_EMPLOYEE")
         self.assertEqual(client.role, "COMPANY_CLIENT")
+        self.assertEqual(self.repository.phone_numbers[employee.email], "+91 98765 43210")
+        self.assertEqual(self.repository.phone_numbers[client.email], "+91 98765 43210")
         self.assertEqual(
             [call[1] for call in self.enforcement.calls], ["MAX_EMPLOYEES", "MAX_CLIENTS"]
         )
@@ -228,7 +241,7 @@ class RegistrationFoundationTests(unittest.TestCase):
         self.enforcement.blocked_code = "MAX_EMPLOYEES"
         with self.assertRaisesRegex(RegistrationError, "Upgrade recommended"):
             self.service.create_employee(
-                CreateEmployeeRequest(**user_payload("limited@example.com")),
+                CreateEmployeeRequest(**tenant_user_payload("limited@example.com")),
                 COMPANY_ADMIN_ID,
                 COMPANY_ID,
             )
@@ -238,11 +251,17 @@ class RegistrationFoundationTests(unittest.TestCase):
         with self.assertRaisesRegex(RegistrationError, "cannot create"):
             self.service.create_client(
                 CreateClientRequest(
-                    **user_payload("client@example.com"),
+                    **tenant_user_payload("client@example.com"),
                 ),
                 EMPLOYEE_ID,
                 COMPANY_ID,
             )
+
+    def test_tenant_registration_requires_phone_number(self):
+        with self.assertRaises(ValidationError):
+            CreateEmployeeRequest(**user_payload("employee@example.com"))
+        with self.assertRaises(ValidationError):
+            CreateClientRequest(**user_payload("client@example.com"))
 
     def test_duplicate_email_is_rejected(self):
         request = CreateDeveloperRequest(**user_payload("duplicate@example.com"))

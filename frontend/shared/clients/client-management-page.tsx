@@ -505,7 +505,9 @@ export function ClientManagementPage({
     if (key === "name" && value.trim().length < 2) return "Enter at least 2 characters.";
     if (key === "name" && value.trim().length > 160) return "Use no more than 160 characters.";
     if (key === "code" && !/^[A-Za-z0-9-]{2,30}$/.test(value.trim())) return "Use 2–30 letters, numbers or hyphens.";
+    if (key === "email" && mode === "create" && !value.trim()) return "Business email is required.";
     if (key === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid email address.";
+    if (key === "phone" && mode === "create" && !value.trim()) return "Mobile number is required.";
     if (key === "phone" && value && !/^\+?[0-9 ()-]{7,24}$/.test(value.trim())) {
       return "Enter a valid phone number using 7–24 characters.";
     }
@@ -576,6 +578,7 @@ export function ClientManagementPage({
             body: JSON.stringify({
               name: form.name.trim(),
               email: form.email.trim(),
+              phone_number: form.phone.trim(),
               role_code: "COMPANY_CLIENT",
             }),
           });
@@ -871,7 +874,7 @@ export function ClientManagementPage({
     { key: "name", label: "Client name", icon: Building2 },
     { key: "code", label: "Client code", icon: Hash },
     { key: "email", label: "Business email", icon: Mail },
-    { key: "phone", label: "Phone", icon: Phone },
+    { key: "phone", label: "Mobile number", icon: Phone },
     { key: "website", label: "Website", icon: Globe2 },
     { key: "address", label: "Address", icon: MapPin, wide: true },
     { key: "city", label: "City", icon: MapPin },

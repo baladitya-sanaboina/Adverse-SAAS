@@ -151,6 +151,7 @@ class RegistrationRepository:
         password_hash: str,
         role_code: str,
         company_id: UUID | None,
+        phone_number: str | None,
     ) -> CreatedUserRecord:
         try:
             with database_pool.connection(timeout=2) as connection:
@@ -162,10 +163,18 @@ class RegistrationRepository:
                     user_id = uuid4()
                     cursor.execute(
                         'INSERT INTO "users" '
-                        "(id, name, email, password_hash, status, company_id, role_id, created_at, updated_at) "
-                        "VALUES (%s, %s, %s, %s, 'PENDING_VERIFICATION', %s, %s, NOW(), NOW()) "
+                        "(id, name, email, password_hash, status, company_id, role_id, phone_number, created_at, updated_at) "
+                        "VALUES (%s, %s, %s, %s, 'PENDING_VERIFICATION', %s, %s, %s, NOW(), NOW()) "
                         "RETURNING id, name, email, status::text, created_at",
-                        (user_id, name, email, password_hash, company_id, role_record[0]),
+                        (
+                            user_id,
+                            name,
+                            email,
+                            password_hash,
+                            company_id,
+                            role_record[0],
+                            phone_number,
+                        ),
                     )
                     user_record = cursor.fetchone()
                     if user_record is None:

@@ -172,7 +172,7 @@ export function EmployeeDirectoryPage() {
       <DashboardHero
         title=""
         highlight="Employees"
-        description="Search and manage your company employee directory."
+        description="Search and manage your company employee and manager directory."
         compact
       />
       <div className="dash-content employee-directory-page">
@@ -180,7 +180,7 @@ export function EmployeeDirectoryPage() {
           {canCreate && (
             <header className="employee-directory-actions">
               <Link href="/employees/new" className="employee-primary-action">
-                <Plus /> Add employee
+                <Plus /> Add employee / manager
               </Link>
             </header>
           )}

@@ -46,19 +46,37 @@ class InvitationServiceTests(unittest.TestCase):
     def test_create_is_tenant_bound_and_stores_only_hash(
         self, send_email: MagicMock, _: MagicMock
     ) -> None:
+        self.repository.create.return_value = InvitationRecord(
+            **{**self.record.__dict__, "role_code": "COMPANY_MANAGER"}
+        )
         response = self.service.create(
-            self.context, InvitationCreate(email=self.record.email, name="Invited Employee")
+            self.context,
+            InvitationCreate(
+                email=self.record.email,
+                name="Invited Employee",
+                phone_number="+91 98765 43210",
+                role_code="COMPANY_MANAGER",
+            ),
         )
         self.assertEqual(response.email, self.record.email)
-        self.assertEqual(response.role_code, "COMPANY_EMPLOYEE")
-        company_id, actor_id, email, token_hash, _, role_code, invited_name, password_hash = (
-            self.repository.create.call_args.args
-        )
+        self.assertEqual(response.role_code, "COMPANY_MANAGER")
+        (
+            company_id,
+            actor_id,
+            email,
+            token_hash,
+            _,
+            role_code,
+            invited_name,
+            phone_number,
+            password_hash,
+        ) = self.repository.create.call_args.args
         self.assertEqual(company_id, self.company_id)
         self.assertEqual(actor_id, self.user_id)
         self.assertEqual(email, self.record.email)
-        self.assertEqual(role_code, "COMPANY_EMPLOYEE")
+        self.assertEqual(role_code, "COMPANY_MANAGER")
         self.assertEqual(invited_name, "Invited Employee")
+        self.assertEqual(phone_number, "+91 98765 43210")
         self.assertTrue(password_hash)
         self.assertEqual(len(token_hash), 64)
         self.assertNotIn(token_hash, send_email.call_args.kwargs["invitation_url"])
@@ -68,7 +86,14 @@ class InvitationServiceTests(unittest.TestCase):
     def test_duplicate_pending_invitation_returns_conflict(self, _: MagicMock) -> None:
         self.repository.create.side_effect = InvitationConflict("INVITATION_EXISTS")
         with self.assertRaises(AuthenticationError) as raised:
-            self.service.create(self.context, InvitationCreate(email=self.record.email, name="Test"))
+            self.service.create(
+                self.context,
+                InvitationCreate(
+                    email=self.record.email,
+                    name="Test",
+                    phone_number="+91 98765 43210",
+                ),
+            )
         self.assertEqual(raised.exception.status_code, 409)
 
     def test_non_admin_cannot_manage_invitations(self) -> None:
@@ -97,7 +122,12 @@ class InvitationServiceTests(unittest.TestCase):
 
     @patch("app.services.invitation_service.hash_password", return_value="secure-hash")
     def test_accept_creates_user_from_invitation_tenant(self, hash_password: MagicMock) -> None:
-        self.repository.find_by_hash.return_value = (self.record, self.company_id, self.user_id, None)
+        self.repository.find_by_hash.return_value = (
+            self.record,
+            self.company_id,
+            self.user_id,
+            None,
+        )
         self.repository.accept.return_value = (
             self.record.email,
             self.record.company_name,

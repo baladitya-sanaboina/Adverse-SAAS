@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Moon, SunMedium } from "lucide-react";
 import { adverseBrand, getBrandLogo } from "@/lib/branding";
+import { appConfig } from "@/lib/config";
 import { AuthCursor, Characters } from "@/components/auth/LoginRegisterPage";
 import { ThemeLoader } from "@/components/loader/theme-loader";
 import "@/styles/auth/base.css";
@@ -20,10 +21,11 @@ type InvitationDetails = {
   email: string;
   company_name: string;
   expires_at: string;
-  role_code: "COMPANY_EMPLOYEE" | "COMPANY_CLIENT";
+  role_code: "COMPANY_EMPLOYEE" | "COMPANY_MANAGER" | "COMPANY_CLIENT";
   login_url: string;
 };
 const THEME_STORAGE_KEY = "loopless-theme";
+const invitationApiBaseUrl = `${appConfig.apiBaseUrl}/company/invitations`;
 
 function passwordError(value: string) {
   if (!value) return "Password is required.";
@@ -73,7 +75,7 @@ export function InvitationAcceptancePage({ token }: { token: string }) {
       return;
     }
     const controller = new AbortController();
-    void fetch(`/api/company/invitations/validate?token=${encodeURIComponent(token)}`, {
+    void fetch(`${invitationApiBaseUrl}/validate?token=${encodeURIComponent(token)}`, {
       cache: "no-store",
       signal: controller.signal,
     })
@@ -115,7 +117,7 @@ export function InvitationAcceptancePage({ token }: { token: string }) {
     setSaving(true);
     setMessage("");
     try {
-      const response = await fetch("/api/company/invitations/accept", {
+      const response = await fetch(`${invitationApiBaseUrl}/accept`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, name: name.trim(), password, confirm_password: confirmation }),
@@ -128,7 +130,12 @@ export function InvitationAcceptancePage({ token }: { token: string }) {
             ? {
                 ...current,
                 login_url: data.login_url,
-                role_code: data.role_code === "COMPANY_CLIENT" ? "COMPANY_CLIENT" : current.role_code,
+                role_code:
+                  data.role_code === "COMPANY_CLIENT" ||
+                  data.role_code === "COMPANY_MANAGER" ||
+                  data.role_code === "COMPANY_EMPLOYEE"
+                    ? data.role_code
+                    : current.role_code,
               }
             : current,
         );
@@ -148,9 +155,11 @@ export function InvitationAcceptancePage({ token }: { token: string }) {
   const continueLabel =
     details?.role_code === "COMPANY_CLIENT"
       ? "Continue to client login"
-      : details?.role_code === "COMPANY_EMPLOYEE"
-        ? "Continue to employee login"
-        : "Continue to login";
+      : details?.role_code === "COMPANY_MANAGER"
+        ? "Continue to manager login"
+        : details?.role_code === "COMPANY_EMPLOYEE"
+          ? "Continue to employee login"
+          : "Continue to login";
 
   return (
     <main className={`interactive-auth ${theme}`}>

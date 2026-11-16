@@ -12,10 +12,12 @@ from app.repositories.registration_repository import (
 )
 from app.schemas.registration import (
     CompanyUserRegistrationRequest,
+    CreateClientRequest,
     CreateCompanyAdminRequest,
     CreateCompanyOnboardingRequest,
     CreateCompanyRequest,
     CreateDeveloperRequest,
+    CreateEmployeeRequest,
 )
 from app.services.authentication_service import AuthenticationError
 from app.services.email_verification_service import (
@@ -51,6 +53,7 @@ class RegistrationRepositoryProtocol(Protocol):
         password_hash: str,
         role_code: str,
         company_id: UUID | None,
+        phone_number: str | None,
     ) -> CreatedUserRecord: ...
 
     def create_company(
@@ -118,8 +121,14 @@ class RegistrationService:
 
     def list_employees(self, actor_id: UUID, company_id: UUID) -> tuple[CreatedUserRecord, ...]:
         self._require_company_admin(actor_id, company_id)
-        return self.repository.list_users(
+        employees = self.repository.list_users(
             role_code=RoleCode.COMPANY_EMPLOYEE.value, company_id=company_id
+        )
+        managers = self.repository.list_users(
+            role_code=RoleCode.COMPANY_MANAGER.value, company_id=company_id
+        )
+        return tuple(
+            sorted((*employees, *managers), key=lambda user: user.created_at, reverse=True)
         )
 
     def list_clients(self, actor_id: UUID, company_id: UUID) -> tuple[CreatedUserRecord, ...]:
@@ -205,7 +214,7 @@ class RegistrationService:
         return self._create_user(request, actor, RoleCode.COMPANY_ADMIN, company.id)
 
     def create_employee(
-        self, request: CompanyUserRegistrationRequest, actor_id: UUID, company_id: UUID
+        self, request: CreateEmployeeRequest, actor_id: UUID, company_id: UUID
     ) -> CreatedUserRecord:
         actor = self._require_company_admin(actor_id, company_id)
         company = self._require_active_company(company_id)
@@ -214,7 +223,7 @@ class RegistrationService:
         return self._create_user(request, actor, RoleCode.COMPANY_EMPLOYEE, company.id)
 
     def create_client(
-        self, request: CompanyUserRegistrationRequest, actor_id: UUID, company_id: UUID
+        self, request: CreateClientRequest, actor_id: UUID, company_id: UUID
     ) -> CreatedUserRecord:
         actor = self._require_company_admin(actor_id, company_id)
         company = self._require_active_company(company_id)
@@ -233,6 +242,11 @@ class RegistrationService:
         company_id: UUID | None,
     ) -> CreatedUserRecord:
         normalized_email = str(request.email).lower()
+        phone_number = (
+            request.phone_number.strip()
+            if isinstance(request, CompanyUserRegistrationRequest) and request.phone_number
+            else None
+        )
         if self.repository.email_exists(normalized_email):
             raise RegistrationError(409, "EMAIL_EXISTS", "Email address is already registered.")
         try:
@@ -243,6 +257,7 @@ class RegistrationService:
                 password_hash=hash_password(request.password.get_secret_value()),
                 role_code=role.value,
                 company_id=company_id,
+                phone_number=phone_number,
             )
             self._start_verification(created.email)
             return created

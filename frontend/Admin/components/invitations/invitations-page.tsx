@@ -1,106 +1,146 @@
 "use client";
+
 import { useCallback, useEffect, useState } from "react";
-import { Mail, MailPlus, RefreshCw, RotateCw, UserRound, X } from "lucide-react";
+import { Mail, MailPlus, Phone, RefreshCw, RotateCw, UserRound, X } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
+import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { ManagementModal } from "@/components/foundation/management-modal";
 import "@/styles/invitations.css";
 
+type InvitationRoleCode = "COMPANY_EMPLOYEE" | "COMPANY_MANAGER" | "COMPANY_CLIENT";
 type Invitation = {
   id: string;
   email: string;
+  role_code: InvitationRoleCode;
   status: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
   expires_at: string;
   created_at: string;
 };
+
+const roleOptions = [
+  { value: "COMPANY_EMPLOYEE", label: "Employee" },
+  { value: "COMPANY_MANAGER", label: "Manager" },
+  { value: "COMPANY_CLIENT", label: "Client" },
+] as const;
+const phonePattern = /^\+?[0-9 ()-]{7,24}$/;
+
+const roleLabel = (roleCode: InvitationRoleCode) =>
+  roleOptions.find((option) => option.value === roleCode)?.label ?? "User";
+
 export function InvitationsPage() {
-  const [items, setItems] = useState<Invitation[]>([]),
-    [loading, setLoading] = useState(true),
-    [saving, setSaving] = useState(false);
-  const [open, setOpen] = useState(false),
-    [name, setName] = useState(""),
-    [nameError, setNameError] = useState(""),
-    [email, setEmail] = useState(""),
-    [emailError, setEmailError] = useState(""),
-    [error, setError] = useState(""),
-    [notice, setNotice] = useState("");
+  const [items, setItems] = useState<Invitation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [roleCode, setRoleCode] = useState<InvitationRoleCode>("COMPANY_EMPLOYEE");
+  const [name, setName] = useState("");
+  const [nameError, setNameError] = useState("");
+  const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [action, setAction] = useState<{ item: Invitation; type: "resend" | "revoke" } | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const r = await fetch("/api/company/invitations", { cache: "no-store" });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail);
-      setItems(d.items);
-    } catch {
-      setError("Unable to load invitations.");
+      const response = await fetch("/api/company/invitations", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail ?? "Unable to load invitations.");
+      setItems(data.items ?? []);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load invitations.");
     } finally {
       setLoading(false);
     }
   }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => clearTimeout(timer);
   }, [load]);
-  async function invite(e: React.FormEvent) {
-    e.preventDefault();
-    const nextNameError = !name.trim() ? "Full name is required." : name.trim().length < 2 ? "Enter at least 2 characters." : "";
-    const validation = !email.trim()
-      ? "Email is required."
-      : !/^\S+@\S+\.\S+$/.test(email.trim())
-        ? "Please enter a valid email address."
+
+  async function invite(event: React.FormEvent) {
+    event.preventDefault();
+    const nextNameError = !name.trim()
+      ? "Full name is required."
+      : name.trim().length < 2
+        ? "Enter at least 2 characters."
         : "";
+    const nextEmailError = !email.trim()
+      ? "Email is required."
+      : /^\S+@\S+\.\S+$/.test(email.trim())
+        ? ""
+        : "Please enter a valid email address.";
+    const nextPhoneError = !phone.trim()
+      ? "Mobile number is required."
+      : phonePattern.test(phone.trim())
+        ? ""
+        : "Please enter a valid mobile number.";
     setNameError(nextNameError);
-    setEmailError(validation);
-    if (nextNameError || validation) {
-      return;
-    }
+    setEmailError(nextEmailError);
+    setPhoneError(nextPhoneError);
+    if (nextNameError || nextEmailError || nextPhoneError) return;
+
     setSaving(true);
     setError("");
     try {
-      const r = await fetch("/api/company/invitations", {
+      const response = await fetch("/api/company/invitations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), email: email.trim() }),
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          phone_number: phone.trim(),
+          role_code: roleCode,
+        }),
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail ?? "Unable to send invitation.");
       setOpen(false);
+      setRoleCode("COMPANY_EMPLOYEE");
       setName("");
       setEmail("");
+      setPhone("");
       setNameError("");
       setEmailError("");
-      setNotice(`Activation email sent to ${d.email}.`);
+      setPhoneError("");
+      setNotice(`Activation email sent to ${data.email}.`);
       await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to send invitation.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to send invitation.");
     } finally {
       setSaving(false);
     }
   }
+
   async function runAction() {
     if (!action) return;
     setSaving(true);
     try {
-      const r = await fetch(`/api/company/invitations/${action.item.id}/${action.type}`, { method: "POST" });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail);
-      setNotice(d.message);
+      const response = await fetch(`/api/company/invitations/${action.item.id}/${action.type}`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail ?? "Unable to update invitation.");
+      setNotice(data.message);
       setAction(null);
       await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to update invitation.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to update invitation.");
     } finally {
       setSaving(false);
     }
   }
+
   return (
     <>
       <DashboardHero
         title=""
         highlight="User Invitations"
-        description="Invite company users through secure, tenant-bound account setup links."
+        description="Invite employees, managers and clients through secure, tenant-bound account setup links."
         compact
       />
       <div className="dash-content">
@@ -113,6 +153,7 @@ export function InvitationsPage() {
                 setError("");
                 setNameError("");
                 setEmailError("");
+                setPhoneError("");
                 setOpen(true);
               }}
             >
@@ -123,48 +164,51 @@ export function InvitationsPage() {
           {error && <div className="invite-error">{error}</div>}
           {loading ? (
             <div className="invite-state">
-              <i /> Loading invitations…
+              <i className="registration-spinner" /> Loading invitations…
             </div>
-          ) : items.length === 0 ? (
+          ) : !items.length ? (
             <div className="invite-state">
-              <MailPlus />
-              <strong>No invitations yet</strong>
-              <span>Invite your first company user.</span>
+              <Mail /> No invitations yet
             </div>
           ) : (
             <div className="registration-table invite-table" role="table">
               <div className="registration-table-head invite-head" role="row">
                 <span>Email</span>
+                <span>Role</span>
                 <span>Status</span>
-                <span>Expires</span>
                 <span>Actions</span>
               </div>
               {items.map((item) => (
                 <article key={item.id} role="row">
-                  <strong>{item.email}</strong>
-                  <em className={item.status.toLowerCase()}>{item.status}</em>
-                  <span>{new Date(item.expires_at).toLocaleDateString()}</span>
-                  <div>
-                    {item.status !== "ACCEPTED" && item.status !== "REVOKED" && (
-                      <button
-                        type="button"
-                        title="Resend invitation"
-                        aria-label={`Resend invitation to ${item.email}`}
-                        onClick={() => setAction({ item, type: "resend" })}
-                      >
-                        <RotateCw />
-                      </button>
-                    )}
-                    {item.status === "PENDING" && (
-                      <button
-                        type="button"
-                        title="Revoke invitation"
-                        aria-label={`Revoke invitation for ${item.email}`}
-                        onClick={() => setAction({ item, type: "revoke" })}
-                      >
-                        <X />
-                      </button>
-                    )}
+                  <div className="registration-row-identity">
+                    <strong>{item.email}</strong>
+                    <small>Expires {new Date(item.expires_at).toLocaleString()}</small>
+                  </div>
+                  <span>{roleLabel(item.role_code)}</span>
+                  <div className="registration-row-meta">
+                    <span>{item.status}</span>
+                    <div className="registration-row-actions">
+                      {item.status !== "ACCEPTED" && item.status !== "REVOKED" && (
+                        <button
+                          type="button"
+                          title="Resend invitation"
+                          aria-label={`Resend invitation to ${item.email}`}
+                          onClick={() => setAction({ item, type: "resend" })}
+                        >
+                          <RotateCw />
+                        </button>
+                      )}
+                      {item.status === "PENDING" && (
+                        <button
+                          type="button"
+                          title="Revoke invitation"
+                          aria-label={`Revoke invitation for ${item.email}`}
+                          onClick={() => setAction({ item, type: "revoke" })}
+                        >
+                          <X />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </article>
               ))}
@@ -200,6 +244,15 @@ export function InvitationsPage() {
         {error && <div className="management-form-message">{error}</div>}
         <form id="invite-user-form" onSubmit={invite}>
           <label className="management-field">
+            <span>Access role</span>
+            <LooplessSelect
+              value={roleCode}
+              onValueChange={(value) => setRoleCode(value as InvitationRoleCode)}
+              ariaLabel="Select invitation role"
+              options={roleOptions}
+            />
+          </label>
+          <label className="management-field">
             <span>Full name</span>
             <span className="management-input">
               <UserRound aria-hidden="true" />
@@ -208,14 +261,20 @@ export function InvitationsPage() {
                 type="text"
                 autoComplete="name"
                 value={name}
-                onChange={(e) => {
-                  const value = e.target.value;
+                onChange={(event) => {
+                  const value = event.target.value;
                   setName(value);
-                  setNameError(!value.trim() ? "Full name is required." : value.trim().length < 2 ? "Enter at least 2 characters." : "");
+                  setNameError(
+                    !value.trim()
+                      ? "Full name is required."
+                      : value.trim().length < 2
+                        ? "Enter at least 2 characters."
+                        : "",
+                  );
                   setError("");
                 }}
                 aria-invalid={Boolean(nameError)}
-                placeholder="Employee full name"
+                placeholder={`${roleLabel(roleCode)} full name`}
               />
             </span>
             {nameError && <small>{nameError}</small>}
@@ -228,8 +287,8 @@ export function InvitationsPage() {
                 type="email"
                 autoComplete="email"
                 value={email}
-                onChange={(e) => {
-                  const value = e.target.value;
+                onChange={(event) => {
+                  const value = event.target.value;
                   setEmail(value);
                   setEmailError(
                     !value.trim()
@@ -241,10 +300,36 @@ export function InvitationsPage() {
                   setError("");
                 }}
                 aria-invalid={Boolean(emailError)}
-                placeholder="employee@company.com"
+                placeholder={`${roleLabel(roleCode).toLowerCase()}@company.com`}
               />
             </span>
             {emailError && <small>{emailError}</small>}
+          </label>
+          <label className="management-field">
+            <span>Mobile number</span>
+            <span className="management-input">
+              <Phone aria-hidden="true" />
+              <input
+                type="tel"
+                autoComplete="tel"
+                value={phone}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setPhone(value);
+                  setPhoneError(
+                    !value.trim()
+                      ? "Mobile number is required."
+                      : phonePattern.test(value.trim())
+                        ? ""
+                        : "Please enter a valid mobile number.",
+                  );
+                  setError("");
+                }}
+                aria-invalid={Boolean(phoneError)}
+                placeholder="+91 98765 43210"
+              />
+            </span>
+            {phoneError && <small>{phoneError}</small>}
           </label>
         </form>
       </ManagementModal>

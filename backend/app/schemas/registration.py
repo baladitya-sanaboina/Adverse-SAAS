@@ -2,7 +2,17 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
+
+PHONE_PATTERN = r"^\+?[0-9 ()-]{7,24}$"
 
 
 class ErrorResponse(BaseModel):
@@ -65,7 +75,12 @@ class CreateCompanyRequest(BaseModel):
 
 
 class CompanyUserRegistrationRequest(UserRegistrationFields):
-    pass
+    phone_number: str | None = Field(default=None, pattern=PHONE_PATTERN)
+
+    @field_validator("phone_number")
+    @classmethod
+    def normalize_phone_number(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
 
 
 class CreateCompanyAdminRequest(CompanyUserRegistrationRequest):
@@ -78,11 +93,11 @@ class CreateCompanyOnboardingRequest(BaseModel):
 
 
 class CreateEmployeeRequest(CompanyUserRegistrationRequest):
-    pass
+    phone_number: str = Field(pattern=PHONE_PATTERN)
 
 
 class CreateClientRequest(CompanyUserRegistrationRequest):
-    pass
+    phone_number: str = Field(pattern=PHONE_PATTERN)
 
 
 class RegisteredUserResponse(BaseModel):
