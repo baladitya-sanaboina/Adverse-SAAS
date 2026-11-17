@@ -104,9 +104,9 @@ case "$mode" in
     log 'Git sync completed. No container rebuild required.'
     ;;
   backend)
-    log 'Rebuilding backend, migrations, and caddy.'
+    log 'Rebuilding backend and migrations only.'
     cd "$compose_dir"
-    run_docker_compose up -d --build migrations backend caddy
+    run_docker_compose up -d --build migrations backend
     ;;
   full)
     log 'Rebuilding full production stack.'
