@@ -7,8 +7,8 @@ import "@/styles/auth/loopless-purple-theme.css";
 export default async function VerifyEmailPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string; email?: string }>;
+  searchParams: Promise<{ token?: string; email?: string; otp?: string }>;
 }) {
-  const { token, email } = await searchParams;
-  return <EmailVerificationPage token={token} email={email} />;
+  const { token, email, otp } = await searchParams;
+  return <EmailVerificationPage token={token} email={email} verificationOtp={otp} />;
 }

@@ -75,7 +75,11 @@ class EmailVerificationService:
             minutes=settings.email_verification_expiry_minutes
         )
         self.repository.create_token(user.id, verification_otp_hash(user.id, otp), expires_at)
-        self.email_sender.send_verification(user.email, otp)
+        self.email_sender.send_verification(
+            user.email,
+            otp,
+            verification_url=settings.email_verification_code_url(user.role, user.email, otp),
+        )
         return VerificationEmailResponse()
 
     def start_for_created_user(self, email: str) -> None:

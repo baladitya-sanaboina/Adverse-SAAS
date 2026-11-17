@@ -15,13 +15,22 @@ type ThemeMode = "dark" | "light";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const THEME_STORAGE_KEY = "loopless-theme";
 
-export default function EmailVerificationPage({ token, email: initialEmail = "" }: { token?: string; email?: string }) {
+export default function EmailVerificationPage({
+  token,
+  email: initialEmail = "",
+  verificationOtp = "",
+}: {
+  token?: string;
+  email?: string;
+  verificationOtp?: string;
+}) {
   const router = useRouter();
+  const hasAutoVerification = Boolean(token || (initialEmail && verificationOtp));
   const [theme, setTheme] = useState<ThemeMode>("dark");
   const [themeReady, setThemeReady] = useState(false);
-  const [state, setState] = useState<VerificationState>(token ? "verifying" : "waiting");
+  const [state, setState] = useState<VerificationState>(hasAutoVerification ? "verifying" : "waiting");
   const [message, setMessage] = useState(
-    token
+    hasAutoVerification
       ? "Verifying your secure link…"
       : "We sent a 6-digit verification code to your email. Enter it below to activate your account.",
   );
@@ -52,20 +61,30 @@ export default function EmailVerificationPage({ token, email: initialEmail = "" 
   }, []);
 
   useEffect(() => {
-    if (!token || verifiedToken.current === token) return;
-    verifiedToken.current = token;
-    void fetch(`/api/auth/verify-email?token=${encodeURIComponent(token)}`, { cache: "no-store" })
-      .then(async (response) => {
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          setState(data.code === "VERIFICATION_TOKEN_EXPIRED" ? "expired" : "failed");
-          throw new Error(data.detail ?? "Email verification failed.");
-        }
-        setState("success");
-        setMessage(data.message);
-      })
-      .catch((error: Error) => setMessage(error.message));
-  }, [token]);
+    const autoVerificationKey = token
+      ? `token:${token}`
+      : initialEmail && verificationOtp
+        ? `otp:${initialEmail}:${verificationOtp}`
+        : "";
+    if (!autoVerificationKey || verifiedToken.current === autoVerificationKey) return;
+    verifiedToken.current = autoVerificationKey;
+    void (async () => {
+      const response = token
+        ? await fetch(`/api/auth/verify-email?token=${encodeURIComponent(token)}`, { cache: "no-store" })
+        : await fetch("/api/auth/verify-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: initialEmail.trim(), otp: verificationOtp.trim() }),
+          });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setState(data.code === "VERIFICATION_TOKEN_EXPIRED" ? "expired" : "failed");
+        throw new Error(data.detail ?? "Email verification failed.");
+      }
+      setState("success");
+      setMessage(data.message);
+    })().catch((error: Error) => setMessage(error.message));
+  }, [token, initialEmail, verificationOtp]);
 
   function toggleTheme() {
     const nextTheme = theme === "dark" ? "light" : "dark";

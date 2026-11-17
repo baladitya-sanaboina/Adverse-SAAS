@@ -2,6 +2,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from app.core.settings import settings
 from app.repositories.email_verification_repository import (
     VerificationTokenRecord,
     VerificationUserRecord,
@@ -59,10 +60,12 @@ class FakeEmailSender:
     def __init__(self):
         self.email = ""
         self.code = ""
+        self.url = None
 
-    def send_verification(self, email, verification_code):
+    def send_verification(self, email, verification_code, *, verification_url=None):
         self.email = email
         self.code = verification_code
+        self.url = verification_url
 
 
 class EmailVerificationTests(unittest.TestCase):
@@ -78,6 +81,12 @@ class EmailVerificationTests(unittest.TestCase):
     def test_send_stores_only_hash_and_delivers_code(self):
         code = self.issue_code()
         self.assertEqual(self.sender.email, "pending@example.com")
+        self.assertEqual(
+            self.sender.url,
+            settings.email_verification_code_url(
+                self.repository.user.role, self.repository.user.email, code
+            ),
+        )
         self.assertEqual(
             self.repository.token_hash, verification_otp_hash(self.repository.user.id, code)
         )

@@ -21,9 +21,15 @@ class EmailTemplateTests(unittest.TestCase):
     def test_verification_email_has_plain_and_branded_html_parts(self) -> None:
         service = EmailService()
         code = "482951"
+        verification_url = "https://employee.adverseindia.com/verify-email?email=user%40example.com&otp=482951"
         with patch.object(service, "_send") as send:
-            service.send_verification("user@example.com", code)
-        self.assert_code_message(send.call_args.args[0], code, "Verify your email address")
+            service.send_verification("user@example.com", code, verification_url=verification_url)
+        message = send.call_args.args[0]
+        self.assert_code_message(message, code, "Verify your email address")
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        html = message.get_body(preferencelist=("html",)).get_content()
+        self.assertIn(verification_url, plain)
+        self.assertIn(verification_url.replace("&", "&amp;"), html)
 
     @patch.object(settings, "smtp_host", "mailpit")
     def test_password_reset_email_has_plain_and_branded_html_parts(self) -> None:

@@ -96,7 +96,10 @@ def branded_code_email_html(
     description: str,
     code: str,
     expiry_minutes: int,
+    action_label: str | None = None,
+    action_url: str | None = None,
 ) -> str:
+    safe_url = escape(action_url, quote=True) if action_url else None
     return f"""<!doctype html>
 <html lang="en">
   <head>
@@ -136,6 +139,23 @@ def branded_code_email_html(
                   <div style="padding:13px 15px;border:1px solid #e5deed;border-radius:12px;background:#faf8fc;color:#5f5668;font-size:13px;line-height:1.5;">
                     This secure code expires in <strong style="color:#0876ED;">{expiry_minutes} minutes</strong>.
                   </div>
+                  {f'''<div style="margin-top:22px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="border-radius:11px;background:#0876ED;">
+                          <a href="{safe_url}" style="display:inline-block;padding:14px 24px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:800;">
+                            {escape(action_label or 'Open verification page')}
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    <div style="margin:18px 0 0;color:#67788E;font-size:12px;line-height:1.6;">
+                      You can also tap the button above to open the correct workspace confirmation page automatically.
+                    </div>
+                    <div style="margin:12px 0 0;overflow-wrap:anywhere;word-break:break-all;color:#0876ED;font-size:11px;line-height:1.6;">
+                      <a href="{safe_url}" style="color:#0876ED;text-decoration:underline;">{safe_url}</a>
+                    </div>
+                  </div>''' if safe_url else ''}
                 </div>
               </td>
             </tr>
@@ -158,7 +178,9 @@ class PasswordResetEmailSender(Protocol):
 
 
 class VerificationEmailSender(Protocol):
-    def send_verification(self, email: str, verification_code: str) -> None: ...
+    def send_verification(
+        self, email: str, verification_code: str, *, verification_url: str | None = None
+    ) -> None: ...
 
 
 class EmailService:
@@ -286,7 +308,9 @@ class EmailService:
         )
         self._send(message)
 
-    def send_verification(self, email: str, verification_code: str) -> None:
+    def send_verification(
+        self, email: str, verification_code: str, *, verification_url: str | None = None
+    ) -> None:
         if not settings.smtp_host:
             logger.warning(
                 "Development email verification code for %s: %s", email, verification_code
@@ -296,10 +320,18 @@ class EmailService:
         message["Subject"] = "Verify your Adverse email"
         message["From"] = settings.smtp_from_email or settings.smtp_username
         message["To"] = email
-        message.set_content(
-            "Use this 6-digit code to activate your Adverse account. "
-            f"It expires in {settings.email_verification_expiry_minutes} minutes.\n\n{verification_code}"
-        )
+        if verification_url:
+            message.set_content(
+                "Use this 6-digit code to activate your Adverse account, or open the secure "
+                f"verification link for your workspace: {verification_url}\n\n"
+                f"This code expires in {settings.email_verification_expiry_minutes} minutes.\n\n"
+                f"{verification_code}"
+            )
+        else:
+            message.set_content(
+                "Use this 6-digit code to activate your Adverse account. "
+                f"It expires in {settings.email_verification_expiry_minutes} minutes.\n\n{verification_code}"
+            )
         message.add_alternative(
             branded_code_email_html(
                 eyebrow="Welcome to Adverse",
@@ -310,6 +342,8 @@ class EmailService:
                 ),
                 code=verification_code,
                 expiry_minutes=settings.email_verification_expiry_minutes,
+                action_label="Verify your email",
+                action_url=verification_url,
             ),
             subtype="html",
         )

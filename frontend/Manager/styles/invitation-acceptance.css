@@ -1,0 +1,63 @@
+.invitation-acceptance-card {
+  max-width: 1040px;
+}
+
+.invitation-acceptance-form {
+  overflow-y: auto;
+}
+
+.invitation-acceptance-form input[readonly] {
+  cursor: not-allowed;
+  color: var(--auth-muted, #766f7f);
+  background: color-mix(in srgb, var(--auth-surface, #fff) 86%, #76579a 14%);
+}
+
+.invitation-validation-state,
+.invitation-success {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 32px 16px;
+  color: var(--auth-muted, #766f7f);
+  text-align: center;
+  font-size: 0.82rem;
+}
+
+.invitation-validation-state i {
+  width: 25px;
+  height: 25px;
+  border: 3px solid #76579a;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: invitation-spin 0.7s linear infinite;
+}
+
+.invitation-success svg {
+  width: 48px;
+  height: 48px;
+  color: #5b9b77;
+}
+
+.invitation-success strong {
+  color: var(--auth-text, #241e29);
+  font-size: 1.05rem;
+}
+
+.invitation-success .interactive-submit {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+@keyframes invitation-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .invitation-acceptance-form {
+    overflow: visible;
+  }
+}

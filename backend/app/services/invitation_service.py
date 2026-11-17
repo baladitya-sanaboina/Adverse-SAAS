@@ -95,7 +95,7 @@ class InvitationService:
         email_service.send_invitation(
             record.email,
             company_name=record.company_name,
-            invitation_url=settings.invitation_url(token),
+            invitation_url=settings.invitation_url(record.role_code, token),
         )
         return self._response(record)
 
@@ -149,7 +149,7 @@ class InvitationService:
         email_service.send_invitation(
             record.email,
             company_name=record.company_name,
-            invitation_url=settings.invitation_url(token),
+            invitation_url=settings.invitation_url(record.role_code, token),
         )
         return InvitationActionResponse(message="Invitation resent successfully.")
 

@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import Literal, Self
+from urllib.parse import quote
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -120,15 +121,17 @@ class Settings(BaseSettings):
     def email_verification_url(self, role: str, token: str) -> str:
         return f"{self.role_origin(role, 'email verification')}/verify-email?token={token}"
 
+    def email_verification_code_url(self, role: str, email: str, otp: str) -> str:
+        origin = self.role_origin(role, "email verification")
+        return (
+            f"{origin}/verify-email?email={quote(email, safe='')}&otp={quote(otp, safe='')}"
+        )
+
     def login_url(self, role: str) -> str:
         return f"{self.role_origin(role, 'login')}/login"
 
-    def invitation_url(self, token: str) -> str:
-        origins = self.allowed_origins
-        if not origins:
-            raise ValueError("At least one CORS origin is required for invitations")
-        origin = origins[0]
-        return f"{origin}/invitations/accept?token={token}"
+    def invitation_url(self, role: str, token: str) -> str:
+        return f"{self.role_origin(role, 'invitation')}/invitations/accept?token={token}"
 
 
 @lru_cache

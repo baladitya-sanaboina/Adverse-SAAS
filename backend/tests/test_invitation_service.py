@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
+from app.core.settings import settings
 from app.repositories.invitation_repository import InvitationConflict, InvitationRecord
 from app.schemas.authentication import AuthContext
 from app.schemas.invitations import InvitationAcceptRequest, InvitationCreate
@@ -79,8 +80,34 @@ class InvitationServiceTests(unittest.TestCase):
         self.assertEqual(phone_number, "+91 98765 43210")
         self.assertTrue(password_hash)
         self.assertEqual(len(token_hash), 64)
+        expected_origin = settings.role_origin("COMPANY_MANAGER", "invitation")
+        self.assertTrue(
+            send_email.call_args.kwargs["invitation_url"].startswith(
+                f"{expected_origin}/invitations/accept?token="
+            )
+        )
         self.assertNotIn(token_hash, send_email.call_args.kwargs["invitation_url"])
         send_email.assert_called_once()
+
+    @patch("app.services.invitation_service.validate_user_action_access", return_value=True)
+    @patch("app.services.invitation_service.email_service.send_invitation")
+    def test_resend_keeps_role_specific_acceptance_domain(
+        self, send_email: MagicMock, _: MagicMock
+    ) -> None:
+        invitation_id = uuid4()
+        self.repository.resend.return_value = InvitationRecord(
+            **{**self.record.__dict__, "id": invitation_id, "role_code": "COMPANY_CLIENT"}
+        )
+
+        response = self.service.resend(self.context, invitation_id)
+
+        self.assertEqual(response.message, "Invitation resent successfully.")
+        expected_origin = settings.role_origin("COMPANY_CLIENT", "invitation")
+        self.assertTrue(
+            send_email.call_args.kwargs["invitation_url"].startswith(
+                f"{expected_origin}/invitations/accept?token="
+            )
+        )
 
     @patch("app.services.invitation_service.validate_user_action_access", return_value=True)
     def test_duplicate_pending_invitation_returns_conflict(self, _: MagicMock) -> None:
