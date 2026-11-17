@@ -106,7 +106,8 @@ case "$mode" in
   backend)
     log 'Rebuilding backend and migrations only.'
     cd "$compose_dir"
-    run_docker_compose up -d --build migrations backend
+    run_docker_compose build migrations backend
+    run_docker_compose up -d migrations backend
     ;;
   full)
     log 'Rebuilding full production stack.'
