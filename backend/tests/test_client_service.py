@@ -10,6 +10,7 @@ from app.repositories.client_repository import (
     ClientActivityRecord,
     ClientConflict,
     ClientContactRecord,
+    ClientDeletionError,
     ClientFeedbackRecord,
     ClientNoteRecord,
     ClientRecord,
@@ -97,6 +98,8 @@ class FakeClientRepository:
         self.updated_client: dict[str, object] | None = None
         self.updated_contact: dict[str, object] | None = None
         self.filters: ClientListFilters | None = None
+        self.delete_error: str | None = None
+        self.deleted_client_id: UUID | None = None
         self.client = ClientRecord(
             self.client_id,
             self.company_id,
@@ -206,6 +209,14 @@ class FakeClientRepository:
             raise ClientConflict(self.conflict)
         self.updated_client = values
         return self.get(company_id, client_id)
+
+    def delete_pending(self, company_id: UUID, client_id: UUID):
+        if self.delete_error:
+            raise ClientDeletionError(self.delete_error)
+        if self.reference_missing or company_id != self.company_id or client_id != self.client_id:
+            return None
+        self.deleted_client_id = client_id
+        return self.client.name, self.client.email
 
     def list_contacts(self, company_id: UUID, client_id: UUID) -> tuple[ClientContactRecord, ...]:
         if self.reference_missing or company_id != self.company_id or client_id != self.client_id:
@@ -414,6 +425,23 @@ class ClientServiceTests(unittest.TestCase):
             ClientUpdate(code="cli-002", status="INACTIVE"),
         )
         self.assertEqual(self.repository.updated_client, {"code": "CLI-002", "status": "INACTIVE"})
+
+    @patch("app.services.client_service.validate_user_action_access", return_value=True)
+    def test_delete_pending_client(self, _: object) -> None:
+        self.service.delete(self.context, self.repository.client_id)
+        self.assertEqual(self.repository.deleted_client_id, self.repository.client_id)
+
+    @patch("app.services.client_service.validate_user_action_access", return_value=True)
+    def test_delete_rejects_active_or_linked_client(self, _: object) -> None:
+        self.repository.delete_error = "ACTIVE_ACCOUNT"
+        with self.assertRaises(AuthenticationError) as active_error:
+            self.service.delete(self.context, self.repository.client_id)
+        self.assertEqual(active_error.exception.code, "CLIENT_DELETE_PENDING_ONLY")
+
+        self.repository.delete_error = "IN_USE"
+        with self.assertRaises(AuthenticationError) as linked_error:
+            self.service.delete(self.context, self.repository.client_id)
+        self.assertEqual(linked_error.exception.code, "CLIENT_IN_USE")
 
     @patch("app.services.client_service.validate_user_action_access", return_value=True)
     def test_duplicate_client_code_returns_conflict(self, _: object) -> None:

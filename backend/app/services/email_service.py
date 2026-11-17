@@ -380,25 +380,65 @@ class EmailService:
         )
         self._send(message)
 
-    def send_invitation(self, email: str, *, company_name: str, invitation_url: str) -> None:
+    def send_invitation(
+        self,
+        email: str,
+        *,
+        company_name: str,
+        invitation_url: str,
+        login_email: str | None = None,
+    ) -> None:
+        login_identity = login_email or email
         message = EmailMessage()
         message["Subject"] = f"Set up your {company_name} access on Adverse"
         message["From"] = settings.smtp_from_email or settings.smtp_username
         message["To"] = email
         message.set_content(
-            f"Your {company_name} access for {email} is almost ready. "
-            f"Use this secure link to set your password and activate the account: {invitation_url}"
+            f"Your {company_name} access is almost ready. "
+            f"Use this secure link to set your password and activate the Adverse login {login_identity}: {invitation_url}"
         )
         message.add_alternative(
             branded_email_html(
                 eyebrow="Account setup",
                 title=f"Set up your {company_name} access",
                 description=(
-                    f"Your company administrator prepared access for {email} in {company_name}. "
+                    f"Your company administrator prepared access for the Adverse login {login_identity} in {company_name}. "
                     "Set your password to activate the account and continue."
                 ),
                 action_label="Set up access",
                 action_url=invitation_url,
+                expiry_minutes=settings.invitation_expiry_hours * 60,
+            ),
+            subtype="html",
+        )
+        self._send(message)
+
+    def send_account_ready(
+        self,
+        email: str,
+        *,
+        company_name: str,
+        login_email: str,
+        login_url: str,
+    ) -> None:
+        message = EmailMessage()
+        message["Subject"] = f"Your {company_name} Adverse login is ready"
+        message["From"] = settings.smtp_from_email or settings.smtp_username
+        message["To"] = email
+        message.set_content(
+            f"Your {company_name} account is ready. Sign in with {login_email} at {login_url}. "
+            "Use the password you created during setup; for security, it is never included in email."
+        )
+        message.add_alternative(
+            branded_email_html(
+                eyebrow="Account ready",
+                title=f"Your {company_name} login is ready",
+                description=(
+                    f"Your Adverse login is {login_email}. Use the password you created during setup and continue to your workspace. "
+                    "For security, your password is never included in email."
+                ),
+                action_label="Open workspace login",
+                action_url=login_url,
                 expiry_minutes=settings.invitation_expiry_hours * 60,
             ),
             subtype="html",

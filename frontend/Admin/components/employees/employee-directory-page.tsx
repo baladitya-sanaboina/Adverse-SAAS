@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Eye, Pencil, Plus, Power, RefreshCw, RotateCcw, Search, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, Pencil, Plus, Power, RefreshCw, RotateCcw, Search, Trash2, UserRound } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
@@ -14,6 +14,7 @@ type Employee = {
   id: string;
   user_name: string;
   user_email: string;
+  user_status: string;
   employee_code: string;
   department_name: string | null;
   branch_name: string | null;
@@ -43,6 +44,7 @@ export function EmployeeDirectoryPage() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [statusEmployee, setStatusEmployee] = useState<Employee | null>(null);
+  const [deleteEmployee, setDeleteEmployee] = useState<Employee | null>(null);
 
   const query = useMemo(
     () => ({
@@ -76,11 +78,13 @@ export function EmployeeDirectoryPage() {
   useEffect(() => {
     const invite = searchParams.get("invite");
     const email = searchParams.get("email");
+    const login = searchParams.get("login");
     if (invite !== "sent" || !email) return;
-    setNotice(`Activation email sent to ${email}.`);
+    setNotice(login ? `Activation email sent to ${email}. Login email: ${login}.` : `Activation email sent to ${email}.`);
     const next = new URLSearchParams(searchParams.toString());
     next.delete("invite");
     next.delete("email");
+    next.delete("login");
     router.replace(`${pathname}${next.size ? `?${next}` : ""}`, { scroll: false });
   }, [pathname, router, searchParams]);
 
@@ -125,6 +129,9 @@ export function EmployeeDirectoryPage() {
   const canEdit = currentUser?.permissions.some(
     (permission) => permission.module === "EMPLOYEES" && permission.action === "EDIT",
   );
+  const canDelete = currentUser?.permissions.some(
+    (permission) => permission.module === "EMPLOYEES" && permission.action === "DELETE",
+  );
   const hasActiveFilters = Boolean(query.search || query.role || query.status);
   const start = data && data.total ? (data.page - 1) * data.page_size + 1 : 0;
   const end = data ? Math.min(data.page * data.page_size, data.total) : 0;
@@ -162,6 +169,28 @@ export function EmployeeDirectoryPage() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to update employee status.");
       setStatusEmployee(null);
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function removeEmployee() {
+    if (!deleteEmployee) return;
+    setUpdating(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/company/employees/${deleteEmployee.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(typeof data?.detail === "string" ? data.detail : "Unable to delete employee.");
+      }
+      setNotice(`${deleteEmployee.user_name} deleted successfully.`);
+      setDeleteEmployee(null);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to delete employee.");
+      setDeleteEmployee(null);
     } finally {
       setUpdating(false);
     }
@@ -302,6 +331,17 @@ export function EmployeeDirectoryPage() {
                         <Power />
                       </button>
                     )}
+                    {canDelete && (employee.user_status === "PENDING_VERIFICATION" || employee.status === "PENDING") && (
+                      <button
+                        type="button"
+                        className="danger"
+                        aria-label={`Delete ${employee.user_name}`}
+                        title="Delete pending employee"
+                        onClick={() => setDeleteEmployee(employee)}
+                      >
+                        <Trash2 />
+                      </button>
+                    )}
                   </div>
                 </article>
               ))}
@@ -354,6 +394,16 @@ export function EmployeeDirectoryPage() {
         loading={updating}
         onCancel={() => setStatusEmployee(null)}
         onConfirm={() => void updateEmployeeStatus()}
+      />
+      <ConfirmationDialog
+        open={Boolean(deleteEmployee)}
+        title="Delete this pending employee?"
+        description="This removes the pending employee profile, invitation and login before the invite is accepted."
+        confirmLabel="Delete employee"
+        tone="danger"
+        loading={updating}
+        onCancel={() => setDeleteEmployee(null)}
+        onConfirm={() => void removeEmployee()}
       />
     </>
   );

@@ -11,6 +11,7 @@ type RoleCode = "COMPANY_EMPLOYEE" | "COMPANY_MANAGER";
 type Fields = {
   name: string;
   email: string;
+  notification_email: string;
   phone_number: string;
   password: string;
   confirm_password: string;
@@ -18,7 +19,14 @@ type Fields = {
 
 type RegisteredUser = { id: string; name: string; email: string; status: string };
 
-const empty: Fields = { name: "", email: "", phone_number: "", password: "", confirm_password: "" };
+const empty: Fields = {
+  name: "",
+  email: "",
+  notification_email: "",
+  phone_number: "",
+  password: "",
+  confirm_password: "",
+};
 const phonePattern = /^\+?[0-9 ()-]{7,24}$/;
 const teamRoleOptions = [
   { value: "COMPANY_EMPLOYEE", label: "Employee" },
@@ -54,13 +62,16 @@ const validationErrorsFrom = (value: unknown) => {
 const fieldLabel = (key: keyof Fields) => {
   if (key === "confirm_password") return "Confirm password";
   if (key === "phone_number") return "Mobile number";
+  if (key === "notification_email") return "Notification email";
   return key[0].toUpperCase() + key.slice(1);
 };
 
 const validate = (key: keyof Fields, value: string, values: Fields) => {
   if (!value.trim()) return "This field is required.";
   if (key === "name" && value.trim().length < 2) return "Enter at least 2 characters.";
-  if (key === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid email address.";
+  if (["email", "notification_email"].includes(key) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    return "Enter a valid email address.";
+  }
   if (key === "phone_number" && !phonePattern.test(value.trim())) {
     return "Enter a valid mobile number using 7–24 characters.";
   }
@@ -108,7 +119,7 @@ export function UserRegistrationPage({
 
   const currentTitle = invitationMode ? (roleCode === "COMPANY_MANAGER" ? "Manager" : "Employee") : baseTitle;
   const formFields = invitationMode
-    ? (["name", "email", "phone_number"] as (keyof Fields)[])
+    ? (["name", "email", "notification_email", "phone_number"] as (keyof Fields)[])
     : (["name", "email", "phone_number", "password", "confirm_password"] as (keyof Fields)[]);
 
   const returnToList = () => (returnHref ? router.push(returnHref) : setMode("list"));
@@ -173,6 +184,7 @@ export function UserRegistrationPage({
             ? {
                 name: values.name.trim(),
                 email: values.email.trim(),
+                notification_email: values.notification_email.trim(),
                 phone_number: values.phone_number.trim(),
                 role_code: roleCode,
               }
@@ -195,16 +207,22 @@ export function UserRegistrationPage({
         }
         throw new Error(messageFrom(data, `${currentTitle} ${invitationMode ? "invitation" : "creation"} failed.`));
       }
+      const recipientEmail = invitationMode
+        ? (typeof data.notification_email === "string" && data.notification_email) || values.notification_email.trim() || data.email
+        : data.email;
+      const loginEmail = invitationMode ? data.email || values.email.trim() : data.email;
       setStatus(
         invitationMode
-          ? `Activation email sent to ${data.email}.`
+          ? `Activation email sent to ${recipientEmail}. Login email: ${loginEmail}.`
           : `${currentTitle} ${data.email} created successfully.`,
       );
       setValues(empty);
       setRoleCode("COMPANY_EMPLOYEE");
       setConfirmCreate(false);
       if (invitationMode && returnHref) {
-        router.push(`${returnHref}?invite=sent&email=${encodeURIComponent(data.email)}`);
+        router.push(
+          `${returnHref}?invite=sent&email=${encodeURIComponent(recipientEmail)}&login=${encodeURIComponent(loginEmail)}`,
+        );
         return;
       }
       await loadList();
@@ -314,7 +332,7 @@ export function UserRegistrationPage({
                   </h2>
                   <p>
                     {invitationMode
-                      ? `Create the ${currentTitle.toLowerCase()} profile with contact details and send a secure email so they can set their own password.`
+                      ? `Create the ${currentTitle.toLowerCase()} profile with an internal login email, contact details and a notification email so they can set their own password.`
                       : "Add the account details below. Access is controlled by the company role and permissions."}
                   </p>
                 </div>
@@ -335,24 +353,36 @@ export function UserRegistrationPage({
                   const passwordField = key === "password" || key === "confirm_password";
                   const visible = passwordField ? visiblePasswords[key] : false;
                   const FieldIcon =
-                    key === "name" ? UserRound : key === "email" ? Mail : key === "phone_number" ? Phone : LockKeyhole;
+                    key === "name"
+                      ? UserRound
+                      : key === "phone_number"
+                        ? Phone
+                        : key === "email" || key === "notification_email"
+                          ? Mail
+                          : LockKeyhole;
                   return (
                     <label key={key}>
-                      <span className="registration-field-label">{fieldLabel(key)}</span>
+                      <span className="registration-field-label">
+                        {invitationMode && key === "email"
+                          ? "Internal login email"
+                          : invitationMode && key === "notification_email"
+                            ? "Personal / notification email"
+                            : fieldLabel(key)}
+                      </span>
                       <span className="registration-input-shell">
                         <FieldIcon aria-hidden="true" />
                         <input
                           type={
                             passwordField && !visible
                               ? "password"
-                              : key === "email"
+                              : key === "email" || key === "notification_email"
                                 ? "email"
                                 : key === "phone_number"
                                   ? "tel"
                                   : "text"
                           }
                           autoComplete={
-                            key === "email"
+                            key === "email" || key === "notification_email"
                               ? "email"
                               : key === "phone_number"
                                 ? "tel"
@@ -364,7 +394,9 @@ export function UserRegistrationPage({
                             key === "name"
                               ? `${currentTitle} full name`
                               : key === "email"
-                                ? "name@company.com"
+                                ? `${currentTitle.toLowerCase()}@adverseindia.com`
+                                : key === "notification_email"
+                                  ? "person@gmail.com"
                                 : key === "phone_number"
                                   ? "+91 98765 43210"
                                   : key === "confirm_password"
@@ -420,7 +452,7 @@ export function UserRegistrationPage({
         }
         description={
           invitationMode
-            ? `The ${currentTitle.toLowerCase()} will receive a secure mail to activate the account and set a password.`
+            ? `The ${currentTitle.toLowerCase()} will receive a secure mail at the notification address to activate the internal login and set a password.`
             : `The ${currentTitle.toLowerCase()} will receive the role and permissions defined for this company.`
         }
         confirmLabel={invitationMode ? "Send email" : `Create ${currentTitle}`}

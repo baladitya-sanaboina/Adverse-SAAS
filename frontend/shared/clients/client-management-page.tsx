@@ -93,6 +93,7 @@ type Form = {
   name: string;
   code: string;
   email: string;
+  portal_login_email: string;
   phone: string;
   website: string;
   address: string;
@@ -157,6 +158,7 @@ const empty: Form = {
   name: "",
   code: "",
   email: "",
+  portal_login_email: "",
   phone: "",
   website: "",
   address: "",
@@ -297,6 +299,7 @@ export function ClientManagementPage({
   const [pricingForm, setPricingForm] = useState<PricingForm>(emptyPricingForm);
   const [pricingFormError, setPricingFormError] = useState("");
   const [pricingSaving, setPricingSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
 
   const query = useMemo(() => {
     const params = new URLSearchParams({ page: String(page), page_size: "20" });
@@ -391,6 +394,7 @@ export function ClientManagementPage({
           name: clientData.name,
           code: clientData.code,
           email: clientData.email ?? "",
+          portal_login_email: clientData.account_email ?? "",
           phone: clientData.phone ?? "",
           website: clientData.website ?? "",
           address: clientData.address,
@@ -476,6 +480,7 @@ export function ClientManagementPage({
         name: data.name,
         code: data.code,
         email: data.email ?? "",
+        portal_login_email: data.account_email ?? "",
         phone: data.phone ?? "",
         website: data.website ?? "",
         address: data.address,
@@ -507,6 +512,8 @@ export function ClientManagementPage({
     if (key === "code" && !/^[A-Za-z0-9-]{2,30}$/.test(value.trim())) return "Use 2–30 letters, numbers or hyphens.";
     if (key === "email" && mode === "create" && !value.trim()) return "Business email is required.";
     if (key === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid email address.";
+    if (key === "portal_login_email" && mode === "create" && !value.trim()) return "Internal login email is required.";
+    if (key === "portal_login_email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid email address.";
     if (key === "phone" && mode === "create" && !value.trim()) return "Mobile number is required.";
     if (key === "phone" && value && !/^\+?[0-9 ()-]{7,24}$/.test(value.trim())) {
       return "Enter a valid phone number using 7–24 characters.";
@@ -570,23 +577,25 @@ export function ClientManagementPage({
         throw new Error(messageFrom(data, "Unable to save client."));
       }
       let nextNotice = `Client ${editing ? "updated" : "created"} successfully.`;
-      if (!editing && form.email.trim() && !data.account_user_id) {
+      if (!editing && form.portal_login_email.trim()) {
         try {
           const inviteResponse = await fetch("/api/company/invitations", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               name: form.name.trim(),
-              email: form.email.trim(),
+              email: form.portal_login_email.trim(),
+              notification_email: form.email.trim(),
               phone_number: form.phone.trim(),
               role_code: "COMPANY_CLIENT",
+              client_id: data.id,
             }),
           });
           const inviteData = await inviteResponse.json();
           if (!inviteResponse.ok) {
             throw new Error(messageFrom(inviteData, "Unable to send the client activation email."));
           }
-          nextNotice = `Client created successfully. Activation email sent to ${form.email.trim()}.`;
+          nextNotice = `Client created successfully. Activation email sent to ${form.email.trim()} for login ${form.portal_login_email.trim()}.`;
         } catch (inviteReason) {
           nextNotice =
             inviteReason instanceof Error
@@ -627,6 +636,31 @@ export function ClientManagementPage({
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to update client status.");
       setPendingStatus(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteClient() {
+    if (!pendingDelete) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/company/clients/${pendingDelete.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(messageFrom(data, "Unable to delete client."));
+      }
+      setNotice(`${pendingDelete.name} deleted successfully.`);
+      setPendingDelete(null);
+      if (initialClientId) {
+        router.push("/clients");
+        return;
+      }
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to delete client.");
+      setPendingDelete(null);
     } finally {
       setSaving(false);
     }
@@ -874,6 +908,7 @@ export function ClientManagementPage({
     { key: "name", label: "Client name", icon: Building2 },
     { key: "code", label: "Client code", icon: Hash },
     { key: "email", label: "Business email", icon: Mail },
+    ...(mode === "create" ? ([{ key: "portal_login_email", label: "Internal login email", icon: Mail }] as const) : []),
     { key: "phone", label: "Mobile number", icon: Phone },
     { key: "website", label: "Website", icon: Globe2 },
     { key: "address", label: "Address", icon: MapPin, wide: true },
@@ -911,6 +946,14 @@ export function ClientManagementPage({
           ? {
               label: `${client.status === "ACTIVE" ? "Disable" : "Enable"} ${client.name}`,
               onClick: () => setPendingStatus(client),
+            }
+          : undefined
+      }
+      remove={
+        canDelete && (!client.account_status || client.account_status === "PENDING_VERIFICATION")
+          ? {
+              label: `Delete ${client.name}`,
+              onClick: () => setPendingDelete(client),
             }
           : undefined
       }
@@ -1762,6 +1805,16 @@ export function ClientManagementPage({
         loading={saving}
         onCancel={() => setPendingStatus(null)}
         onConfirm={() => void changeStatus()}
+      />
+      <ConfirmationDialog
+        open={Boolean(pendingDelete)}
+        title="Delete this pending client?"
+        description="This removes the client profile, pending invitation and unaccepted login before activation."
+        confirmLabel="Delete client"
+        tone="danger"
+        loading={saving}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void deleteClient()}
       />
       <ConfirmationDialog
         open={Boolean(pendingNoteDelete)}

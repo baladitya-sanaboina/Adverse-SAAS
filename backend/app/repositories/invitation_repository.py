@@ -14,6 +14,7 @@ from app.database.connectivity import database_pool
 class InvitationRecord:
     id: UUID
     email: str
+    notification_email: str
     company_name: str
     invited_by_name: str
     role_code: str
@@ -29,7 +30,7 @@ class InvitationConflict(Exception):
 
 class InvitationRepository:
     _select = (
-        "SELECT i.id,i.email,c.name,u.name,i.role_code,"
+        "SELECT i.id,i.email,COALESCE(i.notification_email,i.email),c.name,u.name,i.role_code,"
         "CASE WHEN i.status='PENDING' AND i.expires_at<=NOW() THEN 'EXPIRED' ELSE i.status::text END,"
         "i.expires_at,i.accepted_at,i.created_at FROM company_invitations i "
         "JOIN companies c ON c.id=i.company_id JOIN users u ON u.id=i.invited_by "
@@ -52,9 +53,30 @@ class InvitationRepository:
         return role[0]
 
     @staticmethod
-    def _link_client_account_if_match(
-        cursor: Cursor[object], company_id: UUID, user_id: UUID, email: str
+    def _link_client_account(
+        cursor: Cursor[object],
+        company_id: UUID,
+        user_id: UUID,
+        *,
+        client_id: UUID | None = None,
+        email: str | None = None,
     ) -> None:
+        if client_id is not None:
+            cursor.execute(
+                "SELECT id FROM clients WHERE company_id=%s AND id=%s "
+                "AND (user_id IS NULL OR user_id=%s) LIMIT 1 FOR UPDATE",
+                (company_id, client_id, user_id),
+            )
+            client = cursor.fetchone()
+            if client is None:
+                raise InvitationConflict("CLIENT_NOT_FOUND")
+            cursor.execute(
+                "UPDATE clients SET user_id=%s,updated_at=NOW() WHERE id=%s",
+                (user_id, client[0]),
+            )
+            return
+        if email is None:
+            return
         cursor.execute(
             "SELECT id FROM clients WHERE company_id=%s AND LOWER(email)=LOWER(%s) "
             "AND (user_id IS NULL OR user_id=%s) ORDER BY created_at ASC LIMIT 1 FOR UPDATE",
@@ -125,14 +147,17 @@ class InvitationRepository:
         company_id: UUID,
         actor_id: UUID,
         email: str,
+        notification_email: str | None,
         token_hash: str,
         expires_at: datetime,
         role_code: str,
         invited_name: str | None = None,
         phone_number: str | None = None,
         provisioned_password_hash: str | None = None,
+        client_id: UUID | None = None,
     ) -> InvitationRecord:
         self._expire()
+        notification_email = notification_email or email
         try:
             with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
                 cursor.execute(
@@ -168,7 +193,13 @@ class InvitationRepository:
                             cursor, company_id, user_id, role_id, "PENDING", role_code
                         )
                     elif role_code == RoleCode.COMPANY_CLIENT:
-                        self._link_client_account_if_match(cursor, company_id, user_id, email)
+                        self._link_client_account(
+                            cursor,
+                            company_id,
+                            user_id,
+                            client_id=client_id,
+                            email=email,
+                        )
                 elif invited_name:
                     if provisioned_password_hash is None:
                         raise RuntimeError(
@@ -201,24 +232,38 @@ class InvitationRepository:
                             cursor, company_id, user_id, role_id, "PENDING", role_code
                         )
                     elif role_code == RoleCode.COMPANY_CLIENT:
-                        self._link_client_account_if_match(cursor, company_id, user_id, email)
+                        self._link_client_account(
+                            cursor,
+                            company_id,
+                            user_id,
+                            client_id=client_id,
+                            email=email,
+                        )
                 invitation_id = uuid4()
                 cursor.execute(
                     "INSERT INTO company_invitations("
-                    "id,company_id,email,invited_by,token_hash,expires_at,role_code,user_id,status,created_at,updated_at"
-                    ") VALUES(%s,%s,LOWER(%s),%s,%s,%s,%s,%s,'PENDING',NOW(),NOW())",
+                    "id,company_id,email,notification_email,invited_by,token_hash,expires_at,role_code,user_id,client_id,status,created_at,updated_at"
+                    ") VALUES(%s,%s,LOWER(%s),LOWER(%s),%s,%s,%s,%s,%s,%s,'PENDING',NOW(),NOW())",
                     (
                         invitation_id,
                         company_id,
                         email,
+                        notification_email,
                         actor_id,
                         token_hash,
                         expires_at,
                         role_code,
                         user_id,
+                        client_id,
                     ),
                 )
-                details: dict[str, object] = {"email": email, "role": role_code}
+                details: dict[str, object] = {
+                    "email": email,
+                    "notification_email": notification_email,
+                    "role": role_code,
+                }
+                if client_id is not None:
+                    details["client_id"] = str(client_id)
                 if user_id is not None:
                     details["provisioned_user_id"] = str(user_id)
                 self._audit(
@@ -299,11 +344,14 @@ class InvitationRepository:
             self._audit(cursor, invitation_id, company_id, actor_id, "USER_INVITATION_REVOKED", {})
         return self.get(company_id, invitation_id)
 
-    def accept(self, token_hash: str, name: str, password_hash: str) -> tuple[str, str, str] | None:
+    def accept(
+        self, token_hash: str, name: str, password_hash: str
+    ) -> tuple[str, str, str, str] | None:
         try:
             with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT id,company_id,email,role_code,user_id,status::text,expires_at FROM company_invitations "
+                    "SELECT id,company_id,email,COALESCE(notification_email,email),role_code,user_id,status::text,expires_at,client_id "
+                    "FROM company_invitations "
                     "WHERE token_hash=%s FOR UPDATE",
                     (token_hash,),
                 )
@@ -314,10 +362,12 @@ class InvitationRepository:
                     invitation_id,
                     company_id,
                     email,
+                    notification_email,
                     role_code,
                     provisioned_user_id,
                     status,
                     expires_at,
+                    client_id,
                 ) = row
                 if status != "PENDING" or expires_at <= datetime.now(expires_at.tzinfo):
                     return None
@@ -336,7 +386,13 @@ class InvitationRepository:
                             cursor, company_id, user_id, role_id, "ACTIVE", role_code
                         )
                     elif role_code == RoleCode.COMPANY_CLIENT:
-                        self._link_client_account_if_match(cursor, company_id, user_id, email)
+                        self._link_client_account(
+                            cursor,
+                            company_id,
+                            user_id,
+                            client_id=client_id,
+                            email=email,
+                        )
                 else:
                     user_id = uuid4()
                     cursor.execute(
@@ -350,7 +406,13 @@ class InvitationRepository:
                             cursor, company_id, user_id, role_id, "ACTIVE", role_code
                         )
                     elif role_code == RoleCode.COMPANY_CLIENT:
-                        self._link_client_account_if_match(cursor, company_id, user_id, email)
+                        self._link_client_account(
+                            cursor,
+                            company_id,
+                            user_id,
+                            client_id=client_id,
+                            email=email,
+                        )
                 cursor.execute(
                     "UPDATE company_invitations SET status='ACCEPTED',accepted_at=NOW(),updated_at=NOW() WHERE id=%s",
                     (invitation_id,),
@@ -384,7 +446,7 @@ class InvitationRepository:
                 if not company:
                     raise RuntimeError("Invitation company is unavailable.")
                 company_name = company[0]
-                return email, company_name, role_code
+                return email, notification_email, company_name, role_code
         except UniqueViolation as error:
             raise InvitationConflict("USER_EXISTS") from error
 

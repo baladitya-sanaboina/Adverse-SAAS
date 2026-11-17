@@ -12,6 +12,7 @@ type InvitationRoleCode = "COMPANY_EMPLOYEE" | "COMPANY_MANAGER" | "COMPANY_CLIE
 type Invitation = {
   id: string;
   email: string;
+  notification_email: string;
   role_code: InvitationRoleCode;
   status: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
   expires_at: string;
@@ -38,6 +39,8 @@ export function InvitationsPage() {
   const [nameError, setNameError] = useState("");
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [notificationEmail, setNotificationEmail] = useState("");
+  const [notificationEmailError, setNotificationEmailError] = useState("");
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [error, setError] = useState("");
@@ -72,8 +75,13 @@ export function InvitationsPage() {
         ? "Enter at least 2 characters."
         : "";
     const nextEmailError = !email.trim()
-      ? "Email is required."
+      ? "Internal login email is required."
       : /^\S+@\S+\.\S+$/.test(email.trim())
+        ? ""
+        : "Please enter a valid email address.";
+    const nextNotificationEmailError = !notificationEmail.trim()
+      ? "Notification email is required."
+      : /^\S+@\S+\.\S+$/.test(notificationEmail.trim())
         ? ""
         : "Please enter a valid email address.";
     const nextPhoneError = !phone.trim()
@@ -83,8 +91,9 @@ export function InvitationsPage() {
         : "Please enter a valid mobile number.";
     setNameError(nextNameError);
     setEmailError(nextEmailError);
+    setNotificationEmailError(nextNotificationEmailError);
     setPhoneError(nextPhoneError);
-    if (nextNameError || nextEmailError || nextPhoneError) return;
+    if (nextNameError || nextEmailError || nextNotificationEmailError || nextPhoneError) return;
 
     setSaving(true);
     setError("");
@@ -95,6 +104,7 @@ export function InvitationsPage() {
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim(),
+          notification_email: notificationEmail.trim(),
           phone_number: phone.trim(),
           role_code: roleCode,
         }),
@@ -105,11 +115,15 @@ export function InvitationsPage() {
       setRoleCode("COMPANY_EMPLOYEE");
       setName("");
       setEmail("");
+      setNotificationEmail("");
       setPhone("");
       setNameError("");
       setEmailError("");
+      setNotificationEmailError("");
       setPhoneError("");
-      setNotice(`Activation email sent to ${data.email}.`);
+      const sentTo = typeof data.notification_email === "string" && data.notification_email ? data.notification_email : notificationEmail.trim();
+      const loginEmail = typeof data.email === "string" && data.email ? data.email : email.trim();
+      setNotice(`Activation email sent to ${sentTo}. Login email: ${loginEmail}.`);
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to send invitation.");
@@ -153,6 +167,7 @@ export function InvitationsPage() {
                 setError("");
                 setNameError("");
                 setEmailError("");
+                setNotificationEmailError("");
                 setPhoneError("");
                 setOpen(true);
               }}
@@ -182,7 +197,12 @@ export function InvitationsPage() {
                 <article key={item.id} role="row">
                   <div className="registration-row-identity">
                     <strong>{item.email}</strong>
-                    <small>Expires {new Date(item.expires_at).toLocaleString()}</small>
+                    <small>
+                      {item.notification_email && item.notification_email !== item.email
+                        ? `Sent to ${item.notification_email} · `
+                        : ""}
+                      Expires {new Date(item.expires_at).toLocaleString()}
+                    </small>
                   </div>
                   <span>{roleLabel(item.role_code)}</span>
                   <div className="registration-row-meta">
@@ -220,7 +240,7 @@ export function InvitationsPage() {
         open={open}
         eyebrow="Invite user"
         title="Send company invitation"
-        subtitle="The secure invitation link is tenant-bound and expires automatically."
+        subtitle="Set the internal login email first, then choose where the secure activation mail should be delivered."
         icon={<MailPlus />}
         busy={saving}
         onClose={() => setOpen(false)}
@@ -280,7 +300,7 @@ export function InvitationsPage() {
             {nameError && <small>{nameError}</small>}
           </label>
           <label className="management-field">
-            <span>Email address</span>
+            <span>Internal login email</span>
             <span className="management-input">
               <Mail aria-hidden="true" />
               <input
@@ -292,7 +312,7 @@ export function InvitationsPage() {
                   setEmail(value);
                   setEmailError(
                     !value.trim()
-                      ? "Email is required."
+                      ? "Internal login email is required."
                       : /^\S+@\S+\.\S+$/.test(value.trim())
                         ? ""
                         : "Please enter a valid email address.",
@@ -300,10 +320,36 @@ export function InvitationsPage() {
                   setError("");
                 }}
                 aria-invalid={Boolean(emailError)}
-                placeholder={`${roleLabel(roleCode).toLowerCase()}@company.com`}
+                placeholder={`${roleLabel(roleCode).toLowerCase()}@adverseindia.com`}
               />
             </span>
             {emailError && <small>{emailError}</small>}
+          </label>
+          <label className="management-field">
+            <span>Personal / notification email</span>
+            <span className="management-input">
+              <Mail aria-hidden="true" />
+              <input
+                type="email"
+                autoComplete="email"
+                value={notificationEmail}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setNotificationEmail(value);
+                  setNotificationEmailError(
+                    !value.trim()
+                      ? "Notification email is required."
+                      : /^\S+@\S+\.\S+$/.test(value.trim())
+                        ? ""
+                        : "Please enter a valid email address.",
+                  );
+                  setError("");
+                }}
+                aria-invalid={Boolean(notificationEmailError)}
+                placeholder="person@gmail.com"
+              />
+            </span>
+            {notificationEmailError && <small>{notificationEmailError}</small>}
           </label>
           <label className="management-field">
             <span>Mobile number</span>
@@ -336,7 +382,11 @@ export function InvitationsPage() {
       <ConfirmationDialog
         open={Boolean(action)}
         title={`${action?.type === "revoke" ? "Revoke" : "Resend"} invitation?`}
-        description={action?.item.email ?? ""}
+        description={
+          action
+            ? `${action.item.email}${action.item.notification_email && action.item.notification_email !== action.item.email ? ` · sent to ${action.item.notification_email}` : ""}`
+            : ""
+        }
         confirmLabel={action?.type === "revoke" ? "Revoke invitation" : "Resend invitation"}
         tone={action?.type === "revoke" ? "danger" : "primary"}
         loading={saving}

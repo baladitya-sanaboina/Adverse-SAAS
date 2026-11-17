@@ -30,6 +30,7 @@ class InvitationServiceTests(unittest.TestCase):
         self.record = InvitationRecord(
             id=uuid4(),
             email="invitee@example.com",
+            notification_email="personal@example.com",
             company_name="Tenant A",
             invited_by_name="Company Admin",
             role_code="COMPANY_EMPLOYEE",
@@ -65,20 +66,24 @@ class InvitationServiceTests(unittest.TestCase):
             company_id,
             actor_id,
             email,
+            notification_email,
             token_hash,
             _,
             role_code,
             invited_name,
             phone_number,
             password_hash,
+            client_id,
         ) = self.repository.create.call_args.args
         self.assertEqual(company_id, self.company_id)
         self.assertEqual(actor_id, self.user_id)
         self.assertEqual(email, self.record.email)
+        self.assertEqual(notification_email, self.record.email)
         self.assertEqual(role_code, "COMPANY_MANAGER")
         self.assertEqual(invited_name, "Invited Employee")
         self.assertEqual(phone_number, "+91 98765 43210")
         self.assertTrue(password_hash)
+        self.assertIsNone(client_id)
         self.assertEqual(len(token_hash), 64)
         expected_origin = settings.role_origin("COMPANY_MANAGER", "invitation")
         self.assertTrue(
@@ -86,6 +91,7 @@ class InvitationServiceTests(unittest.TestCase):
                 f"{expected_origin}/invitations/accept?token="
             )
         )
+        self.assertEqual(send_email.call_args.kwargs["login_email"], self.record.email)
         self.assertNotIn(token_hash, send_email.call_args.kwargs["invitation_url"])
         send_email.assert_called_once()
 
@@ -148,7 +154,10 @@ class InvitationServiceTests(unittest.TestCase):
         self.assertEqual(expired_error.exception.status_code, 410)
 
     @patch("app.services.invitation_service.hash_password", return_value="secure-hash")
-    def test_accept_creates_user_from_invitation_tenant(self, hash_password: MagicMock) -> None:
+    @patch("app.services.invitation_service.email_service.send_account_ready")
+    def test_accept_creates_user_from_invitation_tenant(
+        self, send_account_ready: MagicMock, hash_password: MagicMock
+    ) -> None:
         self.repository.find_by_hash.return_value = (
             self.record,
             self.company_id,
@@ -157,6 +166,7 @@ class InvitationServiceTests(unittest.TestCase):
         )
         self.repository.accept.return_value = (
             self.record.email,
+            self.record.notification_email,
             self.record.company_name,
             self.record.role_code,
         )
@@ -172,9 +182,35 @@ class InvitationServiceTests(unittest.TestCase):
             expected_hash, "Invited Employee", "secure-hash"
         )
         hash_password.assert_called_once_with("StrongPassword@123")
+        send_account_ready.assert_called_once_with(
+            self.record.notification_email,
+            company_name=self.record.company_name,
+            login_email=self.record.email,
+            login_url=settings.login_url(self.record.role_code),
+        )
         self.assertEqual(response.email, self.record.email)
         self.assertEqual(response.role_code, self.record.role_code)
         self.assertIn("/login", response.login_url)
+
+    @patch("app.services.invitation_service.validate_user_action_access", return_value=True)
+    @patch("app.services.invitation_service.email_service.send_invitation")
+    def test_create_uses_notification_email_when_provided(
+        self, send_email: MagicMock, _: MagicMock
+    ) -> None:
+        response = self.service.create(
+            self.context,
+            InvitationCreate(
+                email="employee@adverseindia.com",
+                notification_email="person@gmail.com",
+                name="Invited Employee",
+                phone_number="+91 98765 43210",
+                role_code="COMPANY_EMPLOYEE",
+            ),
+        )
+        self.assertEqual(response.email, self.record.email)
+        self.assertEqual(self.repository.create.call_args.args[3], "person@gmail.com")
+        self.assertEqual(send_email.call_args.args[0], self.record.notification_email)
+        self.assertEqual(send_email.call_args.kwargs["login_email"], self.record.email)
 
     def test_accept_schema_rejects_weak_or_mismatched_password(self) -> None:
         with self.assertRaises(ValidationError):

@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from app.repositories.client_repository import (
+    ClientDeletionError,
     ClientActivityRecord,
     ClientConflict,
     ClientContactRecord,
@@ -178,6 +179,25 @@ class ClientService:
         if record is None:
             raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
         return self._client(record)
+
+    def delete(self, context: AuthContext, client_id: UUID) -> None:
+        company_id = self._authorize(context, "DELETE")
+        try:
+            deleted = self.repository.delete_pending(company_id, client_id)
+        except ClientDeletionError as error:
+            if error.reason == "ACTIVE_ACCOUNT":
+                raise AuthenticationError(
+                    409,
+                    "CLIENT_DELETE_PENDING_ONLY",
+                    "Only clients without an accepted portal account can be deleted.",
+                ) from error
+            raise AuthenticationError(
+                409,
+                "CLIENT_IN_USE",
+                "Client cannot be deleted because work, billing or pricing is already linked.",
+            ) from error
+        if deleted is None:
+            raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
 
     def get_portal_dashboard(self, context: AuthContext) -> ClientPortalDashboardResponse:
         company_id = self._authorize_portal(context)

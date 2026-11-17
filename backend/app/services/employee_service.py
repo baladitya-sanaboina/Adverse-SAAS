@@ -2,6 +2,7 @@ from uuid import UUID
 
 from app.repositories.employee_repository import (
     EmployeeConflict,
+    EmployeeDeletionError,
     EmployeeRecord,
     EmployeeReferenceError,
     EmployeeRepository,
@@ -111,6 +112,25 @@ class EmployeeService:
         if record is None:
             raise AuthenticationError(404, "EMPLOYEE_NOT_FOUND", "Employee was not found.")
         return self._response(record)
+
+    def delete(self, context: AuthContext, employee_id: UUID) -> None:
+        company_id = self._authorize(context, "DELETE")
+        try:
+            deleted = self.repository.delete_pending(company_id, employee_id)
+        except EmployeeDeletionError as error:
+            if error.reason == "ACTIVE_ACCOUNT":
+                raise AuthenticationError(
+                    409,
+                    "EMPLOYEE_DELETE_PENDING_ONLY",
+                    "Only employees with an unaccepted invite can be deleted.",
+                ) from error
+            raise AuthenticationError(
+                409,
+                "EMPLOYEE_IN_USE",
+                "Employee cannot be deleted because company work is already linked.",
+            ) from error
+        if deleted is None:
+            raise AuthenticationError(404, "EMPLOYEE_NOT_FOUND", "Employee was not found.")
 
     def is_ready(self) -> bool:
         return self.repository.is_ready()

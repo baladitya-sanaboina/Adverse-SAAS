@@ -18,10 +18,17 @@ InvitationRoleCode = Literal["COMPANY_EMPLOYEE", "COMPANY_MANAGER", "COMPANY_CLI
 
 class InvitationCreate(BaseModel):
     email: EmailStr
+    notification_email: EmailStr | None = None
     name: str | None = Field(default=None, min_length=2, max_length=100)
     phone_number: str = Field(pattern=r"^\+?[0-9 ()-]{7,24}$")
     role_code: InvitationRoleCode = "COMPANY_EMPLOYEE"
+    client_id: UUID | None = None
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("email", "notification_email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr | None) -> str | None:
+        return str(value).strip().lower() if value is not None else None
 
     @field_validator("name")
     @classmethod
@@ -36,10 +43,17 @@ class InvitationCreate(BaseModel):
     def normalize_phone_number(cls, value: str) -> str:
         return value.strip()
 
+    @model_validator(mode="after")
+    def validate_role_specific_fields(self) -> "InvitationCreate":
+        if self.client_id is not None and self.role_code != "COMPANY_CLIENT":
+            raise ValueError("Client link is supported only for client invitations.")
+        return self
+
 
 class InvitationResponse(BaseModel):
     id: UUID
     email: EmailStr
+    notification_email: EmailStr
     company_name: str
     invited_by_name: str
     role_code: InvitationRoleCode

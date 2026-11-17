@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from psycopg.errors import UniqueViolation
+from psycopg.errors import ForeignKeyViolation, UniqueViolation
 
 from app.database.connectivity import database_pool
 from app.schemas.employee import EmployeeListFilters
@@ -42,6 +42,11 @@ class EmployeeConflict(Exception):
 class EmployeeReferenceError(Exception):
     def __init__(self, reference: str):
         self.reference = reference
+
+
+class EmployeeDeletionError(Exception):
+    def __init__(self, reason: str):
+        self.reason = reason
 
 
 class EmployeeRepository:
@@ -229,6 +234,45 @@ class EmployeeRepository:
                 return self._get(cursor, company_id, employee_id)
         except UniqueViolation as error:
             raise EmployeeConflict("employee_code") from error
+
+    def delete_pending(self, company_id: UUID, employee_id: UUID) -> tuple[str, str] | None:
+        try:
+            with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT e.user_id,u.name,u.email,u.status::text FROM employees e "
+                    'JOIN "users" u ON u.id=e.user_id '
+                    "WHERE e.company_id=%s AND e.id=%s FOR UPDATE",
+                    (company_id, employee_id),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                user_id, user_name, user_email, user_status = row
+                if user_status != "PENDING_VERIFICATION":
+                    raise EmployeeDeletionError("ACTIVE_ACCOUNT")
+                cursor.execute(
+                    "UPDATE registration_audits SET created_user_id=NULL WHERE created_user_id=%s",
+                    (user_id,),
+                )
+                cursor.execute(
+                    "DELETE FROM company_invitations WHERE company_id=%s AND user_id=%s",
+                    (company_id, user_id),
+                )
+                cursor.execute(
+                    "DELETE FROM employees WHERE id=%s AND company_id=%s RETURNING id",
+                    (employee_id, company_id),
+                )
+                if cursor.fetchone() is None:
+                    return None
+                cursor.execute(
+                    'DELETE FROM "users" WHERE id=%s AND company_id=%s AND status=%s RETURNING id',
+                    (user_id, company_id, "PENDING_VERIFICATION"),
+                )
+                if cursor.fetchone() is None:
+                    raise EmployeeDeletionError("ACTIVE_ACCOUNT")
+                return user_name, user_email
+        except ForeignKeyViolation as error:
+            raise EmployeeDeletionError("IN_USE") from error
 
     @staticmethod
     def _validate_user(cursor: Any, company_id: UUID, user_id: UUID) -> None:

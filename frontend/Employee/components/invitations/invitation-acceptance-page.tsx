@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Moon, SunMedium } from "lucide-react";
 import { adverseBrand, getBrandLogo } from "@/lib/branding";
-import { appConfig } from "@/lib/config";
 import { AuthCursor, Characters } from "@/components/auth/LoginRegisterPage";
 import { ThemeLoader } from "@/components/loader/theme-loader";
 import "@/styles/auth/base.css";
@@ -25,7 +24,7 @@ type InvitationDetails = {
   login_url: string;
 };
 const THEME_STORAGE_KEY = "loopless-theme";
-const invitationApiBaseUrl = `${appConfig.apiBaseUrl}/company/invitations`;
+const invitationApiBaseUrl = "/api/company/invitations";
 
 function passwordError(value: string) {
   if (!value) return "Password is required.";
@@ -184,7 +183,7 @@ export function InvitationAcceptancePage({ token }: { token: string }) {
             celebrate={accepted}
             register
           />
-          <p>Your secure invitation is tied to one company and one email address.</p>
+          <p>Your secure invitation is tied to one company and one login email address.</p>
         </section>
         <section className="interactive-form recovery-form invitation-acceptance-form">
           <div className="auth-logo">

@@ -121,6 +121,18 @@ def update_client(
     return client_service.update(context, client_id, request)
 
 
+@router.delete(
+    "/{client_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    summary="Delete a pending client",
+    responses=ERRORS,
+)
+def delete_client(client_id: UUID, context: AuthenticatedContext) -> Response:
+    client_service.delete(context, client_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post(
     "/{client_id}/contacts",
     response_model=ClientContactResponse,

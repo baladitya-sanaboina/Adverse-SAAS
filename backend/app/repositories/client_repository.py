@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from psycopg.errors import ForeignKeyViolation
 from psycopg.errors import UniqueViolation
 
 from app.database.connectivity import database_pool
@@ -90,6 +91,11 @@ class ClientConflict(Exception):
 
 class ClientReferenceError(Exception):
     pass
+
+
+class ClientDeletionError(Exception):
+    def __init__(self, reason: str):
+        self.reason = reason
 
 
 class ClientRepository:
@@ -198,7 +204,7 @@ class ClientRepository:
         normalized["email"] = email
         try:
             with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
-                normalized["user_id"] = self._resolve_account_user_id(cursor, company_id, email)
+                self._ensure_unique_email(cursor, company_id, email)
                 client_id = uuid4()
                 columns = ["id", "company_id", *normalized]
                 params = [client_id, company_id, *normalized.values()]
@@ -235,13 +241,12 @@ class ClientRepository:
         try:
             with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
                 if "email" in normalized:
-                    normalized["user_id"] = self._resolve_account_user_id(
+                    self._ensure_unique_email(
                         cursor,
                         company_id,
                         normalized.get("email"),
                         exclude_client_id=client_id,
                     )
-                    setters = ",".join(f"{column}=%s" for column in normalized)
                 cursor.execute(
                     f"UPDATE clients SET {setters},updated_at=NOW() "
                     "WHERE id=%s AND company_id=%s RETURNING id",
@@ -261,6 +266,46 @@ class ClientRepository:
                 return None
         except UniqueViolation as error:
             raise ClientConflict(self._conflict_field(error)) from error
+
+    def delete_pending(self, company_id: UUID, client_id: UUID) -> tuple[str, str | None] | None:
+        try:
+            with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT clients.user_id,clients.name,clients.email,account_user.status::text "
+                    "FROM clients LEFT JOIN users account_user ON account_user.id=clients.user_id "
+                    "WHERE clients.company_id=%s AND clients.id=%s FOR UPDATE",
+                    (company_id, client_id),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                user_id, client_name, client_email, account_status = row
+                if user_id is not None and account_status != "PENDING_VERIFICATION":
+                    raise ClientDeletionError("ACTIVE_ACCOUNT")
+                cursor.execute(
+                    "DELETE FROM company_invitations WHERE company_id=%s AND (client_id=%s OR user_id=%s)",
+                    (company_id, client_id, user_id),
+                )
+                cursor.execute(
+                    "DELETE FROM clients WHERE id=%s AND company_id=%s RETURNING id",
+                    (client_id, company_id),
+                )
+                if cursor.fetchone() is None:
+                    return None
+                if user_id is not None:
+                    cursor.execute(
+                        "UPDATE registration_audits SET created_user_id=NULL WHERE created_user_id=%s",
+                        (user_id,),
+                    )
+                    cursor.execute(
+                        'DELETE FROM "users" WHERE id=%s AND company_id=%s AND status=%s RETURNING id',
+                        (user_id, company_id, "PENDING_VERIFICATION"),
+                    )
+                    if cursor.fetchone() is None:
+                        raise ClientDeletionError("ACTIVE_ACCOUNT")
+                return client_name, client_email
+        except ForeignKeyViolation as error:
+            raise ClientDeletionError("IN_USE") from error
 
     def list_contacts(self, company_id: UUID, client_id: UUID) -> tuple[ClientContactRecord, ...]:
         with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
@@ -553,17 +598,17 @@ class ClientRepository:
             return "account_user"
         return "code"
 
-    def _resolve_account_user_id(
+    def _ensure_unique_email(
         self,
         cursor: Any,
         company_id: UUID,
         email: object,
         *,
         exclude_client_id: UUID | None = None,
-    ) -> UUID | None:
+    ) -> None:
         normalized_email = self._normalize_email(email)
         if normalized_email is None:
-            return None
+            return
         cursor.execute(
             "SELECT 1 FROM clients WHERE company_id=%s AND LOWER(email)=LOWER(%s) "
             "AND (%s::uuid IS NULL OR id<>%s) LIMIT 1",
@@ -571,25 +616,6 @@ class ClientRepository:
         )
         if cursor.fetchone() is not None:
             raise ClientConflict("email")
-
-        cursor.execute(
-            "SELECT u.id FROM users u "
-            "JOIN roles r ON r.id=u.role_id "
-            "WHERE u.company_id=%s AND LOWER(u.email)=LOWER(%s) AND r.code='COMPANY_CLIENT' "
-            "ORDER BY u.created_at ASC LIMIT 1",
-            (company_id, normalized_email),
-        )
-        row = cursor.fetchone()
-        user_id = row[0] if row else None
-        if user_id is not None:
-            cursor.execute(
-                "SELECT 1 FROM clients WHERE company_id=%s AND user_id=%s "
-                "AND (%s::uuid IS NULL OR id<>%s) LIMIT 1",
-                (company_id, user_id, exclude_client_id, exclude_client_id),
-            )
-            if cursor.fetchone() is not None:
-                raise ClientConflict("account_user")
-        return user_id
 
     def _get_note(
         self, cursor: Any, company_id: UUID, client_id: UUID, note_id: UUID

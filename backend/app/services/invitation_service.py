@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -23,6 +24,8 @@ from app.services.authentication_service import AuthenticationError
 from app.services.email_service import email_service
 from app.services.password_service import hash_password
 from app.services.permission_service import validate_user_action_access
+
+logger = logging.getLogger(__name__)
 
 
 def invitation_token_hash(token: str) -> str:
@@ -77,15 +80,19 @@ class InvitationService:
                 company_id,
                 context.user_id,
                 str(request.email).lower(),
+                str(request.notification_email or request.email).lower(),
                 token_hash,
                 expires_at,
                 request.role_code,
                 invited_name,
                 request.phone_number,
                 provisioned_password_hash,
+                request.client_id,
             )
         except InvitationConflict as error:
             code = str(error)
+            if code == "CLIENT_NOT_FOUND":
+                raise AuthenticationError(404, code, "Client was not found.") from error
             detail = (
                 "User with this email already exists."
                 if code == "USER_EXISTS"
@@ -93,9 +100,10 @@ class InvitationService:
             )
             raise AuthenticationError(409, code, detail) from error
         email_service.send_invitation(
-            record.email,
+            record.notification_email,
             company_name=record.company_name,
             invitation_url=settings.invitation_url(record.role_code, token),
+            login_email=record.email,
         )
         return self._response(record)
 
@@ -147,9 +155,10 @@ class InvitationService:
                 404, "INVITATION_NOT_RESENDABLE", "Invitation cannot be resent."
             )
         email_service.send_invitation(
-            record.email,
+            record.notification_email,
             company_name=record.company_name,
             invitation_url=settings.invitation_url(record.role_code, token),
+            login_email=record.email,
         )
         return InvitationActionResponse(message="Invitation resent successfully.")
 
@@ -169,6 +178,12 @@ class InvitationService:
                 token_hash, request.name, hash_password(request.password.get_secret_value())
             )
         except InvitationConflict as error:
+            if str(error) == "CLIENT_NOT_FOUND":
+                raise AuthenticationError(
+                    404,
+                    "CLIENT_NOT_FOUND",
+                    "The linked client profile is no longer available.",
+                ) from error
             raise AuthenticationError(
                 409, "USER_EXISTS", "User with this email already exists."
             ) from error
@@ -176,11 +191,23 @@ class InvitationService:
             raise AuthenticationError(
                 400, "INVALID_INVITATION", "Invitation is no longer available."
             )
+        login_email, notification_email, company_name, role_code = accepted
+        try:
+            email_service.send_account_ready(
+                notification_email,
+                company_name=company_name,
+                login_email=login_email,
+                login_url=self._login_url(role_code),
+            )
+        except Exception:
+            logger.exception(
+                "Accepted invitation confirmation email failed for %s", login_email
+            )
         return InvitationAcceptedResponse(
-            email=accepted[0],
-            company_name=accepted[1],
-            role_code=accepted[2],
-            login_url=self._login_url(accepted[2]),
+            email=login_email,
+            company_name=company_name,
+            role_code=role_code,
+            login_url=self._login_url(role_code),
         )
 
     def is_ready(self) -> bool:

@@ -57,6 +57,41 @@ class EmailTemplateTests(unittest.TestCase):
         self.assertIn("never included", html)
         self.assertNotIn("StrongPass", message.as_string())
 
+    @patch.object(settings, "smtp_host", "mailpit")
+    def test_invitation_email_includes_internal_login_email(self) -> None:
+        service = EmailService()
+        with patch.object(service, "_send") as send:
+            service.send_invitation(
+                "person@gmail.com",
+                company_name="Acme Operations",
+                invitation_url="https://employee.adverseindia.com/invitations/accept?token=abc",
+                login_email="employee@adverseindia.com",
+            )
+        message = send.call_args.args[0]
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        html = message.get_body(preferencelist=("html",)).get_content()
+        self.assertIn("employee@adverseindia.com", plain)
+        self.assertIn("employee@adverseindia.com", html)
+        self.assertIn("Acme Operations", plain)
+
+    @patch.object(settings, "smtp_host", "mailpit")
+    def test_account_ready_email_mentions_login_but_not_password(self) -> None:
+        service = EmailService()
+        with patch.object(service, "_send") as send:
+            service.send_account_ready(
+                "person@gmail.com",
+                company_name="Acme Operations",
+                login_email="employee@adverseindia.com",
+                login_url="https://employee.adverseindia.com/login",
+            )
+        message = send.call_args.args[0]
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        html = message.get_body(preferencelist=("html",)).get_content()
+        self.assertIn("employee@adverseindia.com", plain)
+        self.assertIn("https://employee.adverseindia.com/login", plain)
+        self.assertIn("never included", html)
+        self.assertNotIn("StrongPass", message.as_string())
+
 
 if __name__ == "__main__":
     unittest.main()

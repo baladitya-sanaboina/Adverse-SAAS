@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from app.repositories.employee_repository import (
     EmployeeConflict,
+    EmployeeDeletionError,
     EmployeeRecord,
     EmployeeReferenceError,
 )
@@ -29,6 +30,8 @@ class FakeEmployeeRepository:
         self.invalid_reference: str | None = None
         self.updated_values: dict[str, object] | None = None
         self.list_filters: EmployeeListFilters | None = None
+        self.delete_error: str | None = None
+        self.deleted_employee_id: UUID | None = None
         now = datetime.now(UTC)
         self.record = EmployeeRecord(
             self.employee_id,
@@ -81,6 +84,14 @@ class FakeEmployeeRepository:
             raise EmployeeReferenceError(self.invalid_reference)
         self.updated_values = values
         return self.get(company_id, employee_id)
+
+    def delete_pending(self, company_id: UUID, employee_id: UUID):
+        if self.delete_error:
+            raise EmployeeDeletionError(self.delete_error)
+        if company_id == self.company_id and employee_id == self.employee_id:
+            self.deleted_employee_id = employee_id
+            return self.record.user_name, self.record.user_email
+        return None
 
     def is_ready(self):
         return True
@@ -194,6 +205,23 @@ class EmployeeServiceTests(unittest.TestCase):
         with self.assertRaises(AuthenticationError) as raised:
             self.service.update(self.context, uuid4(), EmployeeUpdate(status="ACTIVE"))
         self.assertEqual(raised.exception.status_code, 404)
+
+    @patch("app.services.employee_service.validate_user_action_access", return_value=True)
+    def test_delete_pending_employee(self, _: object) -> None:
+        self.service.delete(self.context, self.repository.employee_id)
+        self.assertEqual(self.repository.deleted_employee_id, self.repository.employee_id)
+
+    @patch("app.services.employee_service.validate_user_action_access", return_value=True)
+    def test_delete_rejects_active_or_in_use_employee(self, _: object) -> None:
+        self.repository.delete_error = "ACTIVE_ACCOUNT"
+        with self.assertRaises(AuthenticationError) as active_error:
+            self.service.delete(self.context, self.repository.employee_id)
+        self.assertEqual(active_error.exception.code, "EMPLOYEE_DELETE_PENDING_ONLY")
+
+        self.repository.delete_error = "IN_USE"
+        with self.assertRaises(AuthenticationError) as linked_error:
+            self.service.delete(self.context, self.repository.employee_id)
+        self.assertEqual(linked_error.exception.code, "EMPLOYEE_IN_USE")
 
     def test_schema_normalizes_code_and_rejects_invalid_payload(self) -> None:
         self.assertEqual(self.request.employee_code, "EMP-001")
