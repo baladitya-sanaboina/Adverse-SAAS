@@ -53,9 +53,30 @@ The migrations run before the API starts. Development test accounts are never cr
 
 ## Updating
 
+Manual update:
+
 ```bash
 cd /opt/adverse && git pull
 cd docker && docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+```
+
+Git-based auto-deploy on the server:
+
+```bash
+cd /opt/adverse
+sudo ./scripts/production/install_autodeploy_systemd.sh
+```
+
+This installs a systemd timer that checks `origin/main` every 2 minutes. The deploy script is change-aware:
+- `frontend/` or production proxy/container changes -> full stack rebuild
+- `backend/` or backend Dockerfile changes -> backend+migrations rebuild
+- docs/CI-only changes -> git sync only
+
+You can also run the detector manually:
+
+```bash
+cd /opt/adverse
+./scripts/production/auto_deploy.sh
 ```
 
 ## Backups
