@@ -41,6 +41,7 @@ run_docker_compose() {
 classify_deploy_mode() {
   local changed_files="$1"
   local changed_file
+  local mode='sync'
 
   while IFS= read -r changed_file; do
     case "$changed_file" in
@@ -49,13 +50,12 @@ classify_deploy_mode() {
         return 0
         ;;
       backend/*|docker/Dockerfile.backend.prod|docker/Dockerfile.prisma)
-        printf 'backend\n'
-        return 0
+        mode='backend'
         ;;
     esac
   done <<< "$changed_files"
 
-  printf 'sync\n'
+  printf '%s\n' "$mode"
 }
 
 require_command git
