@@ -132,6 +132,7 @@ class DeploymentHealthResponse(BaseModel):
     status: Literal["enabled"]
     strategy: Literal["git-auto-deploy"]
     branch: Literal["main"]
+    mode: Literal["change-aware"]
 
 
 class AuditLogHealthResponse(BaseModel):
@@ -546,6 +547,7 @@ def health(response: Response) -> HealthResponse:
             status="enabled",
             strategy="git-auto-deploy",
             branch="main",
+            mode="change-aware",
         ),
         rbac=RbacHealthResponse(
             status=rbac_status,
