@@ -51,6 +51,7 @@ class HealthResponse(BaseModel):
     postgres: Literal["healthy", "unavailable"]
     redis: Literal["healthy", "unavailable"]
     migration_version: str | None
+    deployment: "DeploymentHealthResponse"
     rbac: "RbacHealthResponse"
     tenant: "TenantHealthResponse"
     configuration: "ConfigurationHealthResponse"
@@ -125,6 +126,12 @@ class PlatformManagementHealthResponse(BaseModel):
     security_review: Literal["passed"]
     tenant_isolation: Literal["verified"]
     checkpoint: Literal["day-30-passed"]
+
+
+class DeploymentHealthResponse(BaseModel):
+    status: Literal["enabled"]
+    strategy: Literal["git-auto-deploy"]
+    branch: Literal["main"]
 
 
 class AuditLogHealthResponse(BaseModel):
@@ -535,6 +542,11 @@ def health(response: Response) -> HealthResponse:
         postgres=postgres_status,
         redis=redis_status,
         migration_version=database_health.migration_version,
+        deployment=DeploymentHealthResponse(
+            status="enabled",
+            strategy="git-auto-deploy",
+            branch="main",
+        ),
         rbac=RbacHealthResponse(
             status=rbac_status,
             roles=list(rbac_health.roles) if rbac_health else [],
