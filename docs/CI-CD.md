@@ -1,71 +1,42 @@
-# CI/CD Foundation
+# CI/CD
 
-Loopless uses GitHub Actions to validate every push and pull request. Day-9 adds continuous integration only; it does not deploy any application.
+`.github/workflows/ci.yml` runs on every push and pull request. It has two required validation jobs:
 
-## Workflow
+- **Frontend quality and builds:** clean npm install, UI standards, formatting, lint, type checking, and production builds for all four workspaces.
+- **Backend quality, tests, and startup:** pinned Python and Prisma installs, formatting, lint, type checking, compilation, database migrations and seed, unit tests, and FastAPI health checks.
 
-The workflow is defined in `.github/workflows/ci.yml` and follows this gate sequence:
+The **Deploy to VPS** job runs only for a push to `main`, only after both validation jobs pass, and only when the repository variable `DEPLOY_ENABLED` is set to `true`. Pull requests and other branches never deploy.
 
-```text
-Checkout → Install dependencies → Format check → Lint → Type-check → Test → Build/startup validation
-```
+## One-time VPS setup
 
-Any failed command stops its job and marks the workflow unsuccessful. Branch protection should require the `Frontend quality and builds` and `Backend quality, tests, and startup` checks before merge.
-
-## Frontend validation
-
-The frontend job installs the locked workspace dependencies once and validates all five applications:
-
-- PlatformOwner
-- Developer
-- CompanyAdmin
-- CompanyEmployee
-- CompanyClient
-
-Prettier checks TypeScript formatting, ESLint checks code quality, TypeScript runs in strict no-emit mode, and Next.js creates a production build for every workspace.
-
-Local commands:
+The VPS runs Node.js 22, Python 3, PostgreSQL, Redis, Caddy, and five systemd services. Docker is not used. Copy a trusted checkout or release archive to the VPS for this one-time setup, then run as root:
 
 ```bash
-cd frontend
-npm ci
-npm run format:check
-npm run lint
-npm run typecheck
-npm run build
+sudo bash scripts/production/install_native.sh
 ```
 
-## Backend validation
+Create `/etc/adverse/backend.env`, `/etc/adverse/frontend.env`, and `/etc/adverse/domains.env` before the first deployment. Keep those files on the VPS, owned by `root:adverse` with mode `0640`; they are not part of the repository. Use the examples in [Deployment](Deployment.md). The backend production settings require SMTP host and sender values. Caddy needs valid DNS records for all five configured hostnames before it can obtain HTTPS certificates.
 
-The backend job starts isolated PostgreSQL and Redis services. It installs pinned development quality tools plus locked Prisma dependencies, checks dependency consistency, then runs:
+The installer creates the `adverse` service/deploy account and `/opt/adverse` release directories. Add a dedicated SSH public key to `/home/adverse/.ssh/authorized_keys`; do not use the VPS root password in GitHub Actions. The account can restart only the five Adverse systemd services through a fixed root-owned wrapper.
 
-```bash
-cd backend
-black --check app main.py tests
-ruff check app main.py tests
-mypy app main.py
-python -m compileall -q main.py app tests
-python -m unittest discover -s tests -v
-```
+## GitHub configuration
 
-CI applies the existing Prisma migrations and seed before starting FastAPI. The job requires both `/health` and `/openapi.json` to respond successfully.
+Add these repository secrets:
 
-## Formatting and quality standards
+| Secret | Value |
+| --- | --- |
+| `VPS_HOST` | VPS IP address or hostname |
+| `VPS_USER` | `adverse` |
+| `VPS_SSH_PRIVATE_KEY` | Private half of the dedicated deploy key |
+| `VPS_KNOWN_HOSTS` | Verified SSH host-key line for this host and port |
 
-- Frontend formatting: Prettier
-- Frontend linting: ESLint
-- Frontend types: strict TypeScript
-- Backend formatting: Black
-- Backend linting: Ruff
-- Backend types: strict mypy
-- Backend tests: Python unittest
+Add these repository variables:
 
-Use formatting commands locally before opening a pull request. Do not weaken a validation rule merely to make a failing change pass.
+| Variable | Value |
+| --- | --- |
+| `DEPLOY_ENABLED` | `true` after the VPS and env files are ready; otherwise leave unset |
+| `VPS_PORT` | SSH port, if not `22` |
 
-## Dependency validation
+The action packages `github.sha` and copies it to the VPS over SSH. The VPS does not clone the repository or receive a GitHub token, so changing the repository from public to private does not require a deployment change. The deploy script builds a new release, runs Prisma migrations, switches the active symlink, restarts the services, and checks all five local HTTP endpoints. A failed health check restores the prior release.
 
-CI uses `npm ci` so package-lock files must match their manifests. Python dependencies install from `requirements-dev.txt`, and `pip check` detects incompatible packages. Critical production npm dependency audit findings fail the backend dependency step.
-
-## Branch strategy
-
-Create short-lived feature branches from `main`, open a pull request, and require both CI jobs before merge. Keep `main` protected and merge only reviewed, passing changes. Deployment workflows will be introduced on a later roadmap day.
+Protect `main` with required status checks for **Frontend quality and builds** and **Backend quality, tests, and startup**. Keep `DEPLOY_ENABLED` unset while configuring the VPS; setting it to `true` turns on automatic deployment after successful CI.

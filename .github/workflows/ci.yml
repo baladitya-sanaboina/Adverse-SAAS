@@ -1,4 +1,4 @@
-name: Loopless CI
+name: Adverse CI/CD
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: loopless-ci-${{ github.workflow }}-${{ github.ref }}
+  group: adverse-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -21,7 +21,7 @@ jobs:
     env:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
-      NEXT_PUBLIC_APP_NAME: Loopless CI
+      NEXT_PUBLIC_APP_NAME: Adverse CI
       NEXT_PUBLIC_APP_VERSION: 0.1.0
       NEXT_PUBLIC_ENVIRONMENT: test
       NEXT_PUBLIC_BACKEND_HEALTH_URL: http://localhost:8000/health
@@ -40,7 +40,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Enforce Loopless UI standards
+      - name: Enforce Adverse UI standards
         run: npm run ui:standards
 
       - name: Validate formatting
@@ -62,13 +62,13 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_DB: loopless_ci
-          POSTGRES_USER: loopless
-          POSTGRES_PASSWORD: loopless
+          POSTGRES_DB: adverse_ci
+          POSTGRES_USER: adverse
+          POSTGRES_PASSWORD: adverse
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U loopless -d loopless_ci"
+          --health-cmd "pg_isready -U adverse -d adverse_ci"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -94,17 +94,17 @@ jobs:
       run:
         working-directory: backend
     env:
-      APP_NAME: Loopless API
+      APP_NAME: Adverse API
       APP_VERSION: 0.37.0
       ENVIRONMENT: test
-      DATABASE_URL: postgresql://loopless:loopless@localhost:5432/loopless_ci
+      DATABASE_URL: postgresql://adverse:adverse@localhost:5432/adverse_ci
       REDIS_URL: redis://localhost:6379/0
-      JWT_SECRET: loopless-ci-validation-secret-at-least-32-characters
+      JWT_SECRET: adverse-ci-validation-secret-at-least-32-characters
       JWT_REFRESH_EXPIRY_DAYS: 7
       PASSWORD_RESET_EXPIRY_MINUTES: 30
       SMTP_HOST: localhost
       SMTP_PORT: 1025
-      SMTP_FROM_EMAIL: no-reply@loopless.test
+      SMTP_FROM_EMAIL: no-reply@adverse.test
       SMTP_USE_TLS: "false"
       CORS_ORIGINS: http://localhost:3000
       SWAGGER_ENABLED: "true"
@@ -168,14 +168,59 @@ jobs:
 
       - name: Validate backend startup and health
         run: |
-          uvicorn main:app --host 127.0.0.1 --port 8000 > /tmp/loopless-backend.log 2>&1 &
+          uvicorn main:app --host 127.0.0.1 --port 8000 > /tmp/adverse-backend.log 2>&1 &
           BACKEND_PID=$!
           trap 'kill "$BACKEND_PID"' EXIT
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            if curl --fail --silent http://127.0.0.1:8000/health > /tmp/loopless-health.json; then
+            if curl --fail --silent http://127.0.0.1:8000/health > /tmp/adverse-health.json; then
               break
             fi
             sleep 1
           done
           curl --fail --show-error http://127.0.0.1:8000/health
           curl --fail --silent http://127.0.0.1:8000/openapi.json > /dev/null
+
+  deploy:
+    name: Deploy to VPS
+    needs: [frontend, backend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Configure pinned SSH access
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          test -n "$VPS_SSH_PRIVATE_KEY" || { echo "VPS_SSH_PRIVATE_KEY is not configured"; exit 1; }
+          test -n "$VPS_KNOWN_HOSTS" || { echo "VPS_KNOWN_HOSTS is not configured"; exit 1; }
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$HOME/.ssh/adverse_deploy"
+          chmod 600 "$HOME/.ssh/adverse_deploy"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          ssh-keygen -y -f "$HOME/.ssh/adverse_deploy" > /dev/null
+
+      - name: Package the tested commit
+        run: git archive --format=tar.gz --output="$RUNNER_TEMP/adverse-${GITHUB_SHA}.tar.gz" "$GITHUB_SHA"
+
+      - name: Upload and deploy release
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+        run: |
+          test -n "$VPS_HOST" || { echo "VPS_HOST is not configured"; exit 1; }
+          test -n "$VPS_USER" || { echo "VPS_USER is not configured"; exit 1; }
+          scp -i "$HOME/.ssh/adverse_deploy" -P "$VPS_PORT" \
+            "$RUNNER_TEMP/adverse-${GITHUB_SHA}.tar.gz" \
+            "$VPS_USER@$VPS_HOST:/tmp/adverse-${GITHUB_SHA}.tar.gz"
+          ssh -i "$HOME/.ssh/adverse_deploy" -p "$VPS_PORT" \
+            -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
+            "mkdir -p /opt/adverse/incoming/$GITHUB_SHA && tar -xzf /tmp/adverse-$GITHUB_SHA.tar.gz -C /opt/adverse/incoming/$GITHUB_SHA && rm -f /tmp/adverse-$GITHUB_SHA.tar.gz && bash /opt/adverse/incoming/$GITHUB_SHA/scripts/production/deploy_native.sh $GITHUB_SHA"

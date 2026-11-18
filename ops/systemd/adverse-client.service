@@ -1,0 +1,23 @@
+[Unit]
+Description=Adverse Client web app
+After=network-online.target adverse-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=adverse
+Group=adverse
+WorkingDirectory=/opt/adverse/current/frontend
+EnvironmentFile=/etc/adverse/frontend.env
+Environment=NODE_ENV=production
+Environment=PORT=3003
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/usr/bin/npm run start --workspace @adverse/client -- --hostname 127.0.0.1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

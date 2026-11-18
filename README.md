@@ -20,7 +20,8 @@ Each role has its own Next.js application, shared auth foundations, OTP-based si
 | Database | PostgreSQL |
 | Cache | Redis |
 | Schema and migrations | Prisma |
-| Infrastructure | Docker Compose |
+| Production runtime | systemd, PostgreSQL, Redis, Caddy |
+| Local development | Docker Compose (optional) |
 
 ## Folder Structure
 
@@ -53,13 +54,15 @@ docker/
 - Forgot password also sends a 6-digit OTP.
 - Login remains role-aware and only allows the correct workspace for the authenticated role.
 
-## Run with Docker
+## Optional Docker Development
 
 ```bash
 docker compose -f docker/docker-compose.yml up --build
 ```
 
 This starts all four role apps, the backend, PostgreSQL, Redis, Prisma migrations, and Mailpit.
+
+For a VPS deployment without Docker, follow [the native deployment guide](docs/Deployment.md). CI/CD is described in [CI/CD](docs/CI-CD.md).
 
 ### Main URLs
 

@@ -1,138 +1,106 @@
-# Deploying Adverse to a server
+# Deploying Adverse without Docker
 
-This guide is for the person who sets up the production server. It runs everything on one Linux server with Docker. Caddy handles HTTPS on its own.
+Production runs on one Linux VPS with PostgreSQL, Redis, Caddy, FastAPI, and four Next.js apps managed by systemd. The app servers listen on localhost only; Caddy provides HTTPS using Let's Encrypt.
 
-## What runs
+## Host and DNS
 
-| Service | What it does | Reachable from the internet |
-| --- | --- | --- |
-| `caddy` | HTTPS for the four app domains and the API; gets and renews certificates | Yes: 80, 443 |
-| `admin`, `manager`, `employee`, `client` | The four Next.js apps (`next build` + `next start`) | Only through Caddy |
-| `backend` | FastAPI, one or more workers, no code reload | Only through Caddy on the API domain |
-| `migrations` | Applies Prisma migrations, then exits | No |
-| `postgres`, `redis` | Data and live events; password protected | No |
-| `coturn` | TURN relay so meets work on strict office/mobile networks | Yes: 3478 UDP+TCP, 49160-49200 UDP |
-
-Files are in `docker/`:
-- `docker-compose.prod.yml`
-- `Caddyfile`
-- `Dockerfile.backend.prod`
-- `Dockerfile.web.prod`
-- `.env.production.example`
-
-## Server
-
-- **Size:** Ubuntu 22.04/24.04 or Oracle Linux 9 with at least 4 GB RAM and 2 CPUs (8 GB is better while building the images). The compose file has tiny-VPS defaults, but four Next.js apps plus the API, Postgres and Redis still run much better with at least 4 GB.
-- **Docker:** Docker Engine with the compose plugin.
-- **DNS:** an A record for each app domain plus the API domain pointing at the server, for example `admin.`, `manager.`, `employee.`, `client.` and `api.` under your domain.
-- **Firewall:** open 80/tcp, 443/tcp, 443/udp, 3478/tcp, 3478/udp and 49160-49200/udp. Leave everything else closed.
-
-## First deploy
-
-1. Copy the repository to the server, for example `git clone` into `/opt/adverse`.
-2. Create the production env files from their examples and fill them in. All of them are git-ignored:
-   - `docker/.env.production`: domains, Postgres/Redis passwords, TURN secret, public IP and tiny-VPS tuning values. Make each secret with `openssl rand -base64 36`.
-   - `backend/.env.production`:
-     - `JWT_SECRET`
-     - SMTP (Gmail App Password)
-     - `CORS_ORIGINS`: the four `https://` domains, in the order Admin, Manager, Employee, Client
-     - `TURN_URLS` pointing at your domain
-   - `frontend/<App>/.env.production` for each of Admin, Manager, Employee and Client: the four app URLs plus the public API URL. These values are built into the browser code, so never put secrets in them.
-3. Build and start:
-
-   ```bash
-   cd docker
-   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
-   ```
-
-4. Check that everything is up:
-   - `docker compose --env-file .env.production -f docker-compose.prod.yml ps`
-   - Open each domain, plus `https://api.your-domain.example/health`. The first visit can take a few seconds while Caddy gets its certificate.
-
-The migrations run before the API starts. Development test accounts are never created in production (`ENVIRONMENT=production`).
-
-## Updating
-
-Manual update:
+The native installer needs Node.js 22, Python 3 with `venv`, PostgreSQL, Redis, and Caddy. It installs the Ubuntu packages, creates the `adverse` account and release directories, installs the systemd units, and grants that account permission to restart only the Adverse services:
 
 ```bash
-cd /opt/adverse && git pull
-cd docker && docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+sudo bash scripts/production/install_native.sh
 ```
 
-Git-based auto-deploy on the server:
+Point five DNS A records at the VPS:
+
+| Host | App |
+| --- | --- |
+| `admin.example.com` | Admin |
+| `manager.example.com` | Manager |
+| `employee.example.com` | Employee |
+| `client.example.com` | Client |
+| `api.example.com` | FastAPI |
+
+Allow inbound TCP 22, 80, and 443 in the VPS firewall. Caddy obtains and renews certificates for the configured names.
+
+## One-time configuration
+
+Create the PostgreSQL role and database with a randomly generated hexadecimal password, for example `openssl rand -hex 32`. Use that password in `DATABASE_URL` below; hexadecimal characters need no URL escaping. Keep the production files out of the repository.
 
 ```bash
-cd /opt/adverse
-sudo ./scripts/production/install_autodeploy_systemd.sh
+sudo -u postgres psql
 ```
 
-This installs a systemd timer that checks `origin/main` every 2 minutes. The deploy script is change-aware:
-- `frontend/` or production proxy/container changes -> full stack rebuild
-- `backend/` or backend Dockerfile changes -> backend+migrations rebuild
-- docs/CI-only changes -> git sync only
+At the PostgreSQL prompt, run these commands with the generated password:
 
-You can also run the detector manually:
+```sql
+CREATE ROLE adverse LOGIN PASSWORD 'generated-password';
+CREATE DATABASE adverse OWNER adverse;
+\q
+```
+
+Create `/etc/adverse/backend.env` (replace every example value):
+
+```dotenv
+APP_NAME=Adverse API
+APP_VERSION=0.37.0
+ENVIRONMENT=production
+DATABASE_URL=postgresql://adverse:URL_ENCODED_PASSWORD@127.0.0.1:5432/adverse
+REDIS_URL=redis://127.0.0.1:6379/0
+JWT_SECRET=GENERATE_WITH_openssl_rand_-hex_32
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=your-smtp-user
+SMTP_PASSWORD=your-smtp-app-password
+SMTP_FROM_EMAIL=no-reply@example.com
+SMTP_USE_TLS=true
+CORS_ORIGINS=https://admin.example.com,https://manager.example.com,https://employee.example.com,https://client.example.com
+SWAGGER_ENABLED=false
+HEALTH_CHECK_ENABLED=true
+PUBLIC_SIGNUP_ENABLED=false
+```
+
+Create `/etc/adverse/frontend.env` with the public URLs that match DNS:
+
+```dotenv
+BACKEND_INTERNAL_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_API_URL=https://api.example.com
+NEXT_PUBLIC_API_BASE_URL=https://api.example.com
+NEXT_PUBLIC_BACKEND_HEALTH_URL=https://api.example.com/health
+NEXT_PUBLIC_ADMIN_APP_URL=https://admin.example.com
+NEXT_PUBLIC_MANAGER_APP_URL=https://manager.example.com
+NEXT_PUBLIC_EMPLOYEE_APP_URL=https://employee.example.com
+NEXT_PUBLIC_CLIENT_APP_URL=https://client.example.com
+NEXT_PUBLIC_APP_VERSION=0.37.0
+NEXT_PUBLIC_ENVIRONMENT=production
+NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=false
+```
+
+Create `/etc/adverse/domains.env` for Caddy:
+
+```dotenv
+ACME_EMAIL=ops@example.com
+ADMIN_DOMAIN=admin.example.com
+MANAGER_DOMAIN=manager.example.com
+EMPLOYEE_DOMAIN=employee.example.com
+CLIENT_DOMAIN=client.example.com
+API_DOMAIN=api.example.com
+```
+
+Set file ownership and permissions, then enable Caddy after DNS points to this VPS:
 
 ```bash
-cd /opt/adverse
-./scripts/production/auto_deploy.sh
+sudo chown root:adverse /etc/adverse/*.env
+sudo chmod 0640 /etc/adverse/*.env
+sudo systemctl daemon-reload
+sudo systemctl enable --now caddy
 ```
 
-## Backups
+The backend refuses to start in production without SMTP host and sender values. Supply a working SMTP account so verification, invitations, and password recovery can send mail. After deployment, temporarily set `PUBLIC_SIGNUP_ENABLED=true` in `/etc/adverse/backend.env` to create the first company admin through the Admin app, verify the address through SMTP, then set it back to `false` and restart `adverse-backend`. Account bootstrap for a platform owner is a separate administrative operation.
 
-Data lives in Docker volumes:
-- `postgres_data`: the database.
-- `backend_storage`: logos and profile pictures.
-- `backend_private`: task files, chat and mail attachments, scripts.
+## Deploys
 
-A daily database dump:
+The GitHub Actions workflow deploys only a `main` commit that passed both CI jobs. It uploads that exact commit as an archive, builds it in a new release under `/opt/adverse/releases`, applies Prisma migrations, atomically switches `/opt/adverse/current`, restarts the five services, and checks their local HTTP endpoints. If checks fail, it restores the previous release.
 
-```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U adverse adverse | gzip > /var/backups/adverse-$(date +%F).sql.gz
-```
+The first release can also be deployed manually after configuring the GitHub SSH key and repository secrets described in [CI/CD](CI-CD.md). The VPS has no GitHub token and does not clone the repository; the workflow remains compatible when the repo becomes private.
 
-Copy the dumps and the two storage volumes off the server, for example to object storage.
-
-## Meets (TURN)
-
-Without TURN, meets connect directly between browsers. That works on most home networks, but often fails on office Wi-Fi and mobile data. With `TURN_URLS` (backend) and `TURN_SECRET` (compose) set:
-- The API gives each signed-in person TURN credentials that last 6 hours, made with an HMAC of the shared secret.
-- Nothing is stored, and the browser never sees the secret.
-- coturn refuses to relay into private networks.
-
-To also offer TURN over TLS on 443 (the strictest networks), give coturn a certificate and add `--tls-listening-port`. This is not needed for a first deploy.
-
-## Installable apps and push notifications
-
-Each app can be installed from Chrome, Edge or Safari ("Install app" in the address bar, or the "Install Adverse as an app" card). Installed apps open in their own window.
-
-Push notifications reach phones and computers even when the app is closed, once the person has allowed notifications. They need a VAPID key pair in `backend/.env.production`. Make one once:
-
-```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml run --rm backend python -c "
-import base64; from cryptography.hazmat.primitives import serialization; from py_vapid import Vapid01
-v = Vapid01(); v.generate_keys(); b = lambda x: base64.urlsafe_b64encode(x).rstrip(b'=').decode()
-print('VAPID_PUBLIC_KEY=' + b(v.public_key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)))
-print('VAPID_PRIVATE_KEY=' + b(v.private_key.private_numbers().private_value.to_bytes(32, 'big')))"
-```
-
-Then:
-- Put both lines in `backend/.env.production`.
-- Set `VAPID_SUBJECT` to `mailto:` plus an address you read.
-- Restart the backend.
-
-Changing the keys later means everyone has to allow notifications again.
-
-- **iPhone and iPad:** push only works after the app is added to the Home Screen (Share, then "Add to Home Screen") on iOS 16.4 or later.
-- **Office networks:** push uses the browser's own push service (Google, Mozilla or Apple), so it needs internet access from the person's device. It does not need any extra ports on the server.
-
-## Mail
-
-Outgoing mail uses the SMTP account in `backend/.env.production`. For Gmail:
-1. Turn on 2-step verification.
-2. Create an App Password.
-3. Set `SMTP_USERNAME` and `SMTP_FROM_EMAIL` to the Gmail address and `SMTP_PASSWORD` to the App Password.
-
-Gmail allows about 500 messages a day. A business mail service (Google Workspace, Amazon SES, Zoho) is better for larger volumes.
+Persistent uploads live in `/opt/adverse/shared/storage` and `/opt/adverse/shared/private-storage` across releases. Back up those directories and the PostgreSQL database outside the VPS.

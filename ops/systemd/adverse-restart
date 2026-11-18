@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+units=(adverse-backend.service adverse-admin.service adverse-manager.service adverse-employee.service adverse-client.service)
+/usr/bin/systemctl restart "${units[@]}"
+for unit in "${units[@]}"; do
+  /usr/bin/systemctl is-active --quiet "$unit"
+done
