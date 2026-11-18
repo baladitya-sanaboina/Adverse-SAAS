@@ -208,7 +208,9 @@ export function UserRegistrationPage({
         throw new Error(messageFrom(data, `${currentTitle} ${invitationMode ? "invitation" : "creation"} failed.`));
       }
       const recipientEmail = invitationMode
-        ? (typeof data.notification_email === "string" && data.notification_email) || values.notification_email.trim() || data.email
+        ? (typeof data.notification_email === "string" && data.notification_email) ||
+          values.notification_email.trim() ||
+          data.email
         : data.email;
       const loginEmail = invitationMode ? data.email || values.email.trim() : data.email;
       setStatus(
@@ -397,11 +399,11 @@ export function UserRegistrationPage({
                                 ? `${currentTitle.toLowerCase()}@adverseindia.com`
                                 : key === "notification_email"
                                   ? "person@gmail.com"
-                                : key === "phone_number"
-                                  ? "+91 98765 43210"
-                                  : key === "confirm_password"
-                                    ? "Repeat the password"
-                                    : "Create a secure password"
+                                  : key === "phone_number"
+                                    ? "+91 98765 43210"
+                                    : key === "confirm_password"
+                                      ? "Repeat the password"
+                                      : "Create a secure password"
                           }
                           value={values[key]}
                           onChange={(event) => update(key, event.target.value)}

@@ -193,7 +193,13 @@ export default function EmailVerificationPage({
               <Image src={getBrandLogo(theme, "wordmark")} alt={adverseBrand.name} width={560} height={236} priority />
             </span>
           </Link>
-          <Characters lookingAway={false} focused={focused} pulse={pulse} celebrate={state === "success"} register={false} />
+          <Characters
+            lookingAway={false}
+            focused={focused}
+            pulse={pulse}
+            celebrate={state === "success"}
+            register={false}
+          />
           <p>The little team keeps your workspace access private.</p>
         </section>
 

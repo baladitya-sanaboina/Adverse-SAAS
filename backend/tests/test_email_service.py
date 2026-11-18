@@ -21,7 +21,9 @@ class EmailTemplateTests(unittest.TestCase):
     def test_verification_email_has_plain_and_branded_html_parts(self) -> None:
         service = EmailService()
         code = "482951"
-        verification_url = "https://employee.adverseindia.com/verify-email?email=user%40example.com&otp=482951"
+        verification_url = (
+            "https://employee.adverseindia.com/verify-email?email=user%40example.com&otp=482951"
+        )
         with patch.object(service, "_send") as send:
             service.send_verification("user@example.com", code, verification_url=verification_url)
         message = send.call_args.args[0]

@@ -197,16 +197,13 @@ export default function LoginRegisterPage({ initialMode = "login" }: { initialMo
       name: !form.name.trim() ? "Name is required." : form.name.trim().length < 2 ? "Use at least 2 characters." : "",
       email: validateEmail(form.email),
       password: validatePassword(form.password),
-      confirmPassword:
-        !form.confirmPassword
-          ? "Confirm your password."
-          : form.confirmPassword !== form.password
-            ? "Passwords do not match."
-            : "",
-      companyName:
-        authConfig.requiresCompanyName && !form.companyName.trim() ? "Company name is required." : "",
-      companyCode:
-        authConfig.requiresCompanyCode && !form.companyCode.trim() ? "Company code is required." : "",
+      confirmPassword: !form.confirmPassword
+        ? "Confirm your password."
+        : form.confirmPassword !== form.password
+          ? "Passwords do not match."
+          : "",
+      companyName: authConfig.requiresCompanyName && !form.companyName.trim() ? "Company name is required." : "",
+      companyCode: authConfig.requiresCompanyCode && !form.companyCode.trim() ? "Company code is required." : "",
     };
     return nextErrors;
   }
@@ -257,17 +254,12 @@ export default function LoginRegisterPage({ initialMode = "login" }: { initialMo
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.detail ?? "Unable to create your account.");
         setSuccess(true);
-        window.setTimeout(
-          () => router.replace(`/verify-email?email=${encodeURIComponent(form.email.trim())}`),
-          700,
-        );
+        window.setTimeout(() => router.replace(`/verify-email?email=${encodeURIComponent(form.email.trim())}`), 700);
       }
     } catch (submissionError) {
       if (
         submissionError instanceof AuthApiError &&
-        ["USER_INACTIVE", "COMPANY_INACTIVE", "ACTOR_INACTIVE", "MAINTENANCE_MODE"].includes(
-          submissionError.code ?? "",
-        )
+        ["USER_INACTIVE", "COMPANY_INACTIVE", "ACTOR_INACTIVE", "MAINTENANCE_MODE"].includes(submissionError.code ?? "")
       ) {
         setError(
           submissionError.code === "MAINTENANCE_MODE"
@@ -319,7 +311,9 @@ export default function LoginRegisterPage({ initialMode = "login" }: { initialMo
           <div className="auth-logo">
             <Image src={getBrandLogo(theme, "orbit")} alt={adverseBrand.name} width={240} height={240} priority />
           </div>
-          <h1>{mode === "login" ? `Welcome back, ${authConfig.roleLabel}` : `Create your ${authConfig.roleLabel} account`}</h1>
+          <h1>
+            {mode === "login" ? `Welcome back, ${authConfig.roleLabel}` : `Create your ${authConfig.roleLabel} account`}
+          </h1>
           <p>
             {mode === "login"
               ? "Sign in to continue to your dashboard."
@@ -466,12 +460,11 @@ export default function LoginRegisterPage({ initialMode = "login" }: { initialMo
                       setForm({ ...form, confirmPassword: event.target.value });
                       setFieldErrors((current) => ({
                         ...current,
-                        confirmPassword:
-                          !event.target.value
-                            ? "Confirm your password."
-                            : event.target.value !== form.password
-                              ? "Passwords do not match."
-                              : "",
+                        confirmPassword: !event.target.value
+                          ? "Confirm your password."
+                          : event.target.value !== form.password
+                            ? "Passwords do not match."
+                            : "",
                       }));
                     }}
                   />
@@ -484,7 +477,9 @@ export default function LoginRegisterPage({ initialMode = "login" }: { initialMo
                     {showConfirm ? <EyeOff /> : <Eye />}
                   </button>
                 </span>
-                {fieldErrors.confirmPassword && <small className="auth-field-error">{fieldErrors.confirmPassword}</small>}
+                {fieldErrors.confirmPassword && (
+                  <small className="auth-field-error">{fieldErrors.confirmPassword}</small>
+                )}
               </label>
             )}
 

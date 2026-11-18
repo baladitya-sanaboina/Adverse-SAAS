@@ -87,9 +87,14 @@ export function CompanyBrandingProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (
-      ["/login", "/forgot-password", "/reset-password", "/verify-email", "/accept-invitation", "/invitations/accept"].some((path) =>
-        pathname.startsWith(path),
-      )
+      [
+        "/login",
+        "/forgot-password",
+        "/reset-password",
+        "/verify-email",
+        "/accept-invitation",
+        "/invitations/accept",
+      ].some((path) => pathname.startsWith(path))
     )
       return;
     let active = true;

@@ -291,7 +291,8 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
     return id;
   }, []);
   const fail = useCallback(
-    (reason: unknown) => toast({ text: reason instanceof Error ? reason.message : "That did not work.", tone: "error" }),
+    (reason: unknown) =>
+      toast({ text: reason instanceof Error ? reason.message : "That did not work.", tone: "error" }),
     [toast],
   );
 
@@ -591,7 +592,9 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
       let cc: Person[] = [];
       if (kind === "all") {
         const everyone = [...(message.sender ? [message.sender] : []), ...message.recipients, ...message.cc];
-        const others = everyone.filter((person, index, all) => person.id !== mine && all.findIndex((p) => p.id === person.id) === index);
+        const others = everyone.filter(
+          (person, index, all) => person.id !== mine && all.findIndex((p) => p.id === person.id) === index,
+        );
         to = message.mine ? message.recipients : sender;
         cc = others.filter((person) => !to.some((p) => p.id === person.id));
       }
@@ -610,51 +613,50 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
     [me, people],
   );
 
-  const deliver = useCallback(
-    async (draft: Draft, when: Date | null) => {
-      const form = new FormData();
-      draft.to.forEach((person) => form.append("to", person.id));
-      draft.cc.forEach((person) => form.append("cc", person.id));
-      draft.bcc.forEach((person) => form.append("bcc", person.id));
-      form.append("subject", draft.subject);
-      form.append("body", draft.body);
-      if (draft.replyTo) form.append("reply_to_id", draft.replyTo);
-      if (draft.forwardOf) form.append("forward_of_id", draft.forwardOf);
-      if (draft.draftId) form.append("draft_id", draft.draftId);
-      if (when) form.append("scheduled_at", when.toISOString());
-      if (draft.ticket && draft.mode === "new") form.append("ticket_priority", draft.ticket);
-      draft.files.forEach((file) => form.append("files", file));
-      const result = await mailApi<Thread>("", { method: "POST", body: form });
-      if (draft.meeting && draft.mode === "new" && !when) {
-        // The mail is the invitation: the calendar event links to this conversation.
-        const meeting = draft.meeting;
-        const start = new Date(`${meeting.day}T${meeting.start}`);
-        let end = new Date(`${meeting.day}T${meeting.end}`);
-        if (end <= start) end = new Date(end.getTime() + 864e5);
-        await fetch("/api/agenda/events", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: draft.subject.trim() || "Meeting",
-            notes: draft.body.slice(0, 2000),
-            starts_at: start.toISOString(),
-            ends_at: end.toISOString(),
-            video: meeting.video,
-            attendee_ids: [...draft.to, ...draft.cc, ...draft.bcc].map((person) => person.id),
-            mail_thread_id: result.thread_id,
-            invite: false,
-          }),
-        }).then(async (response) => {
-          if (!response.ok) {
-            const body = (await response.json().catch(() => ({}))) as { detail?: string };
-            throw new Error(`The mail went, but the meeting was not added: ${body.detail ?? "please add it in the calendar."}`);
-          }
-        });
-      }
-      return result;
-    },
-    [],
-  );
+  const deliver = useCallback(async (draft: Draft, when: Date | null) => {
+    const form = new FormData();
+    draft.to.forEach((person) => form.append("to", person.id));
+    draft.cc.forEach((person) => form.append("cc", person.id));
+    draft.bcc.forEach((person) => form.append("bcc", person.id));
+    form.append("subject", draft.subject);
+    form.append("body", draft.body);
+    if (draft.replyTo) form.append("reply_to_id", draft.replyTo);
+    if (draft.forwardOf) form.append("forward_of_id", draft.forwardOf);
+    if (draft.draftId) form.append("draft_id", draft.draftId);
+    if (when) form.append("scheduled_at", when.toISOString());
+    if (draft.ticket && draft.mode === "new") form.append("ticket_priority", draft.ticket);
+    draft.files.forEach((file) => form.append("files", file));
+    const result = await mailApi<Thread>("", { method: "POST", body: form });
+    if (draft.meeting && draft.mode === "new" && !when) {
+      // The mail is the invitation: the calendar event links to this conversation.
+      const meeting = draft.meeting;
+      const start = new Date(`${meeting.day}T${meeting.start}`);
+      let end = new Date(`${meeting.day}T${meeting.end}`);
+      if (end <= start) end = new Date(end.getTime() + 864e5);
+      await fetch("/api/agenda/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: draft.subject.trim() || "Meeting",
+          notes: draft.body.slice(0, 2000),
+          starts_at: start.toISOString(),
+          ends_at: end.toISOString(),
+          video: meeting.video,
+          attendee_ids: [...draft.to, ...draft.cc, ...draft.bcc].map((person) => person.id),
+          mail_thread_id: result.thread_id,
+          invite: false,
+        }),
+      }).then(async (response) => {
+        if (!response.ok) {
+          const body = (await response.json().catch(() => ({}))) as { detail?: string };
+          throw new Error(
+            `The mail went, but the meeting was not added: ${body.detail ?? "please add it in the calendar."}`,
+          );
+        }
+      });
+    }
+    return result;
+  }, []);
 
   const send = useCallback(
     (draft: Draft, when: Date | null, fromInline: boolean) => {
@@ -768,7 +770,14 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
             return next;
           });
       }
-      const targets = view === "thread" && thread ? [thread.thread_id] : selected.size ? [...selected] : current ? [current.thread_id] : [];
+      const targets =
+        view === "thread" && thread
+          ? [thread.thread_id]
+          : selected.size
+            ? [...selected]
+            : current
+              ? [current.thread_id]
+              : [];
       if (key === "e" && folder !== "TRASH") return void act("archive", targets);
       if (key === "#") return void act(folder === "TRASH" ? "purge" : "trash", targets);
       if (key === "s" && view === "list" && current) return toggleStar(current.thread_id, current.starred);
@@ -783,7 +792,22 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [items, cursor, thread, help, openId, view, selected, folder, act, back, startCompose, openConversation, toggleStar, replyDraft]);
+  }, [
+    items,
+    cursor,
+    thread,
+    help,
+    openId,
+    view,
+    selected,
+    folder,
+    act,
+    back,
+    startCompose,
+    openConversation,
+    toggleStar,
+    replyDraft,
+  ]);
 
   // -- theme ---------------------------------------------------------------------------------
 
@@ -819,7 +843,12 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
   return (
     <div className={`mailx${drawer ? " drawer-open" : ""}`}>
       <header className="mailx-top">
-        <button type="button" className="mailx-icon mailx-menu" aria-label="Folders" onClick={() => setDrawer((open) => !open)}>
+        <button
+          type="button"
+          className="mailx-icon mailx-menu"
+          aria-label="Folders"
+          onClick={() => setDrawer((open) => !open)}
+        >
           <Menu />
         </button>
         <a className="mailx-brand" href={homeHref} title="Back to Adverse">
@@ -857,10 +886,21 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
           )}
         </form>
         <div className="mailx-top-actions">
-          <button type="button" className="mailx-icon" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setHelp(true)}>
+          <button
+            type="button"
+            className="mailx-icon"
+            aria-label="Keyboard shortcuts"
+            title="Keyboard shortcuts (?)"
+            onClick={() => setHelp(true)}
+          >
             <Keyboard />
           </button>
-          <button type="button" className="mailx-icon" aria-label={dark ? "Light mode" : "Dark mode"} onClick={toggleTheme}>
+          <button
+            type="button"
+            className="mailx-icon"
+            aria-label={dark ? "Light mode" : "Dark mode"}
+            onClick={toggleTheme}
+          >
             {dark ? <SunMedium /> : <Moon />}
           </button>
           {me && (
@@ -921,7 +961,9 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
             : "Mail inside Adverse. Clients can only write to the admin."}
         </p>
       </aside>
-      {drawer && <button type="button" className="mailx-scrim" aria-label="Close folders" onClick={() => setDrawer(false)} />}
+      {drawer && (
+        <button type="button" className="mailx-scrim" aria-label="Close folders" onClick={() => setDrawer(false)} />
+      )}
 
       <main className="mailx-main">
         {view === "tickets" ? (
@@ -989,7 +1031,13 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
                   aria-label="Select all on this page"
                 />
               </label>
-              <button type="button" className="mailx-icon" aria-label="Refresh" title="Refresh" onClick={() => void loadList()}>
+              <button
+                type="button"
+                className="mailx-icon"
+                aria-label="Refresh"
+                title="Refresh"
+                onClick={() => void loadList()}
+              >
                 <RefreshCw className={loading ? "spin" : undefined} />
               </button>
               {someChecked && (
@@ -998,7 +1046,9 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
                   onAct={(action) => void act(action, [...selected])}
                   onDiscardDrafts={() => {
                     const ids = items.filter((item) => selected.has(item.thread_id)).map((item) => item.message_id);
-                    void Promise.all(ids.map((id) => mailApi(`/drafts/${id}`, { method: "DELETE" }).catch(() => undefined))).then(() => {
+                    void Promise.all(
+                      ids.map((id) => mailApi(`/drafts/${id}`, { method: "DELETE" }).catch(() => undefined)),
+                    ).then(() => {
                       setSelected(new Set());
                       toast({ text: "Drafts discarded" }, 3000);
                       void loadList();
@@ -1006,7 +1056,9 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
                   }}
                   onUnschedule={() => {
                     const ids = items.filter((item) => selected.has(item.thread_id)).map((item) => item.message_id);
-                    void Promise.all(ids.map((id) => mailApi(`/${id}/unschedule`, { method: "POST" }).catch(() => undefined))).then(() => {
+                    void Promise.all(
+                      ids.map((id) => mailApi(`/${id}/unschedule`, { method: "POST" }).catch(() => undefined)),
+                    ).then(() => {
                       setSelected(new Set());
                       toast({ text: "Send cancelled. The mails are in Drafts." });
                       void loadList();
@@ -1057,11 +1109,23 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
             </div>
             {inboxView && !search && (
               <div className="mailx-tabs" role="tablist" aria-label="Inbox">
-                <button type="button" role="tab" aria-selected={folder === "INBOX"} className={folder === "INBOX" ? "active" : undefined} onClick={() => goFolder("INBOX")}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={folder === "INBOX"}
+                  className={folder === "INBOX" ? "active" : undefined}
+                  onClick={() => goFolder("INBOX")}
+                >
                   <Inbox aria-hidden="true" /> Primary
                   {counts.inbox > 0 && <b>{counts.inbox} new</b>}
                 </button>
-                <button type="button" role="tab" aria-selected={folder === "UPDATES"} className={folder === "UPDATES" ? "active" : undefined} onClick={() => goFolder("UPDATES")}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={folder === "UPDATES"}
+                  className={folder === "UPDATES" ? "active" : undefined}
+                  onClick={() => goFolder("UPDATES")}
+                >
                   <CircleAlert aria-hidden="true" /> Updates
                   {counts.updates > 0 && <b className="updates">{counts.updates} new</b>}
                 </button>
@@ -1109,9 +1173,19 @@ export function MailApp({ homeHref = "/dashboard" }: { homeHref?: string }) {
       </main>
 
       {compose && (
-        <div className={`mailx-compose ${composeSize}`} role="dialog" aria-label={compose.ticket ? "Raise a ticket" : "New message"}>
+        <div
+          className={`mailx-compose ${composeSize}`}
+          role="dialog"
+          aria-label={compose.ticket ? "Raise a ticket" : "New message"}
+        >
           <header onClick={() => composeSize === "min" && setComposeSize("normal")}>
-            <strong>{compose.ticket ? "Raise a ticket" : compose.mode === "forward" ? "Forward" : compose.subject || "New message"}</strong>
+            <strong>
+              {compose.ticket
+                ? "Raise a ticket"
+                : compose.mode === "forward"
+                  ? "Forward"
+                  : compose.subject || "New message"}
+            </strong>
             <span>
               <button
                 type="button"
@@ -1263,17 +1337,41 @@ function BulkActions({
   return (
     <>
       {folder !== "ALL" && folder !== "SENT" && (
-        <button type="button" className="mailx-icon" aria-label="Archive" title="Archive (e)" onClick={() => onAct("archive")}>
+        <button
+          type="button"
+          className="mailx-icon"
+          aria-label="Archive"
+          title="Archive (e)"
+          onClick={() => onAct("archive")}
+        >
           <Archive />
         </button>
       )}
-      <button type="button" className="mailx-icon" aria-label="Delete" title="Delete (#)" onClick={() => onAct("trash")}>
+      <button
+        type="button"
+        className="mailx-icon"
+        aria-label="Delete"
+        title="Delete (#)"
+        onClick={() => onAct("trash")}
+      >
         <Trash2 />
       </button>
-      <button type="button" className="mailx-icon" aria-label="Mark as read" title="Mark as read (Shift+I)" onClick={() => onAct("read")}>
+      <button
+        type="button"
+        className="mailx-icon"
+        aria-label="Mark as read"
+        title="Mark as read (Shift+I)"
+        onClick={() => onAct("read")}
+      >
         <MailOpen />
       </button>
-      <button type="button" className="mailx-icon" aria-label="Mark as unread" title="Mark as unread (Shift+U)" onClick={() => onAct("unread")}>
+      <button
+        type="button"
+        className="mailx-icon"
+        aria-label="Mark as unread"
+        title="Mark as unread (Shift+U)"
+        onClick={() => onAct("unread")}
+      >
         <Mail />
       </button>
       <button type="button" className="mailx-icon" aria-label="Star" title="Star" onClick={() => onAct("star")}>
@@ -1375,9 +1473,7 @@ function ConversationRow({
         {item.count > 1 && <small>{item.count}</small>}
       </span>
       <span className="mailx-row-text">
-        {item.ticket && (
-          <i className={`mailx-ticket-pill ${item.ticket.status.toLowerCase()}`}>{item.ticket.code}</i>
-        )}
+        {item.ticket && <i className={`mailx-ticket-pill ${item.ticket.status.toLowerCase()}`}>{item.ticket.code}</i>}
         {item.kind !== "PERSONAL" && !item.ticket && item.sender === null && <i className="mailx-label">Adverse</i>}
         <strong>{item.subject}</strong>
         <span> — {item.preview}</span>
@@ -1498,13 +1594,31 @@ function ThreadView({
           </>
         ) : (
           <>
-            <button type="button" className="mailx-icon" aria-label="Archive" title="Archive (e)" onClick={() => onAct("archive")}>
+            <button
+              type="button"
+              className="mailx-icon"
+              aria-label="Archive"
+              title="Archive (e)"
+              onClick={() => onAct("archive")}
+            >
               <Archive />
             </button>
-            <button type="button" className="mailx-icon" aria-label="Delete" title="Delete (#)" onClick={() => onAct("trash")}>
+            <button
+              type="button"
+              className="mailx-icon"
+              aria-label="Delete"
+              title="Delete (#)"
+              onClick={() => onAct("trash")}
+            >
               <Trash2 />
             </button>
-            <button type="button" className="mailx-icon" aria-label="Mark as unread" title="Mark as unread" onClick={() => onAct("unread")}>
+            <button
+              type="button"
+              className="mailx-icon"
+              aria-label="Mark as unread"
+              title="Mark as unread"
+              onClick={() => onAct("unread")}
+            >
               <Mail />
             </button>
           </>
@@ -1534,7 +1648,12 @@ function ThreadView({
         {thread.event && <MeetingBanner event={thread.event} onError={onError} />}
 
         {thread.ticket && (
-          <TicketBar ticket={thread.ticket} people={people} isAdmin={isAdmin} onChange={(change) => onTicket(thread.ticket as Ticket, change)} />
+          <TicketBar
+            ticket={thread.ticket}
+            people={people}
+            isAdmin={isAdmin}
+            onChange={(change) => onTicket(thread.ticket as Ticket, change)}
+          />
         )}
 
         <ol className="mailx-messages">
@@ -1558,7 +1677,11 @@ function ThreadView({
                 onUnschedule={() => onUnschedule(item)}
               />
             ) : (
-              <li key={item.id} className="mailx-collapsed" onClick={() => setExpanded((value) => new Set(value).add(item.id))}>
+              <li
+                key={item.id}
+                className="mailx-collapsed"
+                onClick={() => setExpanded((value) => new Set(value).add(item.id))}
+              >
                 <Face person={item.sender} size={30} />
                 <strong>{item.sender ? item.sender.name : "Adverse"}</strong>
                 <span>{item.preview}</span>
@@ -1594,7 +1717,8 @@ function ThreadView({
                 <button type="button" onClick={() => onReply(lastSent, "reply")}>
                   <Reply aria-hidden="true" /> Reply
                 </button>
-                {(lastSent.recipients.length + lastSent.cc.length > 1 || (lastSent.mine && lastSent.recipients.length > 1)) && (
+                {(lastSent.recipients.length + lastSent.cc.length > 1 ||
+                  (lastSent.mine && lastSent.recipients.length > 1)) && (
                   <button type="button" onClick={() => onReply(lastSent, "all")}>
                     <ReplyAll aria-hidden="true" /> Reply all
                   </button>
@@ -1758,18 +1882,30 @@ function MessageCard({
       {item.attachments.length > 0 && (
         <div className="mailx-files">
           <span className="mailx-files-title">
-            <Paperclip aria-hidden="true" /> {item.attachments.length} {item.attachments.length === 1 ? "attachment" : "attachments"}
+            <Paperclip aria-hidden="true" /> {item.attachments.length}{" "}
+            {item.attachments.length === 1 ? "attachment" : "attachments"}
           </span>
           <div>
             {images.map((file) => (
-              <a key={file.id} className="mailx-file image" href={`/api/mail/attachments/${file.id}`} target="_blank" rel="noopener noreferrer">
+              <a
+                key={file.id}
+                className="mailx-file image"
+                href={`/api/mail/attachments/${file.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`/api/mail/attachments/${file.id}`} alt={file.file_name} loading="lazy" />
                 <span>{file.file_name}</span>
               </a>
             ))}
             {others.map((file) => (
-              <a key={file.id} className="mailx-file" href={`/api/mail/attachments/${file.id}`} download={file.file_name}>
+              <a
+                key={file.id}
+                className="mailx-file"
+                href={`/api/mail/attachments/${file.id}`}
+                download={file.file_name}
+              >
                 <FileText aria-hidden="true" />
                 <span>
                   {file.file_name}
@@ -1845,14 +1981,26 @@ function MeetingBanner({ event, onError }: { event: MeetingCard; onError: (reaso
         {answer !== null && (
           <span className="mailx-rsvp" role="group" aria-label="Going?">
             {(["YES", "MAYBE", "NO"] as const).map((value) => (
-              <button key={value} type="button" className={answer === value ? "active" : undefined} aria-pressed={answer === value} onClick={() => void respond(value)}>
+              <button
+                key={value}
+                type="button"
+                className={answer === value ? "active" : undefined}
+                aria-pressed={answer === value}
+                onClick={() => void respond(value)}
+              >
                 {value === "YES" ? "Yes" : value === "NO" ? "No" : "Maybe"}
               </button>
             ))}
           </span>
         )}
         {event.video && event.conversation_id && (
-          <button type="button" className="mailx-join" disabled={!open} title={open ? "Join the call" : "Opens 10 minutes before the start"} onClick={() => event.conversation_id && startCall(event.conversation_id, "VIDEO", event.title)}>
+          <button
+            type="button"
+            className="mailx-join"
+            disabled={!open}
+            title={open ? "Join the call" : "Opens 10 minutes before the start"}
+            onClick={() => event.conversation_id && startCall(event.conversation_id, "VIDEO", event.title)}
+          >
             Join
           </button>
         )}
@@ -1899,7 +2047,10 @@ function TicketBar({
             <LooplessSelect
               value={ticket.status}
               ariaLabel="Ticket status"
-              options={(Object.keys(STATUS_LABEL) as TicketStatus[]).map((value) => ({ value, label: STATUS_LABEL[value] }))}
+              options={(Object.keys(STATUS_LABEL) as TicketStatus[]).map((value) => ({
+                value,
+                label: STATUS_LABEL[value],
+              }))}
               onValueChange={(value) => onChange({ status: value })}
             />
           ) : (
@@ -1912,7 +2063,10 @@ function TicketBar({
             <LooplessSelect
               value={ticket.priority}
               ariaLabel="Ticket priority"
-              options={(Object.keys(PRIORITY_LABEL) as Priority[]).map((value) => ({ value, label: PRIORITY_LABEL[value] }))}
+              options={(Object.keys(PRIORITY_LABEL) as Priority[]).map((value) => ({
+                value,
+                label: PRIORITY_LABEL[value],
+              }))}
               onValueChange={(value) => onChange({ priority: value })}
             />
           ) : (
@@ -2008,7 +2162,13 @@ function TicketsView({
             <span role="columnheader">Updated</span>
           </div>
           {data.items.map((ticket) => (
-            <button key={ticket.id} type="button" role="row" className="mailx-ticket-row" onClick={() => onOpen(ticket)}>
+            <button
+              key={ticket.id}
+              type="button"
+              role="row"
+              className="mailx-ticket-row"
+              onClick={() => onOpen(ticket)}
+            >
               <span role="cell" className="subject">
                 <small>{ticket.code}</small>
                 <strong>{ticket.subject}</strong>
@@ -2056,7 +2216,10 @@ function RecipientField({
     const term = text.trim().toLowerCase();
     return people
       .filter((person) => !value.some((chosen) => chosen.id === person.id))
-      .filter((person) => !term || person.name.toLowerCase().includes(term) || ROLE_LABEL[person.role].toLowerCase().includes(term))
+      .filter(
+        (person) =>
+          !term || person.name.toLowerCase().includes(term) || ROLE_LABEL[person.role].toLowerCase().includes(term),
+      )
       .slice(0, 8);
   }, [people, value, text]);
 
@@ -2215,7 +2378,8 @@ function Composer({
       if (now.replyTo) form.append("reply_to_id", now.replyTo);
       void mailApi<{ id: string; saved_at: string }>("/drafts", { method: "POST", body: form })
         .then((result) => {
-          if (latest.current.key === now.key && !latest.current.draftId) onChange({ ...latest.current, draftId: result.id });
+          if (latest.current.key === now.key && !latest.current.draftId)
+            onChange({ ...latest.current, draftId: result.id });
           setSaved(new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }));
           onSaved();
         })
@@ -2269,7 +2433,13 @@ function Composer({
     <form className={`mailx-composer${inline ? " inline" : ""}${isTicket ? " ticket" : ""}`} onSubmit={submit}>
       {inline && (
         <div className="mailx-inline-head">
-          {draft.mode === "forward" ? <Forward aria-hidden="true" /> : draft.cc.length ? <ReplyAll aria-hidden="true" /> : <Reply aria-hidden="true" />}
+          {draft.mode === "forward" ? (
+            <Forward aria-hidden="true" />
+          ) : draft.cc.length ? (
+            <ReplyAll aria-hidden="true" />
+          ) : (
+            <Reply aria-hidden="true" />
+          )}
           <span>{draft.mode === "forward" ? "Forward" : "Reply"}</span>
         </div>
       )}
@@ -2277,13 +2447,16 @@ function Composer({
         <div className="mailx-ticket-note">
           <LifeBuoy aria-hidden="true" />
           <span>
-            Goes to {admins.length ? admins.map((person) => person.name.split(" ")[0]).join(", ") : "the admin"} as a ticket.
-            Replies stay in this conversation.
+            Goes to {admins.length ? admins.map((person) => person.name.split(" ")[0]).join(", ") : "the admin"} as a
+            ticket. Replies stay in this conversation.
           </span>
           <LooplessSelect
             value={draft.ticket ?? "NORMAL"}
             ariaLabel="Ticket priority"
-            options={(Object.keys(PRIORITY_LABEL) as Priority[]).map((value) => ({ value, label: `${PRIORITY_LABEL[value]} priority` }))}
+            options={(Object.keys(PRIORITY_LABEL) as Priority[]).map((value) => ({
+              value,
+              label: `${PRIORITY_LABEL[value]} priority`,
+            }))}
             onValueChange={(value) => update({ ticket: value as Priority })}
           />
         </div>
@@ -2310,7 +2483,9 @@ function Composer({
         }
       />
       {draft.showCc && <RecipientField label="Cc" value={draft.cc} people={people} onChange={(cc) => update({ cc })} />}
-      {draft.showBcc && <RecipientField label="Bcc" value={draft.bcc} people={people} onChange={(bcc) => update({ bcc })} />}
+      {draft.showBcc && (
+        <RecipientField label="Bcc" value={draft.bcc} people={people} onChange={(bcc) => update({ bcc })} />
+      )}
       {(draft.mode === "new" || draft.mode === "forward") && (
         <label className="mailx-field">
           <span className="mailx-field-label">Subject</span>
@@ -2330,7 +2505,13 @@ function Composer({
         value={draft.body}
         aria-label="Message"
         maxLength={20000}
-        placeholder={isTicket ? "What happened, where, and what you expected…" : inline ? "Write your reply…" : "Write your message…"}
+        placeholder={
+          isTicket
+            ? "What happened, where, and what you expected…"
+            : inline
+              ? "Write your reply…"
+              : "Write your message…"
+        }
         onChange={(event) => update({ body: event.target.value })}
         onKeyDown={(event) => {
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -2348,7 +2529,11 @@ function Composer({
                 {file.name}
                 <small>{sizeLabel(file.size)}</small>
               </span>
-              <button type="button" aria-label={`Remove ${file.name}`} onClick={() => update({ files: draft.files.filter((_, i) => i !== index) })}>
+              <button
+                type="button"
+                aria-label={`Remove ${file.name}`}
+                onClick={() => update({ files: draft.files.filter((_, i) => i !== index) })}
+              >
                 <X />
               </button>
             </li>
@@ -2364,26 +2549,36 @@ function Composer({
             type="date"
             aria-label="Meeting date"
             value={draft.meeting.day}
-            onChange={(event) => update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), day: event.target.value } })}
+            onChange={(event) =>
+              update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), day: event.target.value } })
+            }
           />
           <input
             type="time"
             aria-label="Meeting start"
             value={draft.meeting.start}
-            onChange={(event) => update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), start: event.target.value } })}
+            onChange={(event) =>
+              update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), start: event.target.value } })
+            }
           />
           <span>to</span>
           <input
             type="time"
             aria-label="Meeting end"
             value={draft.meeting.end}
-            onChange={(event) => update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), end: event.target.value } })}
+            onChange={(event) =>
+              update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), end: event.target.value } })
+            }
           />
           <label>
             <input
               type="checkbox"
               checked={draft.meeting.video}
-              onChange={(event) => update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), video: event.target.checked } })}
+              onChange={(event) =>
+                update({
+                  meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), video: event.target.checked },
+                })
+              }
             />
             Video call
           </label>
@@ -2403,7 +2598,12 @@ function Composer({
           </button>
           {!isTicket && (
             <span className="mailx-send-more">
-              <button type="button" aria-label="More send options" aria-expanded={sendMenu} onClick={() => setSendMenu((value) => !value)}>
+              <button
+                type="button"
+                aria-label="More send options"
+                aria-expanded={sendMenu}
+                onClick={() => setSendMenu((value) => !value)}
+              >
                 <ChevronDown />
               </button>
               {sendMenu && (
@@ -2423,7 +2623,13 @@ function Composer({
             </span>
           )}
         </div>
-        <button type="button" className="mailx-icon" aria-label="Attach files" title="Attach files (up to 25 MB each)" onClick={() => fileInput.current?.click()}>
+        <button
+          type="button"
+          className="mailx-icon"
+          aria-label="Attach files"
+          title="Attach files (up to 25 MB each)"
+          onClick={() => fileInput.current?.click()}
+        >
           <Paperclip />
         </button>
         <input ref={fileInput} type="file" multiple hidden onChange={addFiles} />
@@ -2465,7 +2671,13 @@ function Composer({
           </button>
         )}
         <span className="mailx-saved">{saved ? `Draft saved ${saved}` : ""}</span>
-        <button type="button" className="mailx-icon" aria-label="Discard draft" title="Discard draft" onClick={() => onDiscard(latest.current)}>
+        <button
+          type="button"
+          className="mailx-icon"
+          aria-label="Discard draft"
+          title="Discard draft"
+          onClick={() => onDiscard(latest.current)}
+        >
           <Trash2 />
         </button>
       </footer>
@@ -2484,7 +2696,7 @@ function ScheduleDialog({ onClose, onPick }: { onClose: () => void; onPick: (whe
       return date;
     };
     const monday = new Date();
-    const add = ((8 - monday.getDay()) % 7) || 7;
+    const add = (8 - monday.getDay()) % 7 || 7;
     return [
       { label: "Tomorrow morning", when: at(1, 8) },
       { label: "Tomorrow afternoon", when: at(1, 13) },
@@ -2508,7 +2720,13 @@ function ScheduleDialog({ onClose, onPick }: { onClose: () => void; onPick: (whe
 
   return (
     <div className="mailx-modal-back" onClick={onClose}>
-      <section className="mailx-modal" role="dialog" aria-modal="true" aria-label="Schedule send" onClick={(event) => event.stopPropagation()}>
+      <section
+        className="mailx-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Schedule send"
+        onClick={(event) => event.stopPropagation()}
+      >
         <header>
           <h2>
             <CalendarClock aria-hidden="true" /> Schedule send
@@ -2521,7 +2739,15 @@ function ScheduleDialog({ onClose, onPick }: { onClose: () => void; onPick: (whe
           {presets.map((preset) => (
             <button key={preset.label} type="button" onClick={() => onPick(preset.when)}>
               <span>{preset.label}</span>
-              <small>{preset.when.toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</small>
+              <small>
+                {preset.when.toLocaleString("en-IN", {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </small>
             </button>
           ))}
         </div>
@@ -2537,7 +2763,13 @@ function ScheduleDialog({ onClose, onPick }: { onClose: () => void; onPick: (whe
         >
           <strong>Pick a date and time</strong>
           <div>
-            <input type="date" value={day} aria-label="Date" min={new Date().toISOString().slice(0, 10)} onChange={(event) => setDay(event.target.value)} />
+            <input
+              type="date"
+              value={day}
+              aria-label="Date"
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={(event) => setDay(event.target.value)}
+            />
             <input type="time" value={time} aria-label="Time" onChange={(event) => setTime(event.target.value)} />
           </div>
           {problem && (
@@ -2589,7 +2821,13 @@ function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   }, [onClose]);
   return (
     <div className="mailx-modal-back" onClick={onClose}>
-      <section className="mailx-modal" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={(event) => event.stopPropagation()}>
+      <section
+        className="mailx-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Keyboard shortcuts"
+        onClick={(event) => event.stopPropagation()}
+      >
         <header>
           <h2>
             <Keyboard aria-hidden="true" /> Keyboard shortcuts

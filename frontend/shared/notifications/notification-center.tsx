@@ -10,7 +10,16 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom";
 import { Bell, BellRing, Check, CheckCheck, Cookie, Download, Inbox, Volume2, VolumeX, X } from "lucide-react";
 import { MAIL_WINDOW } from "../mail/mail-types";
-import { canInstall, disablePush, enablePush, install, installed, onInstallChange, pushActive, registerWorker } from "../pwa/pwa";
+import {
+  canInstall,
+  disablePush,
+  enablePush,
+  install,
+  installed,
+  onInstallChange,
+  pushActive,
+  registerWorker,
+} from "../pwa/pwa";
 import { subscribeRealtime } from "../realtime/realtime";
 import "../styles/notifications.css";
 
@@ -232,7 +241,11 @@ function PermissionPrompts() {
         </span>
         <div>
           <strong>
-            {step === "cookies" ? "We use cookies" : step === "install" ? "Install Adverse as an app" : "Turn on notifications?"}
+            {step === "cookies"
+              ? "We use cookies"
+              : step === "install"
+                ? "Install Adverse as an app"
+                : "Turn on notifications?"}
           </strong>
           <p>
             {step === "cookies"

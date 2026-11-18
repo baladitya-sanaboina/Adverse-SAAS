@@ -123,9 +123,7 @@ class Settings(BaseSettings):
 
     def email_verification_code_url(self, role: str, email: str, otp: str) -> str:
         origin = self.role_origin(role, "email verification")
-        return (
-            f"{origin}/verify-email?email={quote(email, safe='')}&otp={quote(otp, safe='')}"
-        )
+        return f"{origin}/verify-email?email={quote(email, safe='')}&otp={quote(otp, safe='')}"
 
     def login_url(self, role: str) -> str:
         return f"{self.role_origin(role, 'login')}/login"

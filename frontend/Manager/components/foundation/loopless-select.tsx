@@ -113,8 +113,8 @@ export function LooplessSelect({
         }
         .loopless-select.open > button,
         .loopless-select > button:hover {
-          border-color: #0876ED;
-          box-shadow: 0 0 0 3px #0876ED16;
+          border-color: #0876ed;
+          box-shadow: 0 0 0 3px #0876ed16;
         }
         .loopless-select > button:disabled {
           opacity: 0.55;
@@ -122,7 +122,7 @@ export function LooplessSelect({
         }
         .loopless-select > button :global(svg) {
           width: 17px;
-          color: #0876ED;
+          color: #0876ed;
         }
         .loopless-select.open > button :global(svg) {
           transform: rotate(180deg);
@@ -161,12 +161,12 @@ export function LooplessSelect({
         }
         .loopless-select > div > button:hover,
         .loopless-select > div > button.active {
-          color: #065EC1;
+          color: #065ec1;
           background: var(--surface-muted);
         }
         .loopless-select > div > button :global(svg) {
           width: 16px;
-          color: #0876ED;
+          color: #0876ed;
         }
         @media (max-width: 700px) {
           .loopless-select,

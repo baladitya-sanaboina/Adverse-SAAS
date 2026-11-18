@@ -200,9 +200,7 @@ class InvitationService:
                 login_url=self._login_url(role_code),
             )
         except Exception:
-            logger.exception(
-                "Accepted invitation confirmation email failed for %s", login_email
-            )
+            logger.exception("Accepted invitation confirmation email failed for %s", login_email)
         return InvitationAcceptedResponse(
             email=login_email,
             company_name=company_name,

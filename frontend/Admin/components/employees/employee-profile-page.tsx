@@ -119,7 +119,11 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
           "Employee details",
           "Review the employee's identity and contact information.",
         ],
-        organization: ["Organization", "Company assignment", "Manage the employee's role assignment and employee code."],
+        organization: [
+          "Organization",
+          "Company assignment",
+          "Manage the employee's role assignment and employee code.",
+        ],
         account: ["Account", "Employment status", "Review and update the employee's current status."],
       })[tab],
     [tab],

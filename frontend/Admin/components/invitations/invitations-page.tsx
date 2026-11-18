@@ -121,7 +121,10 @@ export function InvitationsPage() {
       setEmailError("");
       setNotificationEmailError("");
       setPhoneError("");
-      const sentTo = typeof data.notification_email === "string" && data.notification_email ? data.notification_email : notificationEmail.trim();
+      const sentTo =
+        typeof data.notification_email === "string" && data.notification_email
+          ? data.notification_email
+          : notificationEmail.trim();
       const loginEmail = typeof data.email === "string" && data.email ? data.email : email.trim();
       setNotice(`Activation email sent to ${sentTo}. Login email: ${loginEmail}.`);
       await load();

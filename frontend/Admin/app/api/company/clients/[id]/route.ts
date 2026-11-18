@@ -4,7 +4,8 @@ import { authenticatedBackend, backendError, setSession } from "@/lib/auth/serve
 type Context = { params: Promise<{ id: string }> };
 
 async function forward(request: NextRequest, id: string, method: "GET" | "PATCH" | "DELETE") {
-  const result = await authenticatedBackend(`/clients/${id}`,
+  const result = await authenticatedBackend(
+    `/clients/${id}`,
     method === "PATCH"
       ? { method, headers: { "Content-Type": "application/json" }, body: await request.text() }
       : { method },

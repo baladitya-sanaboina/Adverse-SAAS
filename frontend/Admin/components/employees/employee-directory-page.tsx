@@ -3,7 +3,19 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Eye, Pencil, Plus, Power, RefreshCw, RotateCcw, Search, Trash2, UserRound } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Eye,
+  Pencil,
+  Plus,
+  Power,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
@@ -80,7 +92,9 @@ export function EmployeeDirectoryPage() {
     const email = searchParams.get("email");
     const login = searchParams.get("login");
     if (invite !== "sent" || !email) return;
-    setNotice(login ? `Activation email sent to ${email}. Login email: ${login}.` : `Activation email sent to ${email}.`);
+    setNotice(
+      login ? `Activation email sent to ${email}. Login email: ${login}.` : `Activation email sent to ${email}.`,
+    );
     const next = new URLSearchParams(searchParams.toString());
     next.delete("invite");
     next.delete("email");
@@ -331,17 +345,18 @@ export function EmployeeDirectoryPage() {
                         <Power />
                       </button>
                     )}
-                    {canDelete && (employee.user_status === "PENDING_VERIFICATION" || employee.status === "PENDING") && (
-                      <button
-                        type="button"
-                        className="danger"
-                        aria-label={`Delete ${employee.user_name}`}
-                        title="Delete pending employee"
-                        onClick={() => setDeleteEmployee(employee)}
-                      >
-                        <Trash2 />
-                      </button>
-                    )}
+                    {canDelete &&
+                      (employee.user_status === "PENDING_VERIFICATION" || employee.status === "PENDING") && (
+                        <button
+                          type="button"
+                          className="danger"
+                          aria-label={`Delete ${employee.user_name}`}
+                          title="Delete pending employee"
+                          onClick={() => setDeleteEmployee(employee)}
+                        >
+                          <Trash2 />
+                        </button>
+                      )}
                   </div>
                 </article>
               ))}

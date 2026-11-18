@@ -513,7 +513,8 @@ export function ClientManagementPage({
     if (key === "email" && mode === "create" && !value.trim()) return "Business email is required.";
     if (key === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid email address.";
     if (key === "portal_login_email" && mode === "create" && !value.trim()) return "Internal login email is required.";
-    if (key === "portal_login_email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid email address.";
+    if (key === "portal_login_email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+      return "Enter a valid email address.";
     if (key === "phone" && mode === "create" && !value.trim()) return "Mobile number is required.";
     if (key === "phone" && value && !/^\+?[0-9 ()-]{7,24}$/.test(value.trim())) {
       return "Enter a valid phone number using 7–24 characters.";

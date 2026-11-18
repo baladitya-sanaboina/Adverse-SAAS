@@ -105,44 +105,42 @@ function Sidebar({
         {items.map((item) => {
           const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
           const Icon = item.icon;
-          return (
-            "newTab" in item && item.newTab ? (
-              <a
-                key={item.href}
-                href={item.href}
-                target={MAIL_WINDOW}
-                title={`${item.label} (opens in a new tab)`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  openMail(item.href);
-                }}
-                className="dash-nav-item"
-              >
-                <span className="dash-nav-icon">
-                  <Icon width={18} height={18} strokeWidth={1.8} aria-hidden="true" />
-                </span>
-                <span className="dash-nav-text">{item.label}</span>
-                <span className="dash-nav-arrow" aria-hidden="true">
-                  ›
-                </span>
-              </a>
-            ) : (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={item.label}
-                onClick={(event) => onNavigate(event, item.href)}
-                className={`dash-nav-item${active ? " active" : ""}`}
-              >
-                <span className="dash-nav-icon">
-                  <Icon width={18} height={18} strokeWidth={1.8} aria-hidden="true" />
-                </span>
-                <span className="dash-nav-text">{item.label}</span>
-                <span className="dash-nav-arrow" aria-hidden="true">
-                  ›
-                </span>
-              </Link>
-            )
+          return "newTab" in item && item.newTab ? (
+            <a
+              key={item.href}
+              href={item.href}
+              target={MAIL_WINDOW}
+              title={`${item.label} (opens in a new tab)`}
+              onClick={(event) => {
+                event.preventDefault();
+                openMail(item.href);
+              }}
+              className="dash-nav-item"
+            >
+              <span className="dash-nav-icon">
+                <Icon width={18} height={18} strokeWidth={1.8} aria-hidden="true" />
+              </span>
+              <span className="dash-nav-text">{item.label}</span>
+              <span className="dash-nav-arrow" aria-hidden="true">
+                ›
+              </span>
+            </a>
+          ) : (
+            <Link
+              key={item.href}
+              href={item.href}
+              title={item.label}
+              onClick={(event) => onNavigate(event, item.href)}
+              className={`dash-nav-item${active ? " active" : ""}`}
+            >
+              <span className="dash-nav-icon">
+                <Icon width={18} height={18} strokeWidth={1.8} aria-hidden="true" />
+              </span>
+              <span className="dash-nav-text">{item.label}</span>
+              <span className="dash-nav-arrow" aria-hidden="true">
+                ›
+              </span>
+            </Link>
           );
         })}
       </nav>

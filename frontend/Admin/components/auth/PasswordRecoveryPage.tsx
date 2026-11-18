@@ -159,8 +159,18 @@ export default function PasswordRecoveryPage({
               <Image src={getBrandLogo(theme, "wordmark")} alt={adverseBrand.name} width={560} height={236} priority />
             </span>
           </Link>
-          <Characters lookingAway={!show && focused === "password"} focused={focused} pulse={pulse} celebrate={!failed && Boolean(message)} register={false} />
-          <p>{mode === "forgot" ? "We will send a secure one-time code to your inbox." : "Enter the code from your email and choose a new password."}</p>
+          <Characters
+            lookingAway={!show && focused === "password"}
+            focused={focused}
+            pulse={pulse}
+            celebrate={!failed && Boolean(message)}
+            register={false}
+          />
+          <p>
+            {mode === "forgot"
+              ? "We will send a secure one-time code to your inbox."
+              : "Enter the code from your email and choose a new password."}
+          </p>
         </section>
 
         <section className="interactive-form">
@@ -168,7 +178,11 @@ export default function PasswordRecoveryPage({
             <Image src={getBrandLogo(theme, "orbit")} alt={adverseBrand.name} width={240} height={240} priority />
           </div>
           <h1>{title}</h1>
-          <p>{mode === "forgot" ? "Request a reset code for your account." : "Complete the reset flow securely with OTP."}</p>
+          <p>
+            {mode === "forgot"
+              ? "Request a reset code for your account."
+              : "Complete the reset flow securely with OTP."}
+          </p>
 
           <form className="auth-form-transition" onSubmit={submit} noValidate>
             <label>
@@ -255,12 +269,11 @@ export default function PasswordRecoveryPage({
                       setConfirmation(event.target.value);
                       setErrors((current) => ({
                         ...current,
-                        confirmation:
-                          !event.target.value
-                            ? "Confirm password is required."
-                            : event.target.value !== password
-                              ? "Passwords do not match."
-                              : "",
+                        confirmation: !event.target.value
+                          ? "Confirm password is required."
+                          : event.target.value !== password
+                            ? "Passwords do not match."
+                            : "",
                       }));
                     }}
                   />

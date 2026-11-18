@@ -1,15 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  BriefcaseBusiness,
-  CircleDollarSign,
-  Contact,
-  Plus,
-  RefreshCw,
-  Search,
-  UserRound,
-} from "lucide-react";
+import { BriefcaseBusiness, CircleDollarSign, Contact, Plus, RefreshCw, Search, UserRound } from "lucide-react";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { CrudActionButtons } from "@/components/foundation/crud-action-buttons";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
@@ -17,12 +9,7 @@ import { ManagementModal } from "@/components/foundation/management-modal";
 import "@/styles/service-pricing-settings.css";
 
 type ServiceStatus = "ACTIVE" | "INACTIVE";
-type PricingModeCode =
-  | "PER_VIDEO"
-  | "PER_PIECE"
-  | "MONTHLY_FIXED"
-  | "MONTHLY_PACKAGE"
-  | "COMMISSION_PER_DELIVERABLE";
+type PricingModeCode = "PER_VIDEO" | "PER_PIECE" | "MONTHLY_FIXED" | "MONTHLY_PACKAGE" | "COMMISSION_PER_DELIVERABLE";
 type SubjectTab = "services" | "clients" | "managers";
 type MoneyValue = string | number;
 
@@ -303,7 +290,9 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
     setPricingLoading(true);
     setPricingError("");
     try {
-      const response = await fetch(`/api/company/pricing/clients/${clientId}?include_history=true`, { cache: "no-store" });
+      const response = await fetch(`/api/company/pricing/clients/${clientId}?include_history=true`, {
+        cache: "no-store",
+      });
       const body = (await response.json()) as PricingOverview | { detail?: string };
       if (!response.ok) throw new Error(messageFrom(body, "Unable to load client pricing."));
       setClientPricing(body as PricingOverview);
@@ -322,7 +311,9 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
     setPricingLoading(true);
     setPricingError("");
     try {
-      const response = await fetch(`/api/company/pricing/managers/${managerId}?include_history=true`, { cache: "no-store" });
+      const response = await fetch(`/api/company/pricing/managers/${managerId}?include_history=true`, {
+        cache: "no-store",
+      });
       const body = (await response.json()) as PricingOverview | { detail?: string };
       if (!response.ok) throw new Error(messageFrom(body, "Unable to load manager pricing."));
       setManagerPricing(body as PricingOverview);
@@ -558,7 +549,10 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
           <span>Company settings</span>
           <h3>Services & pricing</h3>
         </div>
-        <p>Manage the database-driven service catalog plus client and manager pricing history without changing the UI shell.</p>
+        <p>
+          Manage the database-driven service catalog plus client and manager pricing history without changing the UI
+          shell.
+        </p>
       </header>
 
       <div className="services-pricing-summary-grid">
@@ -702,12 +696,18 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
             <div>
               <span>{activeTab === "clients" ? "Client pricing" : "Manager pricing"}</span>
               <strong>
-                {activeTab === "clients"
-                  ? "Client-specific billing rates"
-                  : "Manager-specific per-service payouts"}
+                {activeTab === "clients" ? "Client-specific billing rates" : "Manager-specific per-service payouts"}
               </strong>
             </div>
-            <button type="button" className="management-back" onClick={() => (activeTab === "clients" ? void loadClientPricing(selectedClientId) : void loadManagerPricing(selectedManagerId))}>
+            <button
+              type="button"
+              className="management-back"
+              onClick={() =>
+                activeTab === "clients"
+                  ? void loadClientPricing(selectedClientId)
+                  : void loadManagerPricing(selectedManagerId)
+              }
+            >
               <RefreshCw /> Refresh
             </button>
           </div>
@@ -796,11 +796,19 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
                         <span>{item.current_rate ? formatDate(item.current_rate.effective_from) : "—"}</span>
                         <span>
                           {item.history_count} entries
-                          <small>{item.configured ? `Updated by ${item.current_rate?.created_by_name}` : "Not configured"}</small>
+                          <small>
+                            {item.configured ? `Updated by ${item.current_rate?.created_by_name}` : "Not configured"}
+                          </small>
                         </span>
                         <CrudActionButtons
-                          view={{ label: `View pricing for ${item.service_name}`, onClick: () => openPricingEditor("view", item) }}
-                          edit={{ label: `Edit pricing for ${item.service_name}`, onClick: () => openPricingEditor("edit", item) }}
+                          view={{
+                            label: `View pricing for ${item.service_name}`,
+                            onClick: () => openPricingEditor("view", item),
+                          }}
+                          edit={{
+                            label: `Edit pricing for ${item.service_name}`,
+                            onClick: () => openPricingEditor("edit", item),
+                          }}
                         />
                       </article>
                     ))}
@@ -814,8 +822,14 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
 
       <ManagementModal
         open={serviceEditorMode !== null}
-        eyebrow={serviceEditorMode === "create" ? "Create service" : serviceEditorMode === "edit" ? "Edit service" : "Service details"}
-        title={serviceEditorMode === "create" ? "New service" : selectedService?.name ?? "Service"}
+        eyebrow={
+          serviceEditorMode === "create"
+            ? "Create service"
+            : serviceEditorMode === "edit"
+              ? "Edit service"
+              : "Service details"
+        }
+        title={serviceEditorMode === "create" ? "New service" : (selectedService?.name ?? "Service")}
         subtitle={selectedService ? `Code · ${selectedService.code}` : "Configure how the service is billed and paid."}
         icon={<BriefcaseBusiness />}
         busy={serviceSaving}
@@ -831,11 +845,7 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
               <button type="button" className="management-secondary-action" onClick={() => setServiceEditorMode(null)}>
                 Close
               </button>
-              <button
-                type="button"
-                className="management-primary-action"
-                onClick={() => setServiceEditorMode("edit")}
-              >
+              <button type="button" className="management-primary-action" onClick={() => setServiceEditorMode("edit")}>
                 Edit service
               </button>
             </>
@@ -844,7 +854,12 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
               <button type="button" className="management-secondary-action" onClick={() => setServiceEditorMode(null)}>
                 Cancel
               </button>
-              <button type="button" className="management-primary-action" disabled={serviceSaving} onClick={() => void saveService()}>
+              <button
+                type="button"
+                className="management-primary-action"
+                disabled={serviceSaving}
+                onClick={() => void saveService()}
+              >
                 {serviceSaving ? (
                   <>
                     <RefreshCw className="spin" /> Saving…
@@ -960,9 +975,7 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
               <LooplessSelect
                 value={serviceForm.status}
                 options={serviceStatusOptions.filter((option) => option.value) as { value: string; label: string }[]}
-                onValueChange={(value) =>
-                  setServiceForm((current) => ({ ...current, status: value as ServiceStatus }))
-                }
+                onValueChange={(value) => setServiceForm((current) => ({ ...current, status: value as ServiceStatus }))}
                 ariaLabel="Service status"
               />
             </label>
@@ -990,7 +1003,11 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
                 Close
               </button>
               {selectedPricingItem?.service_status === "ACTIVE" && (
-                <button type="button" className="management-primary-action" onClick={() => setPricingEditorMode("edit")}>
+                <button
+                  type="button"
+                  className="management-primary-action"
+                  onClick={() => setPricingEditorMode("edit")}
+                >
                   Edit pricing
                 </button>
               )}
@@ -1000,7 +1017,12 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
               <button type="button" className="management-secondary-action" onClick={() => setPricingEditorMode(null)}>
                 Cancel
               </button>
-              <button type="button" className="management-primary-action" disabled={pricingSaving} onClick={() => void savePricing()}>
+              <button
+                type="button"
+                className="management-primary-action"
+                disabled={pricingSaving}
+                onClick={() => void savePricing()}
+              >
                 {pricingSaving ? (
                   <>
                     <RefreshCw className="spin" /> Saving…

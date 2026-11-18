@@ -61,8 +61,24 @@ type AgendaEvent = {
   my_response: Answer | null;
   can_edit: boolean;
 };
-type Meeting = { id: string; conversation_id: string; title: string; starts_at: string; ends_at: string; kind: string; room: string };
-type TaskDue = { id: string; code: string; title: string; due_date: string; status: string; assignee: string | null; client: string | null };
+type Meeting = {
+  id: string;
+  conversation_id: string;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  kind: string;
+  room: string;
+};
+type TaskDue = {
+  id: string;
+  code: string;
+  title: string;
+  due_date: string;
+  status: string;
+  assignee: string | null;
+  client: string | null;
+};
 type Todo = {
   id: string;
   title: string;
@@ -74,7 +90,15 @@ type Todo = {
   owner: Person;
   mine: boolean;
 };
-type Feed = { events: AgendaEvent[]; meetings: Meeting[]; tasks: TaskDue[]; todos: Todo[]; people: Person[]; scope: Scope; role: Role };
+type Feed = {
+  events: AgendaEvent[];
+  meetings: Meeting[];
+  tasks: TaskDue[];
+  todos: Todo[];
+  people: Person[];
+  scope: Scope;
+  role: Role;
+};
 type Scope = "mine" | "team" | "all";
 type View = "month" | "week" | "day" | "list";
 type Kind = "event" | "meeting" | "task" | "todo";
@@ -118,7 +142,12 @@ const COLOURS: Record<string, string> = {
   grey: "#6b7280",
 };
 const KIND_COLOUR: Record<Exclude<Kind, "event">, string> = { meeting: "teal", task: "amber", todo: "purple" };
-const KIND_LABEL: Record<Kind, string> = { event: "Events", meeting: "Chat meetings", task: "Task deadlines", todo: "Todos" };
+const KIND_LABEL: Record<Kind, string> = {
+  event: "Events",
+  meeting: "Chat meetings",
+  task: "Task deadlines",
+  todo: "Todos",
+};
 const ANSWER_LABEL: Record<Answer, string> = { PENDING: "Not answered", YES: "Going", NO: "Not going", MAYBE: "Maybe" };
 const HOUR_PX = 52;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -164,14 +193,16 @@ function range(view: View, cursor: Date): [Date, Date] {
   return [start, addDays(start, 42)];
 }
 function heading(view: View, cursor: Date): string {
-  if (view === "day") return cursor.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  if (view === "day")
+    return cursor.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   if (view === "week") {
     const [start] = range("week", cursor);
     const end = addDays(start, 6);
     const sameMonth = start.getMonth() === end.getMonth();
     return `${start.toLocaleDateString("en-IN", { day: "numeric", month: sameMonth ? undefined : "short" })} – ${end.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`;
   }
-  if (view === "list") return `Next 30 days from ${cursor.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`;
+  if (view === "list")
+    return `Next 30 days from ${cursor.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`;
   return cursor.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 }
 
@@ -330,7 +361,16 @@ export function AgendaPage({ role }: { role: Role }) {
           .then((event) => {
             const start = utc(event.starts_at);
             setCursor(start);
-            setOpen({ key: `e${event.id}`, kind: "event", title: event.title, start, end: utc(event.ends_at), allDay: event.all_day, colour: event.colour, event });
+            setOpen({
+              key: `e${event.id}`,
+              kind: "event",
+              title: event.title,
+              start,
+              end: utc(event.ends_at),
+              allDay: event.all_day,
+              colour: event.colour,
+              event,
+            });
           })
           .catch((reason) => setNotice(reason instanceof Error ? reason.message : "That event was not found."));
       }
@@ -362,7 +402,9 @@ export function AgendaPage({ role }: { role: Role }) {
   // Keep the open details in step with fresh data.
   useEffect(() => {
     if (!open || !feed) return;
-    const fresh = toItems(feed, { event: true, meeting: true, task: true, todo: true }).find((item) => item.key === open.key);
+    const fresh = toItems(feed, { event: true, meeting: true, task: true, todo: true }).find(
+      (item) => item.key === open.key,
+    );
     if (fresh && fresh !== open) {
       const timer = window.setTimeout(() => setOpen(fresh), 0);
       return () => window.clearTimeout(timer);
@@ -505,7 +547,13 @@ export function AgendaPage({ role }: { role: Role }) {
                 onClick={() => {
                   // Today: the next half hour. Another day in view: 10 am that day.
                   const day = view === "day" || view === "week" ? cursor : new Date();
-                  setDraft(newDraft(sameDay(day, new Date()) ? new Date() : new Date(day.getFullYear(), day.getMonth(), day.getDate(), 10)));
+                  setDraft(
+                    newDraft(
+                      sameDay(day, new Date())
+                        ? new Date()
+                        : new Date(day.getFullYear(), day.getMonth(), day.getDate(), 10),
+                    ),
+                  );
                 }}
               >
                 <CalendarPlus aria-hidden="true" /> Create
@@ -515,10 +563,15 @@ export function AgendaPage({ role }: { role: Role }) {
 
           <div className="agenda-layout">
             <aside className="agenda-side">
-              <MiniMonth key={`${cursor.getFullYear()}-${cursor.getMonth()}`} cursor={cursor} items={items} onPick={(day) => {
-                setCursor(day);
-                if (view === "month") setView("day");
-              }} />
+              <MiniMonth
+                key={`${cursor.getFullYear()}-${cursor.getMonth()}`}
+                cursor={cursor}
+                items={items}
+                onPick={(day) => {
+                  setCursor(day);
+                  if (view === "month") setView("day");
+                }}
+              />
               <fieldset className="agenda-filters">
                 <legend>Show</legend>
                 {(Object.keys(KIND_LABEL) as Kind[]).map((kind) => (
@@ -528,12 +581,20 @@ export function AgendaPage({ role }: { role: Role }) {
                       checked={show[kind]}
                       onChange={() => setShow((current) => ({ ...current, [kind]: !current[kind] }))}
                     />
-                    <i style={{ background: COLOURS[kind === "event" ? "blue" : KIND_COLOUR[kind]] }} aria-hidden="true" />
+                    <i
+                      style={{ background: COLOURS[kind === "event" ? "blue" : KIND_COLOUR[kind]] }}
+                      aria-hidden="true"
+                    />
                     {KIND_LABEL[kind]}
                   </label>
                 ))}
               </fieldset>
-              <TodoPanel todos={todos} now={now} onChange={() => void Promise.all([loadTodos(), load()])} onError={setNotice} />
+              <TodoPanel
+                todos={todos}
+                now={now}
+                onChange={() => void Promise.all([loadTodos(), load()])}
+                onError={setNotice}
+              />
             </aside>
 
             <div className="agenda-main">
@@ -556,13 +617,17 @@ export function AgendaPage({ role }: { role: Role }) {
                     setCursor(day);
                     setView("day");
                   }}
-                  onCreate={(day) => setDraft(newDraft(new Date(day.getFullYear(), day.getMonth(), day.getDate(), 10), false))}
+                  onCreate={(day) =>
+                    setDraft(newDraft(new Date(day.getFullYear(), day.getMonth(), day.getDate(), 10), false))
+                  }
                 />
               ) : view === "list" ? (
                 <ListView start={from} items={items} onOpen={setOpen} />
               ) : (
                 <TimeGrid
-                  days={view === "day" ? [dayStart(cursor)] : Array.from({ length: 7 }, (_, index) => addDays(from, index))}
+                  days={
+                    view === "day" ? [dayStart(cursor)] : Array.from({ length: 7 }, (_, index) => addDays(from, index))
+                  }
                   items={items}
                   now={now}
                   onOpen={setOpen}
@@ -587,14 +652,21 @@ export function AgendaPage({ role }: { role: Role }) {
             setOpen(null);
             setDraft(editDraft(event));
           }}
-          onAnswer={(event, response) => void act(() => api(`/events/${event.id}/respond`, json("POST", { response })), "Answer saved.")}
+          onAnswer={(event, response) =>
+            void act(() => api(`/events/${event.id}/respond`, json("POST", { response })), "Answer saved.")
+          }
           onCancel={(event) =>
             void act(async () => {
               await api(`/events/${event.id}`, { method: "DELETE" });
               setOpen(null);
             }, "Event cancelled. People were told by mail.")
           }
-          onTodo={(todo, done) => void act(() => api(`/todos/${todo.id}`, json("PATCH", { done })), done ? "Todo done." : "Todo opened again.")}
+          onTodo={(todo, done) =>
+            void act(
+              () => api(`/todos/${todo.id}`, json("PATCH", { done })),
+              done ? "Todo done." : "Todo opened again.",
+            )
+          }
         />
       )}
 
@@ -628,10 +700,18 @@ function MiniMonth({ cursor, items, onPick }: { cursor: Date; items: Item[]; onP
       <header>
         <strong>{shown.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</strong>
         <span>
-          <button type="button" aria-label="Previous month" onClick={() => setMonth(new Date(shown.getFullYear(), shown.getMonth() - 1, 1))}>
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={() => setMonth(new Date(shown.getFullYear(), shown.getMonth() - 1, 1))}
+          >
             <ChevronLeft />
           </button>
-          <button type="button" aria-label="Next month" onClick={() => setMonth(new Date(shown.getFullYear(), shown.getMonth() + 1, 1))}>
+          <button
+            type="button"
+            aria-label="Next month"
+            onClick={() => setMonth(new Date(shown.getFullYear(), shown.getMonth() + 1, 1))}
+          >
             <ChevronRight />
           </button>
         </span>
@@ -727,7 +807,9 @@ function MonthView({
                 onDay(day);
               }}
             >
-              {day.getDate() === 1 ? day.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : day.getDate()}
+              {day.getDate() === 1
+                ? day.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+                : day.getDate()}
             </button>
             {here.slice(0, 3).map((item) => (
               <Chip key={item.key} item={item} onOpen={onOpen} compact />
@@ -778,7 +860,11 @@ function ListView({ start, items, onOpen }: { start: Date; items: Item[]; onOpen
           <ul>
             {dayItems.map((item) => (
               <li key={item.key}>
-                <button type="button" onClick={() => onOpen(item)} style={{ ["--chip" as string]: COLOURS[item.colour] ?? COLOURS.blue }}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(item)}
+                  style={{ ["--chip" as string]: COLOURS[item.colour] ?? COLOURS.blue }}
+                >
                   <i aria-hidden="true" />
                   <time>{item.allDay ? "All day" : `${timeLabel(item.start)} – ${timeLabel(item.end)}`}</time>
                   <strong className={item.done ? "done" : undefined}>{item.title}</strong>
@@ -823,7 +909,12 @@ function TimeGrid({
       <div className="agenda-grid-head">
         <span />
         {days.map((day) => (
-          <button key={iso(day)} type="button" className={sameDay(day, today) ? "today" : undefined} onClick={() => onDay(day)}>
+          <button
+            key={iso(day)}
+            type="button"
+            className={sameDay(day, today) ? "today" : undefined}
+            onClick={() => onDay(day)}
+          >
             <small>{day.toLocaleDateString("en-IN", { weekday: "short" })}</small>
             <b>{day.getDate()}</b>
           </button>
@@ -850,7 +941,14 @@ function TimeGrid({
           ))}
         </div>
         {days.map((day) => (
-          <DayColumn key={iso(day)} day={day} items={items.filter((item) => !item.allDay && covers(item, day))} now={now} onOpen={onOpen} onCreate={onCreate} />
+          <DayColumn
+            key={iso(day)}
+            day={day}
+            items={items.filter((item) => !item.allDay && covers(item, day))}
+            now={now}
+            onOpen={onOpen}
+            onCreate={onCreate}
+          />
         ))}
       </div>
     </div>
@@ -872,7 +970,9 @@ function DayColumn({
 }) {
   // Side by side when items overlap (simple columns per cluster).
   const placed = useMemo(() => {
-    const sorted = [...items].sort((a, b) => a.start.getTime() - b.start.getTime() || b.end.getTime() - a.end.getTime());
+    const sorted = [...items].sort(
+      (a, b) => a.start.getTime() - b.start.getTime() || b.end.getTime() - a.end.getTime(),
+    );
     const out: { item: Item; column: number; columns: number }[] = [];
     let cluster: { item: Item; column: number }[] = [];
     let clusterEnd = 0;
@@ -938,7 +1038,9 @@ function DayColumn({
           </button>
         );
       })}
-      {isToday && <b className="agenda-now" style={{ top: ((now - start) / 3_600_000) * HOUR_PX }} aria-hidden="true" />}
+      {isToday && (
+        <b className="agenda-now" style={{ top: ((now - start) / 3_600_000) * HOUR_PX }} aria-hidden="true" />
+      )}
     </div>
   );
 }
@@ -971,17 +1073,33 @@ function Details({
   const event = item.event;
   const when = item.allDay
     ? item.start.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }) +
-      (item.end.getTime() - item.start.getTime() > 864e5 ? ` – ${addDays(item.end, -1).toLocaleDateString("en-IN", { day: "numeric", month: "long" })}` : "")
+      (item.end.getTime() - item.start.getTime() > 864e5
+        ? ` – ${addDays(item.end, -1).toLocaleDateString("en-IN", { day: "numeric", month: "long" })}`
+        : "")
     : `${item.start.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })} · ${timeLabel(item.start)} – ${timeLabel(item.end)}`;
   const joinOpen = now >= item.start.getTime() - 10 * 60_000 && now <= item.end.getTime();
   const conversation = event?.conversation_id ?? item.meeting?.conversation_id ?? null;
   return (
     <div className="agenda-sheet-back" onClick={onClose}>
-      <aside className="agenda-sheet" role="dialog" aria-modal="true" aria-label={item.title} onClick={(e) => e.stopPropagation()}>
+      <aside
+        className="agenda-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label={item.title}
+        onClick={(e) => e.stopPropagation()}
+      >
         <header style={{ ["--chip" as string]: colour }}>
           <span className="agenda-kind">
             <i aria-hidden="true" />
-            {item.kind === "event" ? (event?.video ? "Video call" : "Event") : item.kind === "meeting" ? "Chat meeting" : item.kind === "task" ? "Task deadline" : "Todo"}
+            {item.kind === "event"
+              ? event?.video
+                ? "Video call"
+                : "Event"
+              : item.kind === "meeting"
+                ? "Chat meeting"
+                : item.kind === "task"
+                  ? "Task deadline"
+                  : "Todo"}
           </span>
           <span className="agenda-sheet-tools">
             {event?.can_edit && (
@@ -1043,7 +1161,8 @@ function Details({
             )}
             <div className="agenda-people">
               <h4>
-                <UsersRound aria-hidden="true" /> {event.attendees.length + 1} {event.attendees.length ? "people" : "person"}
+                <UsersRound aria-hidden="true" /> {event.attendees.length + 1}{" "}
+                {event.attendees.length ? "people" : "person"}
               </h4>
               <ul>
                 <li>
@@ -1217,11 +1336,21 @@ function EventEditor({
 
   const options = people
     .filter((person) => !draft.attendees.some((chosen) => chosen.id === person.id))
-    .map((person) => ({ value: person.id, label: `${person.name} · ${person.role[0]}${person.role.slice(1).toLowerCase()}` }));
+    .map((person) => ({
+      value: person.id,
+      label: `${person.name} · ${person.role[0]}${person.role.slice(1).toLowerCase()}`,
+    }));
 
   return (
     <div className="agenda-modal-back" onClick={() => !busy && onClose()}>
-      <form className="agenda-modal" role="dialog" aria-modal="true" aria-label={editing ? "Edit event" : "New event"} onClick={(e) => e.stopPropagation()} onSubmit={(e) => void save(e)}>
+      <form
+        className="agenda-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={editing ? "Edit event" : "New event"}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => void save(e)}
+      >
         <header>
           <h2>{editing ? "Edit event" : "New event"}</h2>
           <button type="button" className="agenda-icon" aria-label="Close" onClick={onClose} disabled={busy}>
@@ -1240,28 +1369,57 @@ function EventEditor({
         <div className="agenda-row">
           <label className="agenda-field">
             <span>Date</span>
-            <input type="date" value={draft.day} aria-label="Date" onChange={(event) => update({ day: event.target.value })} />
+            <input
+              type="date"
+              value={draft.day}
+              aria-label="Date"
+              onChange={(event) => update({ day: event.target.value })}
+            />
           </label>
           {!draft.allDay && (
             <>
               <label className="agenda-field">
                 <span>From</span>
-                <input type="time" value={draft.start} aria-label="Start time" onChange={(event) => update({ start: event.target.value })} />
+                <input
+                  type="time"
+                  value={draft.start}
+                  aria-label="Start time"
+                  onChange={(event) => update({ start: event.target.value })}
+                />
               </label>
               <label className="agenda-field">
                 <span>To</span>
-                <input type="time" value={draft.end} aria-label="End time" onChange={(event) => update({ end: event.target.value })} />
+                <input
+                  type="time"
+                  value={draft.end}
+                  aria-label="End time"
+                  onChange={(event) => update({ end: event.target.value })}
+                />
               </label>
             </>
           )}
         </div>
         <div className="agenda-toggles">
           <label>
-            <input type="checkbox" checked={draft.allDay} onChange={(event) => update({ allDay: event.target.checked, video: event.target.checked ? false : draft.video })} />
+            <input
+              type="checkbox"
+              checked={draft.allDay}
+              onChange={(event) =>
+                update({ allDay: event.target.checked, video: event.target.checked ? false : draft.video })
+              }
+            />
             All day
           </label>
-          <label className={editing ? "disabled" : undefined} title={editing ? "Video is set when the event is created." : undefined}>
-            <input type="checkbox" checked={draft.video} disabled={editing || draft.allDay} onChange={(event) => update({ video: event.target.checked })} />
+          <label
+            className={editing ? "disabled" : undefined}
+            title={editing ? "Video is set when the event is created." : undefined}
+          >
+            <input
+              type="checkbox"
+              checked={draft.video}
+              disabled={editing || draft.allDay}
+              onChange={(event) => update({ video: event.target.checked })}
+            />
             <Video aria-hidden="true" /> Video call
           </label>
         </div>
@@ -1272,7 +1430,11 @@ function EventEditor({
               <span key={person.id} className="agenda-person-chip">
                 <Avatar person={person} />
                 {person.name}
-                <button type="button" aria-label={`Remove ${person.name}`} onClick={() => update({ attendees: draft.attendees.filter((p) => p.id !== person.id) })}>
+                <button
+                  type="button"
+                  aria-label={`Remove ${person.name}`}
+                  onClick={() => update({ attendees: draft.attendees.filter((p) => p.id !== person.id) })}
+                >
                   <X />
                 </button>
               </span>
@@ -1292,15 +1454,28 @@ function EventEditor({
               </div>
             )}
           </div>
-          {draft.attendees.length > 0 && <small className="agenda-hint">They get an invitation in Mail and answer Yes, No or Maybe.</small>}
+          {draft.attendees.length > 0 && (
+            <small className="agenda-hint">They get an invitation in Mail and answer Yes, No or Maybe.</small>
+          )}
         </div>
         <label className="agenda-field">
           <span>Where</span>
-          <input value={draft.location} maxLength={200} placeholder="Studio, office, client place…" onChange={(event) => update({ location: event.target.value })} />
+          <input
+            value={draft.location}
+            maxLength={200}
+            placeholder="Studio, office, client place…"
+            onChange={(event) => update({ location: event.target.value })}
+          />
         </label>
         <label className="agenda-field">
           <span>Notes</span>
-          <textarea rows={3} value={draft.notes} maxLength={2000} placeholder="Agenda, links, what to bring…" onChange={(event) => update({ notes: event.target.value })} />
+          <textarea
+            rows={3}
+            value={draft.notes}
+            maxLength={2000}
+            placeholder="Agenda, links, what to bring…"
+            onChange={(event) => update({ notes: event.target.value })}
+          />
         </label>
         <div className="agenda-field">
           <span>Colour</span>
@@ -1407,12 +1582,20 @@ function TodoPanel({
     if (todo.due_at) {
       const at = utc(todo.due_at);
       const late = !todo.done && at.getTime() < now;
-      return <small className={late ? "late" : undefined}>{at.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</small>;
+      return (
+        <small className={late ? "late" : undefined}>
+          {at.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+        </small>
+      );
     }
     if (todo.due_date) {
       const at = localDate(todo.due_date);
       const late = !todo.done && at < dayStart(new Date(now));
-      return <small className={late ? "late" : undefined}>{at.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</small>;
+      return (
+        <small className={late ? "late" : undefined}>
+          {at.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+        </small>
+      );
     }
     return null;
   };
@@ -1424,7 +1607,14 @@ function TodoPanel({
       </h3>
       <form onSubmit={(event) => void add(event)}>
         <div className="agenda-todo-add">
-          <input value={title} maxLength={200} placeholder="Add a todo" aria-label="New todo" onChange={(event) => setTitle(event.target.value)} onFocus={() => setMore(true)} />
+          <input
+            value={title}
+            maxLength={200}
+            placeholder="Add a todo"
+            aria-label="New todo"
+            onChange={(event) => setTitle(event.target.value)}
+            onFocus={() => setMore(true)}
+          />
           <button type="submit" aria-label="Add todo" disabled={!title.trim()}>
             <Plus />
           </button>
@@ -1432,7 +1622,13 @@ function TodoPanel({
         {more && (
           <div className="agenda-todo-when">
             <input type="date" value={day} aria-label="Due date" onChange={(event) => setDay(event.target.value)} />
-            <input type="time" value={time} aria-label="Due time" disabled={!day} onChange={(event) => setTime(event.target.value)} />
+            <input
+              type="time"
+              value={time}
+              aria-label="Due time"
+              disabled={!day}
+              onChange={(event) => setTime(event.target.value)}
+            />
           </div>
         )}
       </form>
@@ -1440,7 +1636,12 @@ function TodoPanel({
         {[...open, ...done].map((todo) => (
           <li key={todo.id} className={isDone(todo) ? "done" : undefined}>
             <label>
-              <input type="checkbox" checked={isDone(todo)} onChange={() => void change(todo, { done: !isDone(todo) })} aria-label={`Done: ${todo.title}`} />
+              <input
+                type="checkbox"
+                checked={isDone(todo)}
+                onChange={() => void change(todo, { done: !isDone(todo) })}
+                aria-label={`Done: ${todo.title}`}
+              />
               <span>
                 {todo.title}
                 {due(todo)}
