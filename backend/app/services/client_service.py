@@ -1,10 +1,10 @@
 from uuid import UUID
 
 from app.repositories.client_repository import (
-    ClientDeletionError,
     ClientActivityRecord,
     ClientConflict,
     ClientContactRecord,
+    ClientDeletionError,
     ClientFeedbackRecord,
     ClientNoteRecord,
     ClientRecord,

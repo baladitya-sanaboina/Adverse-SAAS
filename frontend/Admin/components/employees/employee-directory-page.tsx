@@ -53,7 +53,12 @@ export function EmployeeDirectoryPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(() => {
+    const email = searchParams.get("email");
+    if (searchParams.get("invite") !== "sent" || !email) return "";
+    const login = searchParams.get("login");
+    return login ? `Activation email sent to ${email}. Login email: ${login}.` : `Activation email sent to ${email}.`;
+  });
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [statusEmployee, setStatusEmployee] = useState<Employee | null>(null);
   const [deleteEmployee, setDeleteEmployee] = useState<Employee | null>(null);
@@ -92,9 +97,6 @@ export function EmployeeDirectoryPage() {
     const email = searchParams.get("email");
     const login = searchParams.get("login");
     if (invite !== "sent" || !email) return;
-    setNotice(
-      login ? `Activation email sent to ${email}. Login email: ${login}.` : `Activation email sent to ${email}.`,
-    );
     const next = new URLSearchParams(searchParams.toString());
     next.delete("invite");
     next.delete("email");

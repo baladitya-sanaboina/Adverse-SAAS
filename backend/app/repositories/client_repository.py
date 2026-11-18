@@ -3,8 +3,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from psycopg.errors import ForeignKeyViolation
-from psycopg.errors import UniqueViolation
+from psycopg.errors import ForeignKeyViolation, UniqueViolation
 
 from app.database.connectivity import database_pool
 from app.schemas.client import ClientListFilters
