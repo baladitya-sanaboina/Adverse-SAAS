@@ -21,6 +21,7 @@ __pycache__/
 !.env.example
 !.env.local.example
 !.env.production.example
+/envs/
 *.pem
 *.key
 *.p12
