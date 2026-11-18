@@ -95,7 +95,6 @@ export function EmployeeDirectoryPage() {
   useEffect(() => {
     const invite = searchParams.get("invite");
     const email = searchParams.get("email");
-    const login = searchParams.get("login");
     if (invite !== "sent" || !email) return;
     const next = new URLSearchParams(searchParams.toString());
     next.delete("invite");

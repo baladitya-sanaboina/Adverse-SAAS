@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from psycopg import Cursor
@@ -45,16 +46,16 @@ class InvitationRepository:
             )
 
     @staticmethod
-    def _role_id(cursor: Cursor[object], role_code: str) -> UUID:
+    def _role_id(cursor: Cursor[Any], role_code: str) -> UUID:
         cursor.execute('SELECT id FROM "roles" WHERE code=%s', (role_code,))
         role = cursor.fetchone()
         if not role:
             raise RuntimeError(f"Role {role_code} is unavailable.")
-        return role[0]
+        return cast(UUID, role[0])
 
     @staticmethod
     def _link_client_account(
-        cursor: Cursor[object],
+        cursor: Cursor[Any],
         company_id: UUID,
         user_id: UUID,
         *,
@@ -92,7 +93,7 @@ class InvitationRepository:
 
     @staticmethod
     def _ensure_employee_profile(
-        cursor: Cursor[object],
+        cursor: Cursor[Any],
         company_id: UUID,
         user_id: UUID,
         role_id: UUID,
@@ -452,7 +453,7 @@ class InvitationRepository:
 
     @staticmethod
     def _audit(
-        cursor: Cursor[object],
+        cursor: Cursor[Any],
         invitation_id: UUID | None,
         company_id: UUID | None,
         actor_id: UUID | None,

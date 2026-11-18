@@ -31,9 +31,6 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   devIndicators: false,
   poweredByHeader: false,
-  eslint: {
-    ignoreDuringBuilds: process.env.NEXT_DISABLE_ESLINT === "1",
-  },
   typescript: {
     ignoreBuildErrors: process.env.SKIP_BUILD_TYPECHECK === "1",
   },

@@ -64,6 +64,7 @@ class PublicSignupService:
                 password_hash=password_hash,
                 role_code=role_code,
                 company_id=existing.id,
+                phone_number=None,
             )
         except RegistrationConflict as error:
             self._raise_conflict(error)
