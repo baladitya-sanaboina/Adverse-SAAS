@@ -30,7 +30,7 @@ id adverse >/dev/null 2>&1 || useradd --system --gid adverse --home-dir /home/ad
 usermod -a -G adverse adverse
 
 install -d -o adverse -g adverse -m 0750 \
-  /opt/adverse/incoming /opt/adverse/releases /opt/adverse/shared/storage \
+  /opt/adverse /opt/adverse/incoming /opt/adverse/releases /opt/adverse/shared/storage \
   /opt/adverse/shared/private-storage
 install -d -o root -g adverse -m 0750 /etc/adverse
 install -d -o root -g root -m 0755 /etc/systemd/system/caddy.service.d
