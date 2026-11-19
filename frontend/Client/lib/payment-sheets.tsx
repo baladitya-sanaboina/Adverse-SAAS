@@ -98,7 +98,13 @@ export function PaymentSheets({
     for (const item of sheets) for (const line of item.lines) found.add(line.day.slice(0, 7));
     return [...found].sort().reverse();
   }, [sheets]);
-  const shown = month ? sheets.filter((item) => item.lines.some((line) => line.day.startsWith(month))) : sheets;
+  // Sheet filter (owner request 2026-11-19): every sheet, only the open one, or closed ones.
+  const [state, setState] = useState("");
+  const shown = sheets.filter(
+    (item) =>
+      (!month || item.lines.some((line) => line.day.startsWith(month))) &&
+      (!state || (state === "open" ? item.end === null : item.end !== null)),
+  );
   const latest = shown[shown.length - 1]?.index ?? 0;
   const [chosen, setChosen] = useState<number | null>(null);
   const sheet = shown.find((item) => item.index === (chosen ?? latest)) ?? shown[shown.length - 1];
@@ -107,29 +113,41 @@ export function PaymentSheets({
 
   return (
     <div className="sheet-book">
-      {months.length > 1 && (
-        <div className="sheet-month">
-          <span>Month</span>
-          <LooplessSelect
-            value={month}
-            ariaLabel="Show sheets for a month"
-            onValueChange={(value) => {
-              setMonth(value);
-              setChosen(null);
-            }}
-            options={[
-              { value: "", label: "All months" },
-              ...months.map((key) => ({ value: key, label: monthLabel(key) })),
-            ]}
-          />
-          {month && (
-            <small>
-              {shown.length} {shown.length === 1 ? "sheet" : "sheets"} in {monthLabel(month)}
-            </small>
-          )}
-        </div>
-      )}
-      {!sheet && <p className="sheets-empty">Nothing in this month.</p>}
+      <div className="sheet-month">
+        <span>Filter sheets</span>
+        <LooplessSelect
+          value={month}
+          ariaLabel="Show sheets for a month"
+          onValueChange={(value) => {
+            setMonth(value);
+            setChosen(null);
+          }}
+          options={[
+            { value: "", label: "All months" },
+            ...months.map((key) => ({ value: key, label: monthLabel(key) })),
+          ]}
+        />
+        <LooplessSelect
+          value={state}
+          ariaLabel="Open or closed sheets"
+          onValueChange={(value) => {
+            setState(value);
+            setChosen(null);
+          }}
+          options={[
+            { value: "", label: `All sheets (${sheets.length})` },
+            { value: "open", label: "Open sheet" },
+            { value: "closed", label: "Closed sheets" },
+          ]}
+        />
+        {(month || state) && (
+          <small>
+            {shown.length} of {sheets.length} {sheets.length === 1 ? "sheet" : "sheets"}
+            {month ? ` in ${monthLabel(month)}` : ""}
+          </small>
+        )}
+      </div>
+      {!sheet && <p className="sheets-empty">No sheet matches these filters.</p>}
       {sheet && shown.length > 1 && (
         <div className="sheet-tabs" role="tablist" aria-label="Payment sheets">
           {shown.map((item, position) => {

@@ -1435,6 +1435,32 @@ function AssignmentPanel({
   const assigneeChanged = assignee !== (task.assignee?.id ?? "");
   const monitorChanged = monitor !== (task.monitor?.id ?? "");
 
+  // The manager's fixed rate for this task's service (owner request 2026-11-19): shown and
+  // filled in when a manager is chosen, and it can be changed for this one task.
+  const [rate, setRate] = useState<{ for: string; amount: string | null } | null>(null);
+  useEffect(() => {
+    if (!assigneeChanged || person?.role !== "MANAGER") return;
+    let live = true;
+    void api<PricingPreview>(
+      `/api/company/tasks/pricing-preview${query({
+        client_id: task.client.id,
+        service_id: task.service.id,
+        assignee_user_id: assignee,
+      })}`,
+    )
+      .then((data) => {
+        if (!live) return;
+        setRate({ for: assignee, amount: data.commission_default });
+        setCommission(data.commission_default ?? "");
+      })
+      .catch(() => live && setRate({ for: assignee, amount: null }));
+    return () => {
+      live = false;
+    };
+  }, [assignee, assigneeChanged, person?.role, task.client.id, task.service.id]);
+  const fixed = rate?.for === assignee ? rate.amount : null;
+  const changedRate = fixed !== null && commission !== "" && Number(commission) !== Number(fixed);
+
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!assigneeChanged && !monitorChanged) return;
@@ -1501,7 +1527,17 @@ function AssignmentPanel({
         </Field>
         {assigneeChanged && person?.role === "MANAGER" && (
           <>
-            <Field label={`Commission (${task.currency})`} wide hint="Leave empty to use this manager's default rate.">
+            <Field
+              label={`Commission (${task.currency})`}
+              wide
+              hint={
+                rate?.for !== assignee
+                  ? "Looking up this manager's rate…"
+                  : fixed !== null
+                    ? `Fixed rate for ${person.name} on ${task.service.name}: ${money(fixed, task.currency)}. Change it for this task if needed.`
+                    : `No fixed rate for ${person.name} on ${task.service.name} yet. Enter it here, or set it in Settings → Services & Pricing → Manager rates.`
+              }
+            >
               <span className="management-input">
                 <Wallet aria-hidden="true" />
                 <input
@@ -1510,11 +1546,11 @@ function AssignmentPanel({
                   step="0.01"
                   value={commission}
                   onChange={(event) => setCommission(event.target.value)}
-                  placeholder="Default rate"
+                  placeholder={fixed ?? "Commission"}
                 />
               </span>
             </Field>
-            <Field label="Reason" wide>
+            <Field label={changedRate ? "Reason for the change" : "Reason"} wide>
               <span className="management-input">
                 <Pencil aria-hidden="true" />
                 <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} />
