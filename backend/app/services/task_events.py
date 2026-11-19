@@ -99,6 +99,7 @@ class TaskEvents:
                 ("Due", due),
             ],
             action="Open task",
+            status=row.status.replace("_", " ").title(),
         )
         # From the person who acted (owner request 2026-11-19), not from "Adverse".
         self.mail.system(

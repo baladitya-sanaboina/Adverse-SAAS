@@ -14,47 +14,81 @@ export function SheetInvoiceButton({
   sheet,
   clientId,
   onError,
+  onDone,
 }: {
   sheet: Sheet;
   clientId: string;
   onError?: (message: string) => void;
+  onDone?: (message: string) => void;
 }) {
+  // The old flow, kept on the sheet itself (owner request 2026-11-19): Generate invoice → it
+  // becomes a PDF → Send invoice mails the PDF to the client's Gmail and their Adverse mailbox.
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"" | "make" | "send">("");
+  const [made, setMade] = useState<{ id: string; code: string; status: string } | null>(null);
+  const invoice =
+    made ??
+    (sheet.invoice_id && sheet.invoice_code
+      ? { id: sheet.invoice_id, code: sheet.invoice_code, status: sheet.invoice_status ?? "" }
+      : null);
 
-  if (sheet.invoice_id && sheet.invoice_code) {
-    const status = sheet.invoice_status === "DRAFT" ? "draft" : (sheet.invoice_status ?? "").toLowerCase();
+  async function generate() {
+    setBusy("make");
+    try {
+      const created = await api<{ id: string; code: string; status: string }>("/api/company/invoices/sheet", {
+        method: "POST",
+        json: { client_id: clientId, start: sheet.start },
+      });
+      setMade({ id: created.id, code: created.code, status: created.status });
+      onDone?.(`Invoice ${created.code} is ready for sheet ${sheet.index}. View the PDF or send it.`);
+    } catch (reason) {
+      onError?.(errorText(reason, "Could not make the invoice."));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function send() {
+    if (!invoice) return;
+    setBusy("send");
+    try {
+      const result = await api<{ message: string }>(`/api/company/invoices/${invoice.id}/send`, { method: "POST" });
+      setMade({ ...invoice, status: "SENT" });
+      onDone?.(`Invoice ${invoice.code}: ${result.message}`);
+    } catch (reason) {
+      onError?.(errorText(reason, "Could not send the invoice."));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (!invoice) {
     return (
-      <button type="button" className="secondary" onClick={() => router.push(`/invoices?invoice=${sheet.invoice_id}`)}>
-        <FileText aria-hidden="true" /> Invoice {sheet.invoice_code}
-        {status ? ` · ${status}` : ""}
+      <button
+        type="button"
+        disabled={busy !== "" || sheet.items === 0}
+        title={sheet.items === 0 ? "No work on this sheet yet" : "Make the invoice PDF for this sheet"}
+        onClick={() => void generate()}
+      >
+        <ReceiptText aria-hidden="true" /> {busy === "make" ? "Making invoice…" : "Generate invoice"}
       </button>
     );
   }
 
-  async function generate() {
-    setBusy(true);
-    try {
-      const invoice = await api<{ id: string }>("/api/company/invoices/sheet", {
-        method: "POST",
-        json: { client_id: clientId, start: sheet.start },
-      });
-      router.push(`/invoices?invoice=${invoice.id}`);
-    } catch (reason) {
-      onError?.(errorText(reason, "Could not make the invoice."));
-      setBusy(false);
-    }
-  }
-
+  const status = invoice.status.toLowerCase();
+  const sent = ["sent", "paid", "partially_paid", "overdue"].includes(status);
   return (
-    <button
-      type="button"
-      disabled={busy || sheet.items === 0}
-      title={sheet.items === 0 ? "No work on this sheet yet" : "Make the invoice for this sheet"}
-      onClick={() => void generate()}
-    >
-      <ReceiptText aria-hidden="true" /> {busy ? "Making invoice…" : "Generate invoice"}
-    </button>
+    <>
+      <button type="button" disabled={busy !== ""} onClick={() => void send()}>
+        <Mail aria-hidden="true" /> {busy === "send" ? "Sending…" : sent ? "Send invoice again" : "Send invoice"}
+      </button>
+      <a className="secondary" href={`/api/company/invoices/${invoice.id}/pdf`} target="_blank" rel="noreferrer">
+        <FileText aria-hidden="true" /> {invoice.code} PDF
+      </a>
+      <button type="button" className="secondary" onClick={() => router.push(`/invoices?invoice=${invoice.id}`)}>
+        <ReceiptText aria-hidden="true" /> Open invoice
+      </button>
+    </>
   );
 }
 

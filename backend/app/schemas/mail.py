@@ -46,6 +46,8 @@ class MailCard(BaseModel):
     table: list[list[str]] = []
     action: str | None = None
     note: str | None = None
+    highlight: MailCardRow | None = None  # the big figure, e.g. Amount ₹10,000
+    status: str | None = None
 
 
 class MailItem(BaseModel):

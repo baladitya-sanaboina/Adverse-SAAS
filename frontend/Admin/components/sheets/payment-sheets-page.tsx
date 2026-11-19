@@ -197,18 +197,25 @@ export function PaymentSheetsPage() {
                 date={formatDate}
                 itemWord={current.kind === "MANAGER" ? "task" : "video"}
                 empty="No sheets yet."
-                sheetAction={(sheet) => (
-                  <>
-                    {current.kind === "CLIENT" && (
-                      <SheetInvoiceButton sheet={sheet} clientId={current.id} onError={setNotice} />
-                    )}
-                    <SheetEmailButton
+                sheetAction={(sheet) =>
+                  current.kind === "CLIENT" ? (
+                    <SheetInvoiceButton
                       sheet={sheet}
-                      kind={current.kind}
-                      ownerId={current.id}
-                      onDone={(message) => setNotice(message)}
+                      clientId={current.id}
+                      onError={setNotice}
+                      onDone={(message) => {
+                        setNotice(message);
+                        void load();
+                      }}
                     />
-                    {current.kind === "MANAGER" && (
+                  ) : (
+                    <>
+                      <SheetEmailButton
+                        sheet={sheet}
+                        kind={current.kind}
+                        ownerId={current.id}
+                        onDone={(message) => setNotice(message)}
+                      />
                       <a
                         className="secondary"
                         href={`/api/company/finance/sheets/managers/${current.id}/${sheet.index}/statement.pdf`}
@@ -216,9 +223,9 @@ export function PaymentSheetsPage() {
                       >
                         <FileDown aria-hidden="true" /> Download PDF
                       </a>
-                    )}
-                  </>
-                )}
+                    </>
+                  )
+                }
               />
             </section>
           ) : owners.length === 0 ? (

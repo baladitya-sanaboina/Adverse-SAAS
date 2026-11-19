@@ -1051,19 +1051,79 @@
   color: var(--mx-accent);
 }
 
-/* App mails laid out like a proper mail (owner request 2026-11-19). */
+/* App mails laid out like a proper mail (owner requests 2026-11-19). */
 .mailx-card {
-  max-width: 640px;
+  --card-tone: var(--mx-accent);
+  max-width: 660px;
   margin: 16px 0 0 54px;
-  padding: 22px 24px;
+  overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.mailx-card.kind-payment,
+.mailx-card.kind-invoice,
+.mailx-card.kind-budget,
+.mailx-card.kind-advance {
+  --card-tone: #1f8a5b;
+}
+
+.mailx-card.kind-ticket {
+  --card-tone: #c96f05;
+}
+
+.mailx-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card-tone) 7%, var(--surface));
+}
+
+.mailx-card-head i {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--card-tone);
+}
+
+.mailx-card-head i svg {
+  width: 15px;
+  height: 15px;
+}
+
+.mailx-card-head span {
+  color: var(--card-tone);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mailx-card-head em {
+  margin-left: auto;
+  padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, var(--card-tone) 35%, var(--border));
+  border-radius: 999px;
+  color: var(--card-tone);
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.mailx-card-main {
+  padding: 20px 22px 22px;
 }
 
 .mailx-card h3 {
   margin: 0 0 10px;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -1079,23 +1139,47 @@
   color: var(--mx-accent);
 }
 
+.mailx-card-highlight {
+  display: grid;
+  gap: 2px;
+  margin: 14px 0 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.mailx-card-highlight small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.mailx-card-highlight strong {
+  color: var(--foreground);
+  font-size: 1.35rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
 .mailx-card-rows {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
   margin: 14px 0 4px;
-  border-top: 1px solid var(--border);
 }
 
 .mailx-card-rows div {
   display: grid;
-  grid-template-columns: minmax(90px, 140px) 1fr;
-  gap: 12px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--border);
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 
 .mailx-card-rows dt {
   color: var(--muted);
-  font-size: 0.66rem;
+  font-size: 0.6rem;
   font-weight: 600;
 }
 
@@ -1109,6 +1193,8 @@
 .mailx-card-table {
   margin: 14px 0 4px;
   overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 
 .mailx-card-table table {
@@ -1121,7 +1207,8 @@
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   color: var(--muted);
-  font-size: 0.6rem;
+  background: var(--surface-muted);
+  font-size: 0.58rem;
   font-weight: 700;
   text-align: left;
   text-transform: uppercase;
@@ -1133,6 +1220,10 @@
   border-bottom: 1px solid var(--border);
 }
 
+.mailx-card-table tr:last-child td {
+  border-bottom: 0;
+}
+
 .mailx-card-table :is(th, td):not(:first-child, :nth-child(2)) {
   text-align: right;
   white-space: nowrap;
@@ -1140,6 +1231,9 @@
 
 .mailx-card-action {
   min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 16px;
   padding: 0 18px;
   border: 0;
@@ -1152,11 +1246,16 @@
   cursor: pointer;
 }
 
+.mailx-card-action svg {
+  width: 15px;
+  height: 15px;
+}
+
 .mailx-card-action:hover {
   filter: brightness(1.08);
 }
 
-.mailx-card small {
+.mailx-card-note {
   display: block;
   margin-top: 14px;
   color: var(--muted);
@@ -1167,12 +1266,11 @@
 @media (max-width: 700px) {
   .mailx-card {
     margin-left: 0;
-    padding: 18px 16px;
   }
 
-  .mailx-card-rows div {
-    grid-template-columns: 1fr;
-    gap: 2px;
+  .mailx-card-head,
+  .mailx-card-main {
+    padding-inline: 16px;
   }
 }
 

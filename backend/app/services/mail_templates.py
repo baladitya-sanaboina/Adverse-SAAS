@@ -19,6 +19,7 @@ LINE = "#E5E7EB"
 BRAND = "#0876ED"
 PAGE = "#F5F7FA"
 FONT = "'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+_MONEY_LABELS = ("amount", "total", "balance", "amount due", "balance due", "advance left now")
 
 
 def logo_url() -> str:
@@ -33,24 +34,29 @@ def _paragraph(text: str) -> str:
     )
 
 
+def _top(index: int) -> str:
+    return f"border-top:1px solid {LINE};" if index else ""
+
+
 def _rows(rows: Sequence[tuple[str, str]], monospace: bool) -> str:
     if not rows:
         return ""
     value_font = "Menlo,Consolas,'Courier New',monospace" if monospace else FONT
+    filled = [(label, value) for label, value in rows if value]
     cells = "".join(
         "<tr>"
-        f'<td style="padding:11px 0;border-bottom:1px solid {LINE};color:{MUTED};font-size:13px;'
+        f'<td style="padding:12px 0;{_top(index)}color:{MUTED};font-size:13px;'
         f'width:38%;vertical-align:top;">{escape(label)}</td>'
-        f'<td style="padding:11px 0;border-bottom:1px solid {LINE};color:{INK};font-size:14px;'
+        f'<td style="padding:12px 0;{_top(index)}color:{INK};font-size:14px;'
         f"font-weight:600;font-family:{value_font};text-align:right;word-break:break-word;"
         f'">{escape(value)}</td>'
         "</tr>"
-        for label, value in rows
-        if value
+        for index, (label, value) in enumerate(filled)
     )
     return (
         '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" '
-        f'style="margin:6px 0 22px;border-top:1px solid {LINE};">{cells}</table>'
+        f'style="margin:6px 0 22px;padding:2px 18px;border:1px solid {LINE};border-radius:10px;">'
+        f"{cells}</table>"
     )
 
 
@@ -114,6 +120,8 @@ def render_mail(
     monospace_rows: bool = False,
     code: str | None = None,
     show_link: bool = False,
+    eyebrow: str | None = None,
+    highlight: tuple[str, str] | None = None,
 ) -> str:
     """The HTML of one mail. `after` are lines below the button; `code` shows a one-time code;
     `show_link` prints the button's address for mail apps that block buttons."""
@@ -146,6 +154,29 @@ def render_mail(
     )
     footer = escape(footnote) + "<br>" if footnote else ""
     sender = escape(company) if company != "Adverse" else "Adverse India"
+    rows = [(label, value) for label, value in rows if value]
+    if highlight is None:
+        found = next((pair for pair in rows if pair[0].strip().lower() in _MONEY_LABELS), None)
+        if found is not None:
+            highlight = found
+            rows = [pair for pair in rows if pair is not found]
+    highlight_html = (
+        f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" '
+        f'style="margin:4px 0 22px;"><tr><td style="padding:18px 20px;border:1px solid {LINE};'
+        f'border-radius:10px;background:{PAGE};">'
+        f'<div style="color:{MUTED};font-size:12px;font-weight:600;letter-spacing:.3px;">'
+        f"{escape(highlight[0])}</div>"
+        f'<div style="margin-top:4px;color:{INK};font-size:28px;line-height:1.2;font-weight:700;">'
+        f"{escape(highlight[1])}</div></td></tr></table>"
+        if highlight
+        else ""
+    )
+    eyebrow_html = (
+        f'<td align="right" style="color:{BRAND};font-size:11px;font-weight:700;'
+        f'letter-spacing:1px;text-transform:uppercase;">{escape(eyebrow)}</td>'
+        if eyebrow
+        else "<td></td>"
+    )
     body = "".join(_paragraph(line) for line in lines if line)
     tail = "".join(_paragraph(line) for line in after if line)
     return f"""<!doctype html>
@@ -163,19 +194,28 @@ def render_mail(
         <td align="center" style="padding:32px 14px;">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
             <tr>
-              <td style="padding:0 6px 20px;">
-                <img src="{escape(logo_url(), quote=True)}" width="128" alt="Adverse" style="display:block;width:128px;height:auto;border:0;color:{BRAND};font-size:22px;font-weight:700;">
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:36px 36px 32px;border:1px solid {LINE};border-radius:12px;background:#ffffff;">
-                <h1 style="margin:0 0 18px;color:{INK};font-size:22px;line-height:1.35;font-weight:700;">{escape(title)}</h1>
-                {greeting_html}{body}{code_html}{_rows(rows, monospace_rows)}{_table(table)}{_button(action_label, action_url)}{link_html}{tail}{sign_html}
+              <td style="border:1px solid {LINE};border-radius:14px;background:#ffffff;overflow:hidden;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="padding:20px 36px;background:#F3F8FF;border-bottom:1px solid {LINE};border-radius:14px 14px 0 0;">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>
+                        <td><img src="{escape(logo_url(), quote=True)}" width="118" alt="Adverse" style="display:block;width:118px;height:auto;border:0;color:{BRAND};font-size:20px;font-weight:700;"></td>
+                        {eyebrow_html}
+                      </tr></table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 36px 32px;">
+                      <h1 style="margin:0 0 18px;color:{INK};font-size:22px;line-height:1.35;font-weight:700;">{escape(title)}</h1>
+                      {greeting_html}{body}{highlight_html}{code_html}{_rows(rows, monospace_rows)}{_table(table)}{_button(action_label, action_url)}{link_html}{tail}{sign_html}
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
             <tr>
               <td style="padding:20px 8px 0;color:{MUTED};font-size:12px;line-height:1.7;text-align:center;">
-                {footer}{sender} · <a href="https://adverseindia.com" style="color:{MUTED};text-decoration:underline;">adverseindia.com</a>
+                {footer}{sender} · <a href="https://adverseindia.com" style="color:{MUTED};text-decoration:underline;">adverseindia.com</a><br>You get this mail because you have an account with {sender}.
               </td>
             </tr>
           </table>

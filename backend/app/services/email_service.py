@@ -31,11 +31,11 @@ def branded_email_html(
 ) -> str:
     """An account mail in the shared Adverse layout (mail_templates.render_mail). `details` are
     label/value rows (e.g. the login and password); a link that expires says so under the button
-    and carries the "did not ask for this" note. `eyebrow` is kept for callers and not shown."""
-    del eyebrow
+    and carries the "did not ask for this" note. `eyebrow` is the small label in the header."""
     expires = expiry_minutes is not None
     return render_mail(
         title=title,
+        eyebrow=eyebrow,
         lines=[description],
         rows=details or (),
         monospace_rows=bool(details),
@@ -62,9 +62,9 @@ def branded_code_email_html(
     action_url: str | None = None,
 ) -> str:
     """A one-time code mail in the shared Adverse layout."""
-    del eyebrow
     return render_mail(
         title=title,
+        eyebrow=eyebrow,
         lines=[description],
         code=code,
         action_label=action_label,
@@ -405,7 +405,9 @@ class EmailService:
                     f"Please find attached invoice {invoice_code} for the work delivered "
                     f"{period}. Each video is listed in the PDF with its date and amount."
                 ],
-                rows=[("Invoice", invoice_code), ("Period", period), ("Amount", amount)],
+                rows=[("Invoice", invoice_code), ("Period", period)],
+                highlight=("Amount due", amount),
+                eyebrow="Invoice",
                 action_label="View in your client portal",
                 action_url=portal_url,
                 after=["If anything looks wrong, just reply to this mail and we will sort it out."],

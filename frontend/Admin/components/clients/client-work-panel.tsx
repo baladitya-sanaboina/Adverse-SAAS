@@ -311,7 +311,9 @@ export function ClientWorkPanel({ clientId }: { clientId: string }) {
               date={formatDate}
               itemWord="video"
               empty="No payments yet. Each payment you record in Payments → Client payments opens a new sheet."
-              sheetAction={(sheet) => <SheetInvoiceButton sheet={sheet} clientId={clientId} />}
+              sheetAction={(sheet) => (
+                <SheetInvoiceButton sheet={sheet} clientId={clientId} onDone={() => void load()} />
+              )}
             />
           </div>
 

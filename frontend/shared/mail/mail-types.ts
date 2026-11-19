@@ -41,6 +41,8 @@ export type MailCard = {
   table: string[][];
   action: string | null;
   note: string | null;
+  highlight?: { label: string; value: string } | null;
+  status?: string | null;
 };
 
 export type Ticket = {

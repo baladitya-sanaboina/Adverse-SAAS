@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import builtins
 import logging
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -773,7 +774,7 @@ class MailService:
                 body[:20000],
                 kind=kind[:40],
                 link=link[:300],
-                card=card,
+                card=card or card_from_text(subject, body, kind, link),
             )
             sender = self.people_repository.person(company_id, sender_id) if sender_id else None
             title = f"Mail from {sender.name}" if sender else "New mail from Adverse"
@@ -792,6 +793,23 @@ class MailService:
             return True
 
 
+_HIGHLIGHT_LABELS = ("amount", "total", "balance", "amount due", "balance due", "advance left now")
+_ROW = re.compile(r"^([A-Z][A-Za-z /&'().-]{1,28}):\s+(\S.{0,160})$")
+KIND_LABELS = {
+    "TASK": "Task update",
+    "PAYMENT": "Payment",
+    "INVOICE": "Invoice",
+    "BUDGET": "Budget",
+    "ADVANCE": "Advance",
+    "CALENDAR": "Calendar",
+    "MEETING": "Meeting",
+    "TICKET": "Ticket",
+    "WELCOME": "Welcome",
+    "CALL": "Call",
+    "SYSTEM": "Adverse",
+}
+
+
 def mail_card(
     title: str,
     lines: Sequence[str] = (),
@@ -799,17 +817,57 @@ def mail_card(
     table: Sequence[Sequence[str]] = (),
     action: str | None = None,
     note: str | None = None,
+    highlight: tuple[str, str] | None = None,
+    status: str | None = None,
 ) -> dict[str, Any]:
-    """The layout of an app mail in the internal mailbox (title, lines, detail rows, an item
-    table whose first row is the headings, the button label for the mail's link, a small note)."""
+    """The layout of an app mail in the internal mailbox: a title, lines, detail rows, an item
+    table (first row = headings), the button label for the mail's link and a small note. The
+    first money row (Amount, Balance, ...) becomes the big highlight figure unless one is given
+    (owner request 2026-11-19: mails must look advanced, not like plain text)."""
+    pairs = [(label, value) for label, value in rows if value]
+    if highlight is None:
+        found = next((pair for pair in pairs if pair[0].strip().lower() in _HIGHLIGHT_LABELS), None)
+        if found is not None:
+            highlight = found
+            pairs.remove(found)
     return {
         "title": title[:200],
         "lines": [line for line in lines if line][:12],
-        "rows": [{"label": label, "value": value} for label, value in rows if value][:16],
+        "rows": [{"label": label, "value": value} for label, value in pairs][:16],
         "table": [[str(cell) for cell in row] for row in table][:200],
         "action": action,
         "note": note,
+        "highlight": {"label": highlight[0], "value": highlight[1]} if highlight else None,
+        "status": status,
     }
+
+
+def card_from_text(subject: str, body: str, kind: str, link: str) -> dict[str, Any]:
+    """A card for an app mail that was written as plain text: short "Label: value" lines become
+    detail rows, the rest stay as lines, and a link gets a button."""
+    lines: list[str] = []
+    rows: list[tuple[str, str]] = []
+    for line in body.splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        match = _ROW.match(text)
+        if match and len(rows) < 12:
+            rows.append((match.group(1), match.group(2)))
+        else:
+            lines.append(text)
+    action = None
+    if link:
+        action = {
+            "TASK": "Open task",
+            "PAYMENT": "Open payments",
+            "INVOICE": "Open invoice",
+            "BUDGET": "Open client",
+            "CALENDAR": "Open calendar",
+            "MEETING": "Open meeting",
+            "TICKET": "Open ticket",
+        }.get(kind, "Open in Adverse")
+    return mail_card(subject, lines, rows, action=action)
 
 
 mail_service = MailService()

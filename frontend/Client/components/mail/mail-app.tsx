@@ -29,6 +29,7 @@ import {
   Archive,
   ArchiveRestore,
   ArrowLeft,
+  ArrowRight,
   CalendarClock,
   CalendarDays,
   CalendarPlus,
@@ -36,6 +37,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  ClipboardList,
   Clock3,
   Download,
   ExternalLink,
@@ -53,6 +55,7 @@ import {
   Moon,
   Paperclip,
   Printer,
+  Receipt,
   RefreshCw,
   Reply,
   ReplyAll,
@@ -64,6 +67,7 @@ import {
   Ticket as TicketIcon,
   Trash2,
   Undo2,
+  Wallet,
   X,
 } from "lucide-react";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
@@ -179,55 +183,109 @@ function typing(target: EventTarget | null): boolean {
 }
 
 /** Text with links that can be clicked; quoted lines (> ...) shown as a quote. */
-/** An app mail laid out like a proper mail (owner request 2026-11-19). */
-function MailCardView({ card, onOpen }: { card: MailCard; onOpen?: () => void }) {
+const CARD_KINDS: Record<string, { label: string; icon: typeof Mail }> = {
+  TASK: { label: "Task update", icon: ClipboardList },
+  PAYMENT: { label: "Payment", icon: Wallet },
+  INVOICE: { label: "Invoice", icon: Receipt },
+  BUDGET: { label: "Budget", icon: Wallet },
+  ADVANCE: { label: "Advance", icon: Wallet },
+  CALENDAR: { label: "Calendar", icon: CalendarDays },
+  MEETING: { label: "Meeting", icon: CalendarDays },
+  TICKET: { label: "Ticket", icon: LifeBuoy },
+};
+const MONEY_LABELS = ["amount", "total", "balance", "amount due", "balance due", "advance left now"];
+const ROW = /^([A-Z][A-Za-z /&'().-]{1,28}):\s+(\S.{0,160})$/;
+
+/** Older app mails were saved as plain text: lay them out as a card too (2026-11-19). */
+function cardFromText(item: MailItem): MailCard {
+  const lines: string[] = [];
+  const rows: { label: string; value: string }[] = [];
+  for (const raw of item.body.split("\n")) {
+    const text = raw.trim();
+    if (!text) continue;
+    const match = ROW.exec(text);
+    if (match && rows.length < 12) rows.push({ label: match[1], value: match[2] });
+    else lines.push(text);
+  }
+  const money = rows.find((row) => MONEY_LABELS.includes(row.label.toLowerCase()));
+  return {
+    title: item.subject,
+    lines,
+    rows: money ? rows.filter((row) => row !== money) : rows,
+    table: [],
+    action: item.link ? "Open in Adverse" : null,
+    note: null,
+    highlight: money ?? null,
+    status: null,
+  };
+}
+
+/** An app mail laid out like a proper mail (owner requests 2026-11-19). */
+function MailCardView({ card, kind, onOpen }: { card: MailCard; kind: string; onOpen?: () => void }) {
   const [head, ...rows] = card.table;
+  const meta = CARD_KINDS[kind] ?? { label: "Adverse", icon: Mail };
+  const Icon = meta.icon;
   return (
-    <div className="mailx-card">
-      <h3>{card.title}</h3>
-      {card.lines.map((line, index) => (
-        <p key={index}>{linkify(line)}</p>
-      ))}
-      {card.rows.length > 0 && (
-        <dl className="mailx-card-rows">
-          {card.rows.map((row) => (
-            <div key={row.label}>
-              <dt>{row.label}</dt>
-              <dd>{row.value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {head && rows.length > 0 && (
-        <div className="mailx-card-table">
-          <table>
-            <thead>
-              <tr>
-                {head.map((cell, index) => (
-                  <th key={index} scope="col">
-                    {cell}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => (
-                <tr key={index}>
-                  {row.map((cell, column) => (
-                    <td key={column}>{cell}</td>
+    <div className={`mailx-card kind-${kind.toLowerCase()}`}>
+      <header className="mailx-card-head">
+        <i aria-hidden="true">
+          <Icon />
+        </i>
+        <span>{meta.label}</span>
+        {card.status && <em>{card.status}</em>}
+      </header>
+      <div className="mailx-card-main">
+        <h3>{card.title}</h3>
+        {card.lines.map((line, index) => (
+          <p key={index}>{linkify(line)}</p>
+        ))}
+        {card.highlight && (
+          <div className="mailx-card-highlight">
+            <small>{card.highlight.label}</small>
+            <strong>{card.highlight.value}</strong>
+          </div>
+        )}
+        {card.rows.length > 0 && (
+          <dl className="mailx-card-rows">
+            {card.rows.map((row) => (
+              <div key={row.label}>
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {head && rows.length > 0 && (
+          <div className="mailx-card-table">
+            <table>
+              <thead>
+                <tr>
+                  {head.map((cell, index) => (
+                    <th key={index} scope="col">
+                      {cell}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {card.action && onOpen && (
-        <button type="button" className="mailx-card-action" onClick={onOpen}>
-          {card.action}
-        </button>
-      )}
-      {card.note && <small>{card.note}</small>}
+              </thead>
+              <tbody>
+                {rows.map((row, index) => (
+                  <tr key={index}>
+                    {row.map((cell, column) => (
+                      <td key={column}>{cell}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {card.action && onOpen && (
+          <button type="button" className="mailx-card-action" onClick={onOpen}>
+            {card.action} <ArrowRight aria-hidden="true" />
+          </button>
+        )}
+        {card.note && <small className="mailx-card-note">{card.note}</small>}
+      </div>
     </div>
   );
 }
@@ -1818,6 +1876,10 @@ function MessageCard({
   const images = item.attachments.filter((file) => file.mime_type.startsWith("image/"));
   const others = item.attachments.filter((file) => !file.mime_type.startsWith("image/"));
 
+  // App mails (no person sent them, or a task/payment mail) always show as a card.
+  const card =
+    item.card ?? (!item.sender || (item.kind !== "PERSONAL" && item.kind !== "TICKET") ? cardFromText(item) : null);
+
   function openLink() {
     const target = item.link;
     if (!target) return;
@@ -1929,12 +1991,12 @@ function MessageCard({
           </div>
         </dl>
       )}
-      {item.card ? (
-        <MailCardView card={item.card} onOpen={item.link ? openLink : undefined} />
+      {card ? (
+        <MailCardView card={card} kind={item.kind} onOpen={item.link ? openLink : undefined} />
       ) : (
         <MailBody text={item.body} />
       )}
-      {item.link && !item.card?.action && (
+      {item.link && !card?.action && (
         <button type="button" className="mailx-open-link" onClick={openLink}>
           <ExternalLink aria-hidden="true" /> Open in Adverse
         </button>

@@ -54,10 +54,12 @@ def _html(
     action_label: str | None,
     action_url: str | None,
     company: str,
+    eyebrow: str | None = None,
 ) -> str:
     """The shared Adverse mail layout (owner request 2026-11-19)."""
     return render_mail(
         title=title,
+        eyebrow=eyebrow,
         lines=lines,
         rows=rows,
         table=table,
@@ -140,6 +142,7 @@ def deliver(
     once_key: str | None = None,
     attachments: Sequence[tuple[bytes, str, str]] = (),
     mailbox_user: UUID | None = None,
+    eyebrow: str | None = None,
 ) -> None:
     """Email (in the background) plus a bell notification. Never raises.
     `mailbox_user`: also put the same mail in this person's internal mailbox (owner request
@@ -179,7 +182,17 @@ def deliver(
     ).strip()
     message.set_content(text)
     message.add_alternative(
-        _html(title, lines, rows, table, action_label, action_url, company_name), subtype="html"
+        _html(
+            title,
+            lines,
+            rows,
+            table,
+            action_label,
+            action_url,
+            company_name,
+            eyebrow or ("Payment" if mailbox_user else None),
+        ),
+        subtype="html",
     )
     for content, filename, mime in attachments:
         main, _, sub = mime.partition("/")
