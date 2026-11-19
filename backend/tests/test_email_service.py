@@ -77,7 +77,30 @@ class EmailTemplateTests(unittest.TestCase):
         self.assertIn("Acme Operations", plain)
 
     @patch.object(settings, "smtp_host", "mailpit")
-    def test_account_ready_email_mentions_login_but_not_password(self) -> None:
+    def test_welcome_email_carries_the_login_and_password(self) -> None:
+        """Owner request 2026-11-19: the welcome mail to their Gmail has the internal login
+        the admin gave them and the password they chose, so they can sign in straight away."""
+        service = EmailService()
+        with patch.object(service, "_send") as send:
+            service.send_account_ready(
+                "person@gmail.com",
+                company_name="Acme Operations",
+                login_email="employee@adverseindia.com",
+                login_url="https://employee.adverseindia.com/login",
+                password="StrongPass@123",
+            )
+        message = send.call_args.args[0]
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        html = message.get_body(preferencelist=("html",)).get_content()
+        self.assertEqual(message["To"], "person@gmail.com")
+        for body in (plain, html):
+            self.assertIn("employee@adverseindia.com", body)
+            self.assertIn("StrongPass@123", body)
+            self.assertIn("https://employee.adverseindia.com/login", body)
+        self.assertNotIn("expires in", html)  # a login does not expire like a setup link
+
+    @patch.object(settings, "smtp_host", "mailpit")
+    def test_welcome_email_without_password_shows_only_the_login(self) -> None:
         service = EmailService()
         with patch.object(service, "_send") as send:
             service.send_account_ready(
@@ -86,13 +109,9 @@ class EmailTemplateTests(unittest.TestCase):
                 login_email="employee@adverseindia.com",
                 login_url="https://employee.adverseindia.com/login",
             )
-        message = send.call_args.args[0]
-        plain = message.get_body(preferencelist=("plain",)).get_content()
-        html = message.get_body(preferencelist=("html",)).get_content()
-        self.assertIn("employee@adverseindia.com", plain)
-        self.assertIn("https://employee.adverseindia.com/login", plain)
-        self.assertIn("never included", html)
-        self.assertNotIn("StrongPass", message.as_string())
+        html = send.call_args.args[0].get_body(preferencelist=("html",)).get_content()
+        self.assertIn("employee@adverseindia.com", html)
+        self.assertNotIn(">Password<", html)
 
 
 if __name__ == "__main__":

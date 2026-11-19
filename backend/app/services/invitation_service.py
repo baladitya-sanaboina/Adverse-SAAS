@@ -234,12 +234,13 @@ class InvitationService:
             )
         login_email, notification_email, company_name, role_code, *created = accepted
         try:
-            # To their Gmail: the login is ready (never to the internal address).
+            # Welcome mail to their Gmail with the login and password (never the internal address).
             email_service.send_account_ready(
                 notification_email,
                 company_name=company_name,
                 login_email=login_email,
                 login_url=self._login_url(role_code),
+                password=request.password.get_secret_value(),
             )
         except Exception:
             logger.exception("Accepted invitation confirmation email failed for %s", login_email)

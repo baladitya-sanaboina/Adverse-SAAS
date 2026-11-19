@@ -16,10 +16,35 @@ def branded_email_html(
     description: str,
     action_label: str,
     action_url: str,
-    expiry_minutes: int,
+    expiry_minutes: int | None,
+    details: list[tuple[str, str]] | None = None,
 ) -> str:
-    """Render a light-mode, email-client-safe Adverse transactional template."""
+    """Render a light-mode, email-client-safe Adverse transactional template. `details` adds a
+    box of label/value rows (e.g. the login and password); no expiry note when it is None."""
     safe_url = escape(action_url, quote=True)
+    details_html = ""
+    if details:
+        rows = "".join(
+            '<tr><td style="padding:6px 14px 6px 0;color:#67788E;font-size:13px;white-space:nowrap;">'
+            f"{escape(label)}</td>"
+            '<td style="padding:6px 0;color:#241f2b;font-size:15px;font-weight:700;'
+            'font-family:Menlo,Consolas,monospace;word-break:break-all;">'
+            f"{escape(value)}</td></tr>"
+            for label, value in details
+        )
+        details_html = (
+            '<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
+            'style="width:100%;margin:0 0 22px;padding:14px 18px;border:1px solid #D8ECFF;'
+            f'border-radius:12px;background:#EDF6FF;">{rows}</table>'
+        )
+    expiry_html = (
+        '<div style="margin:0 0 26px;padding:13px 15px;border:1px solid #e5deed;border-radius:12px;'
+        'background:#faf8fc;color:#5f5668;font-size:13px;line-height:1.5;">'
+        "This secure, single-use link expires in "
+        f'<strong style="color:#0876ED;">{expiry_minutes} minutes</strong>.</div>'
+        if expiry_minutes is not None
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="en">
   <head>
@@ -52,9 +77,8 @@ def branded_email_html(
                   <p style="margin:0 0 22px;color:#67788E;font-size:15px;line-height:1.75;">
                     {escape(description)}
                   </p>
-                  <div style="margin:0 0 26px;padding:13px 15px;border:1px solid #e5deed;border-radius:12px;background:#faf8fc;color:#5f5668;font-size:13px;line-height:1.5;">
-                    This secure, single-use link expires in <strong style="color:#0876ED;">{expiry_minutes} minutes</strong>.
-                  </div>
+                  {details_html}
+                  {expiry_html}
                   <table role="presentation" cellspacing="0" cellpadding="0" border="0">
                     <tr>
                       <td style="border-radius:11px;background:#0876ED;">
@@ -428,26 +452,43 @@ class EmailService:
         company_name: str,
         login_email: str,
         login_url: str,
+        password: str | None = None,
     ) -> None:
+        """The welcome mail to their Gmail once the account is set up (owner request
+        2026-11-19): the internal login the admin gave them and, when given, the password they
+        chose, so they can sign in straight away."""
         message = EmailMessage()
-        message["Subject"] = f"Your {company_name} Adverse login is ready"
+        message["Subject"] = f"Welcome to {company_name}: your Adverse login"
         message["From"] = settings.smtp_from_email or settings.smtp_username
         message["To"] = email
-        message.set_content(
-            f"Your {company_name} account is ready. Sign in with {login_email} at {login_url}. "
-            "Use the password you created during setup; for security, it is never included in email."
-        )
+        lines = [
+            f"Welcome to {company_name}. Your Adverse account is ready.",
+            "",
+            f"Login: {login_email}",
+        ]
+        if password:
+            lines.append(f"Password: {password}")
+        lines += [
+            "",
+            f"Sign in at {login_url}",
+            "",
+            "Keep this mail private. You can change your password anytime from your profile;"
+            " if you forget it, use Forgot password and the code comes to this Gmail.",
+        ]
+        message.set_content("\n".join(lines))
+        details = [("Login", login_email)] + ([("Password", password)] if password else [])
         message.add_alternative(
             branded_email_html(
-                eyebrow="Account ready",
-                title=f"Your {company_name} login is ready",
+                eyebrow="Welcome",
+                title=f"Welcome to {company_name}",
                 description=(
-                    f"Your Adverse login is {login_email}. Use the password you created during setup and continue to your workspace. "
-                    "For security, your password is never included in email."
+                    "Your Adverse account is ready. Sign in with these details. Keep this mail "
+                    "private; you can change your password anytime from your profile."
                 ),
-                action_label="Open workspace login",
+                action_label="Sign in to Adverse",
                 action_url=login_url,
-                expiry_minutes=settings.invitation_expiry_hours * 60,
+                expiry_minutes=None,
+                details=details,
             ),
             subtype="html",
         )

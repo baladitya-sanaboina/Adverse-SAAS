@@ -191,6 +191,7 @@ class InvitationServiceTests(unittest.TestCase):
             company_name=self.record.company_name,
             login_email=self.record.email,
             login_url=settings.login_url(self.record.role_code),
+            password="StrongPassword@123",
         )
         self.assertEqual(response.email, self.record.email)
         self.assertEqual(response.role_code, self.record.role_code)
