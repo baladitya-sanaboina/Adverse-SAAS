@@ -218,6 +218,7 @@
   cursor: none;
 }
 .remember-row {
+  position: relative;
   display: flex !important;
   align-items: center;
   gap: 8px;
@@ -227,7 +228,15 @@
   font-weight: 500 !important;
 }
 .remember-row input {
+  /* Hidden but still reachable (the box drawn by the <i> shows it). It used to take the
+     full form width from the input rules and pushed the page sideways (2026-11-19). */
   position: absolute;
+  width: 1px !important;
+  height: 1px !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
   opacity: 0;
   pointer-events: none;
 }
@@ -757,5 +766,13 @@
 @media (max-width: 560px) {
   .interactive-auth.account-disabled-page {
     padding: 20px 16px;
+  }
+}
+
+/* Short laptop screens: less padding so the login card fits without a small scroll (2026-11-19). */
+@media (max-height: 760px) and (min-width: 900px) {
+  main.interactive-auth {
+    padding-top: 16px !important;
+    padding-bottom: 16px !important;
   }
 }
