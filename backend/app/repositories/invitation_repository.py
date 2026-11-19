@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -156,6 +156,10 @@ class InvitationRepository:
         phone_number: str | None = None,
         provisioned_password_hash: str | None = None,
         client_id: UUID | None = None,
+        *,
+        designation: str | None = None,
+        department_id: UUID | None = None,
+        joining_date: date | None = None,
     ) -> InvitationRecord:
         self._expire()
         notification_email = notification_email or email
@@ -243,8 +247,9 @@ class InvitationRepository:
                 invitation_id = uuid4()
                 cursor.execute(
                     "INSERT INTO company_invitations("
-                    "id,company_id,email,notification_email,invited_by,token_hash,expires_at,role_code,user_id,client_id,status,created_at,updated_at"
-                    ") VALUES(%s,%s,LOWER(%s),LOWER(%s),%s,%s,%s,%s,%s,%s,'PENDING',NOW(),NOW())",
+                    "id,company_id,email,notification_email,invited_by,token_hash,expires_at,role_code,user_id,client_id,"
+                    "designation,department_id,joining_date,status,created_at,updated_at"
+                    ") VALUES(%s,%s,LOWER(%s),LOWER(%s),%s,%s,%s,%s,%s,%s,%s,%s,%s,'PENDING',NOW(),NOW())",
                     (
                         invitation_id,
                         company_id,
@@ -256,8 +261,13 @@ class InvitationRepository:
                         role_code,
                         user_id,
                         client_id,
+                        designation,
+                        department_id,
+                        joining_date,
                     ),
                 )
+                if user_id is not None:
+                    self._apply_details(cursor, invitation_id, user_id)
                 details: dict[str, object] = {
                     "email": email,
                     "notification_email": notification_email,
@@ -347,7 +357,7 @@ class InvitationRepository:
 
     def accept(
         self, token_hash: str, name: str, password_hash: str
-    ) -> tuple[str, str, str, str] | None:
+    ) -> tuple[str, str, str, str, UUID, UUID] | None:
         try:
             with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
                 cursor.execute(
@@ -414,6 +424,7 @@ class InvitationRepository:
                             client_id=client_id,
                             email=email,
                         )
+                self._apply_details(cursor, invitation_id, user_id)
                 cursor.execute(
                     "UPDATE company_invitations SET status='ACCEPTED',accepted_at=NOW(),updated_at=NOW() WHERE id=%s",
                     (invitation_id,),
@@ -447,9 +458,47 @@ class InvitationRepository:
                 if not company:
                     raise RuntimeError("Invitation company is unavailable.")
                 company_name = company[0]
-                return email, notification_email, company_name, role_code
+                return email, notification_email, company_name, role_code, user_id, company_id
         except UniqueViolation as error:
             raise InvitationConflict("USER_EXISTS") from error
+
+    @staticmethod
+    def _apply_details(cursor: Cursor[Any], invitation_id: UUID, user_id: UUID) -> None:
+        """The invitation's details on the person (owner request 2026-11-19): their Gmail for
+        outside mail, and for staff the department, designation and joining date."""
+        cursor.execute(
+            'UPDATE "users" u SET recovery_email=LOWER(i.notification_email), '
+            "department_id=COALESCE(i.department_id,u.department_id), updated_at=NOW() "
+            "FROM company_invitations i WHERE i.id=%s AND u.id=%s "
+            "AND i.notification_email IS NOT NULL AND LOWER(i.notification_email)<>LOWER(u.email)",
+            (invitation_id, user_id),
+        )
+        cursor.execute(
+            "UPDATE employees e SET designation=COALESCE(NULLIF(i.designation,''),e.designation), "
+            "department_id=COALESCE(i.department_id,e.department_id), "
+            "joining_date=COALESCE(i.joining_date,e.joining_date), updated_at=NOW() "
+            "FROM company_invitations i WHERE i.id=%s AND e.user_id=%s",
+            (invitation_id, user_id),
+        )
+
+    def gmail_in_use(self, gmail: str, login_email: str) -> str | None:
+        """The login of another account that already uses this Gmail (one Gmail, one login)."""
+        with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                'SELECT email FROM "users" WHERE LOWER(recovery_email)=LOWER(%s) '
+                "AND LOWER(email)<>LOWER(%s) AND status='ACTIVE' LIMIT 1",
+                (gmail, login_email),
+            )
+            row = cursor.fetchone()
+            return str(row[0]) if row else None
+
+    def department_ok(self, company_id: UUID, department_id: UUID) -> bool:
+        with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM departments WHERE id=%s AND company_id=%s",
+                (department_id, company_id),
+            )
+            return cursor.fetchone() is not None
 
     @staticmethod
     def _audit(

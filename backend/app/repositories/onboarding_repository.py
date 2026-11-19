@@ -214,7 +214,7 @@ class OnboardingRepository:
     def clients(self, company_id: UUID) -> list[ClientInfo]:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
-                "SELECT c.id, c.name, COALESCE(NULLIF(c.email,''), u.email), "
+                "SELECT c.id, c.name, COALESCE(NULLIF(c.email,''), NULLIF(u.recovery_email,''), u.email), "
                 "(SELECT TRIM(cc.first_name || ' ' || cc.last_name) FROM client_contacts cc "
                 "WHERE cc.client_id = c.id "
                 " ORDER BY cc.is_primary DESC, cc.created_at LIMIT 1), "
@@ -230,7 +230,8 @@ class OnboardingRepository:
     def staff(self, company_id: UUID) -> list[StaffInfo]:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
-                "SELECT u.id, u.name, u.email, r.code, u.created_at FROM users u "
+                "SELECT u.id, u.name, COALESCE(NULLIF(u.recovery_email,''), u.email), r.code, u.created_at "
+                "FROM users u "
                 "JOIN roles r ON r.id = u.role_id WHERE u.company_id=%s "
                 "AND r.code IN ('COMPANY_EMPLOYEE','COMPANY_MANAGER') ORDER BY u.name",
                 (company_id,),

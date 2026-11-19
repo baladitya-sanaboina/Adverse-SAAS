@@ -260,10 +260,12 @@ class InvoiceRepository:
             return CompanyProfile(*row)
 
     def client_login_email(self, company_id: UUID, client_id: UUID) -> str | None:
-        """The client's portal login email, falling back to the client record's email."""
+        """Where the client's invoice mail goes: their own Gmail, else the client record's email,
+        else the portal login (an internal login is never mailed)."""
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
-                "SELECT COALESCE(u.email, c.email) FROM clients c LEFT JOIN users u ON u.id=c.user_id "
+                "SELECT COALESCE(NULLIF(u.recovery_email,''), NULLIF(c.email,''), u.email) "
+                "FROM clients c LEFT JOIN users u ON u.id=c.user_id "
                 "WHERE c.company_id=%s AND c.id=%s",
                 (company_id, client_id),
             )

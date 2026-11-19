@@ -168,8 +168,8 @@ export default function PasswordRecoveryPage({
           />
           <p>
             {mode === "forgot"
-              ? "We will send a secure one-time code to your inbox."
-              : "Enter the code from your email and choose a new password."}
+              ? "We send a secure one-time code to your Gmail."
+              : "Enter the code we sent to your Gmail and choose a new password."}
           </p>
         </section>
 
@@ -180,16 +180,16 @@ export default function PasswordRecoveryPage({
           <h1>{title}</h1>
           <p>
             {mode === "forgot"
-              ? "Request a reset code for your account."
+              ? "Enter your Adverse login or your Gmail. The code goes to your Gmail."
               : "Complete the reset flow securely with OTP."}
           </p>
 
           <form className="auth-form-transition" onSubmit={submit} noValidate>
             <label>
-              Email
+              Login email or Gmail
               <input
                 type="email"
-                placeholder="you@example.com"
+                placeholder="name@adverseindia.com or you@gmail.com"
                 value={email}
                 readOnly={Boolean(initialEmail) && mode === "reset" && !token}
                 aria-invalid={Boolean(errors.email)}

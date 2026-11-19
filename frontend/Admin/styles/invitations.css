@@ -326,3 +326,11 @@
     flex: 1;
   }
 }
+
+/* Short help under the login and Gmail fields (2026-11-19). */
+.management-field .invite-hint {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-style: normal;
+  font-weight: 500;
+}

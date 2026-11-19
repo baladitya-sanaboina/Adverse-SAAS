@@ -72,9 +72,10 @@ class FakeEmailSender:
         self.email = ""
         self.reset_code = ""
 
-    def send_password_reset(self, email: str, reset_code: str):
+    def send_password_reset(self, email: str, reset_code: str, login_email: str | None = None):
         self.email = email
         self.reset_code = reset_code
+        self.login_email = login_email
 
 
 class PasswordRecoveryTests(unittest.TestCase):
@@ -93,6 +94,29 @@ class PasswordRecoveryTests(unittest.TestCase):
         self.assertEqual(self.repository.token_hash, reset_otp_hash(self.repository.user.id, code))
         self.assertNotEqual(self.repository.token_hash, code)
         self.assertRegex(code, r"^\d{6}$")
+
+    def test_code_goes_to_their_gmail_not_the_internal_login(self):
+        """Owner request 2026-11-19: forgot password reaches their own Gmail."""
+        self.repository.user = RecoveryUserRecord(
+            self.repository.user.id,
+            "ravi@adverseindia.com",
+            "ACTIVE",
+            "COMPANY_EMPLOYEE",
+            "ravi@gmail.com",
+        )
+        self.service.forgot_password(ForgotPasswordRequest(email="ravi@adverseindia.com"))
+        self.assertEqual(self.email.email, "ravi@gmail.com")
+        self.assertEqual(self.email.login_email, "ravi@adverseindia.com")
+
+    def test_internal_login_without_gmail_gets_no_mail(self):
+        self.repository.user = RecoveryUserRecord(
+            self.repository.user.id, "ravi@adverseindia.com", "ACTIVE", "COMPANY_EMPLOYEE", None
+        )
+        response = self.service.forgot_password(
+            ForgotPasswordRequest(email="ravi@adverseindia.com")
+        )
+        self.assertIn("eligible", response.message)  # same answer, nothing sent
+        self.assertEqual(self.email.reset_code, "")
 
     def test_unknown_email_gets_same_generic_response(self):
         response = self.service.forgot_password(ForgotPasswordRequest(email="unknown@example.com"))

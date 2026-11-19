@@ -11,6 +11,7 @@ class RecoveryUserRecord:
     email: str
     status: str
     role: str
+    recovery_email: str | None = None  # their own Gmail, where the code goes
 
 
 @dataclass(frozen=True)
@@ -24,12 +25,17 @@ class PasswordResetRecord:
 
 class PasswordRecoveryRepository:
     def find_user_by_email(self, email: str) -> RecoveryUserRecord | None:
+        """By login email, or by their own Gmail (owner request 2026-11-19). A login match wins;
+        otherwise the active account most recently set up with that Gmail."""
         with database_pool.connection(timeout=2) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    'SELECT u.id, u.email, u.status::text, r.code FROM "users" u '
-                    'JOIN "roles" r ON r.id = u.role_id WHERE LOWER(u.email) = LOWER(%s)',
-                    (email,),
+                    'SELECT u.id, u.email, u.status::text, r.code, u.recovery_email FROM "users" u '
+                    'JOIN "roles" r ON r.id = u.role_id '
+                    "WHERE LOWER(u.email) = LOWER(%s) OR LOWER(u.recovery_email) = LOWER(%s) "
+                    "ORDER BY (LOWER(u.email) = LOWER(%s)) DESC, (u.status = 'ACTIVE') DESC, "
+                    "u.created_at DESC LIMIT 1",
+                    (email, email, email),
                 )
                 record = cursor.fetchone()
                 return RecoveryUserRecord(*record) if record else None

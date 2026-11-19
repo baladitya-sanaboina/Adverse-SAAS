@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     vapid_public_key: str = ""
     vapid_private_key: SecretStr = SecretStr("")
     vapid_subject: str = "mailto:admin@localhost"
+    # Logins are internal addresses (name@adverseindia.com) that exist only inside the app; no
+    # mail is ever sent to them by SMTP. Outside mail goes to the person's own Gmail.
+    internal_email_domain: str = "adverseindia.com"
+    # The company admin login, made on start when missing (owner request 2026-11-19). The
+    # password is used only to create the account; changing it later in the app sticks.
+    default_admin_email: str = ""
+    default_admin_recovery_email: str = ""
+    default_admin_password: SecretStr = SecretStr("")
+    default_admin_name: str = "Admin"
 
     cors_origins: str = (
         "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"
@@ -96,6 +105,10 @@ class Settings(BaseSettings):
             # The interactive API docs list every route; never publish them in production.
             self.swagger_enabled = False
         return self
+
+    def is_internal_email(self, address: str | None) -> bool:
+        domain = self.internal_email_domain.strip().lower().lstrip("@")
+        return bool(domain and address and address.strip().lower().endswith(f"@{domain}"))
 
     @property
     def allowed_origins(self) -> list[str]:

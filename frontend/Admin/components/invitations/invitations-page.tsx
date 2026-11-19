@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Mail, MailPlus, Phone, RefreshCw, RotateCw, UserRound, X } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, Mail, MailPlus, Phone, RefreshCw, RotateCw, UserRound, X } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
@@ -25,6 +25,42 @@ const roleOptions = [
   { value: "COMPANY_CLIENT", label: "Client" },
 ] as const;
 const phonePattern = /^\+?[0-9 ()-]{7,24}$/;
+// Logins are internal addresses that work only inside Adverse; outside mail goes to their Gmail
+// (owner request 2026-11-19).
+const INTERNAL_DOMAIN = "adverseindia.com";
+const isInternal = (value: string) => value.trim().toLowerCase().endsWith(`@${INTERNAL_DOMAIN}`);
+const withDomain = (value: string) => {
+  const trimmed = value.trim().toLowerCase();
+  return trimmed && !trimmed.includes("@") ? `${trimmed}@${INTERNAL_DOMAIN}` : trimmed;
+};
+const suggestLogin = (fullName: string) => {
+  const parts = fullName
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z\s]/g, "")
+    .split(/\s+/)
+    .filter(Boolean);
+  return parts.length ? `${parts.slice(0, 2).join(".")}@${INTERNAL_DOMAIN}` : "";
+};
+const loginError = (value: string) =>
+  !value.trim()
+    ? "Internal login email is required."
+    : !/^\S+@\S+\.\S+$/.test(withDomain(value))
+      ? "Please enter a valid email address."
+      : !isInternal(withDomain(value))
+        ? `The login must end with @${INTERNAL_DOMAIN}.`
+        : "";
+const gmailError = (value: string, login: string) =>
+  !value.trim()
+    ? "Their Gmail is required: the setup link goes there."
+    : !/^\S+@\S+\.\S+$/.test(value.trim())
+      ? "Please enter a valid email address."
+      : isInternal(value)
+        ? `Use their own Gmail, not an @${INTERNAL_DOMAIN} address.`
+        : value.trim().toLowerCase() === withDomain(login)
+          ? "The Gmail and the login must be different."
+          : "";
+type Department = { id: string; name: string; status: string };
 
 const roleLabel = (roleCode: InvitationRoleCode) =>
   roleOptions.find((option) => option.value === roleCode)?.label ?? "User";
@@ -43,6 +79,12 @@ export function InvitationsPage() {
   const [notificationEmailError, setNotificationEmailError] = useState("");
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState("");
+  const [loginTouched, setLoginTouched] = useState(false);
+  const [designation, setDesignation] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [joiningDate, setJoiningDate] = useState("");
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const staffRole = roleCode !== "COMPANY_CLIENT";
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [action, setAction] = useState<{ item: Invitation; type: "resend" | "revoke" } | null>(null);
@@ -67,6 +109,21 @@ export function InvitationsPage() {
     return () => clearTimeout(timer);
   }, [load]);
 
+  // Departments for the invite form (employees and managers).
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    fetch("/api/company/departments", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { items?: Department[] } | null) => {
+        if (live && data?.items) setDepartments(data.items.filter((item) => item.status === "ACTIVE"));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [open]);
+
   async function invite(event: React.FormEvent) {
     event.preventDefault();
     const nextNameError = !name.trim()
@@ -74,16 +131,8 @@ export function InvitationsPage() {
       : name.trim().length < 2
         ? "Enter at least 2 characters."
         : "";
-    const nextEmailError = !email.trim()
-      ? "Internal login email is required."
-      : /^\S+@\S+\.\S+$/.test(email.trim())
-        ? ""
-        : "Please enter a valid email address.";
-    const nextNotificationEmailError = !notificationEmail.trim()
-      ? "Notification email is required."
-      : /^\S+@\S+\.\S+$/.test(notificationEmail.trim())
-        ? ""
-        : "Please enter a valid email address.";
+    const nextEmailError = loginError(email);
+    const nextNotificationEmailError = gmailError(notificationEmail, email);
     const nextPhoneError = !phone.trim()
       ? "Mobile number is required."
       : phonePattern.test(phone.trim())
@@ -103,10 +152,17 @@ export function InvitationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
-          email: email.trim(),
-          notification_email: notificationEmail.trim(),
+          email: withDomain(email),
+          notification_email: notificationEmail.trim().toLowerCase(),
           phone_number: phone.trim(),
           role_code: roleCode,
+          ...(staffRole
+            ? {
+                designation: designation.trim() || null,
+                department_id: departmentId || null,
+                joining_date: joiningDate || null,
+              }
+            : {}),
         }),
       });
       const data = await response.json();
@@ -117,6 +173,10 @@ export function InvitationsPage() {
       setEmail("");
       setNotificationEmail("");
       setPhone("");
+      setLoginTouched(false);
+      setDesignation("");
+      setDepartmentId("");
+      setJoiningDate("");
       setNameError("");
       setEmailError("");
       setNotificationEmailError("");
@@ -126,7 +186,9 @@ export function InvitationsPage() {
           ? data.notification_email
           : notificationEmail.trim();
       const loginEmail = typeof data.email === "string" && data.email ? data.email : email.trim();
-      setNotice(`Activation email sent to ${sentTo}. Login email: ${loginEmail}.`);
+      setNotice(
+        `Setup link sent to ${sentTo}. Their login is ${loginEmail}; they choose their own password from the link.`,
+      );
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to send invitation.");
@@ -287,6 +349,11 @@ export function InvitationsPage() {
                 onChange={(event) => {
                   const value = event.target.value;
                   setName(value);
+                  if (!loginTouched) {
+                    const suggested = suggestLogin(value);
+                    setEmail(suggested);
+                    setEmailError("");
+                  }
                   setNameError(
                     !value.trim()
                       ? "Full name is required."
@@ -313,23 +380,27 @@ export function InvitationsPage() {
                 onChange={(event) => {
                   const value = event.target.value;
                   setEmail(value);
-                  setEmailError(
-                    !value.trim()
-                      ? "Internal login email is required."
-                      : /^\S+@\S+\.\S+$/.test(value.trim())
-                        ? ""
-                        : "Please enter a valid email address.",
-                  );
+                  setLoginTouched(true);
+                  setEmailError(value.includes("@") ? loginError(value) : "");
                   setError("");
                 }}
+                onBlur={() => {
+                  const value = withDomain(email);
+                  setEmail(value);
+                  setEmailError(value ? loginError(value) : "");
+                }}
                 aria-invalid={Boolean(emailError)}
-                placeholder={`${roleLabel(roleCode).toLowerCase()}@adverseindia.com`}
+                placeholder={`firstname.lastname@${INTERNAL_DOMAIN}`}
               />
             </span>
-            {emailError && <small>{emailError}</small>}
+            {emailError ? (
+              <small>{emailError}</small>
+            ) : (
+              <em className="invite-hint">They sign in with this. Work mail arrives in its Adverse mailbox.</em>
+            )}
           </label>
           <label className="management-field">
-            <span>Personal / notification email</span>
+            <span>Their Gmail</span>
             <span className="management-input">
               <Mail aria-hidden="true" />
               <input
@@ -339,20 +410,18 @@ export function InvitationsPage() {
                 onChange={(event) => {
                   const value = event.target.value;
                   setNotificationEmail(value);
-                  setNotificationEmailError(
-                    !value.trim()
-                      ? "Notification email is required."
-                      : /^\S+@\S+\.\S+$/.test(value.trim())
-                        ? ""
-                        : "Please enter a valid email address.",
-                  );
+                  setNotificationEmailError(gmailError(value, email));
                   setError("");
                 }}
                 aria-invalid={Boolean(notificationEmailError)}
                 placeholder="person@gmail.com"
               />
             </span>
-            {notificationEmailError && <small>{notificationEmailError}</small>}
+            {notificationEmailError ? (
+              <small>{notificationEmailError}</small>
+            ) : (
+              <em className="invite-hint">The setup link, password resets and account mail go here.</em>
+            )}
           </label>
           <label className="management-field">
             <span>Mobile number</span>
@@ -380,6 +449,42 @@ export function InvitationsPage() {
             </span>
             {phoneError && <small>{phoneError}</small>}
           </label>
+          {staffRole && (
+            <>
+              <label className="management-field">
+                <span>Designation</span>
+                <span className="management-input">
+                  <BriefcaseBusiness aria-hidden="true" />
+                  <input
+                    type="text"
+                    value={designation}
+                    maxLength={120}
+                    onChange={(event) => setDesignation(event.target.value)}
+                    placeholder={roleCode === "COMPANY_MANAGER" ? "Production Manager" : "Video Editor"}
+                  />
+                </span>
+              </label>
+              <label className="management-field">
+                <span>Department</span>
+                <LooplessSelect
+                  value={departmentId}
+                  onValueChange={setDepartmentId}
+                  ariaLabel="Select department"
+                  options={[
+                    { value: "", label: departments.length ? "No department" : "No departments yet" },
+                    ...departments.map((item) => ({ value: item.id, label: item.name })),
+                  ]}
+                />
+              </label>
+              <label className="management-field">
+                <span>Joining date</span>
+                <span className="management-input">
+                  <CalendarDays aria-hidden="true" />
+                  <input type="date" value={joiningDate} onChange={(event) => setJoiningDate(event.target.value)} />
+                </span>
+              </label>
+            </>
+          )}
         </form>
       </ManagementModal>
       <ConfirmationDialog

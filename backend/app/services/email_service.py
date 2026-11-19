@@ -174,7 +174,9 @@ def branded_code_email_html(
 
 
 class PasswordResetEmailSender(Protocol):
-    def send_password_reset(self, email: str, reset_code: str) -> None: ...
+    def send_password_reset(
+        self, email: str, reset_code: str, login_email: str | None = None
+    ) -> None: ...
 
 
 class VerificationEmailSender(Protocol):
@@ -202,10 +204,13 @@ class EmailService:
         found = getaddresses(message.get_all("To", []) + message.get_all("Cc", []))
         # Reserved test domains never deliver anywhere; skip them instead of bouncing.
         reserved = ("@example.com", "@example.org", "@example.net", ".test", ".invalid", ".example")
+        # Internal logins (name@adverseindia.com) exist only inside the app: never mail them.
         return [
             address
             for _, address in found
-            if address.lower() not in TEST_ACCOUNT_EMAILS and not address.lower().endswith(reserved)
+            if address.lower() not in TEST_ACCOUNT_EMAILS
+            and not address.lower().endswith(reserved)
+            and not settings.is_internal_email(address)
         ]
 
     @staticmethod
@@ -280,17 +285,20 @@ class EmailService:
         except (OSError, smtplib.SMTPException):
             return False
 
-    def send_password_reset(self, email: str, reset_code: str) -> None:
+    def send_password_reset(
+        self, email: str, reset_code: str, login_email: str | None = None
+    ) -> None:
+        """email: where the code goes (their Gmail); login_email: the account it is for."""
         if not settings.smtp_host:
             logger.warning("Development password reset code for %s: %s", email, reset_code)
             return
-
+        login = login_email or email
         message = EmailMessage()
         message["Subject"] = "Reset your Adverse password"
         message["From"] = settings.smtp_from_email or settings.smtp_username
         message["To"] = email
         message.set_content(
-            "Use this 6-digit code to reset your Adverse password. "
+            f"Use this 6-digit code to reset the password of your Adverse login {login}. "
             f"It expires in {settings.password_reset_expiry_minutes} minutes.\n\n{reset_code}"
         )
         message.add_alternative(
@@ -298,7 +306,7 @@ class EmailService:
                 eyebrow="Account security",
                 title="Reset your password",
                 description=(
-                    "We received a request to update the password for your Adverse account. "
+                    f"We received a request to update the password for your Adverse login {login}. "
                     "Enter this one-time code to choose a new, secure password."
                 ),
                 code=reset_code,

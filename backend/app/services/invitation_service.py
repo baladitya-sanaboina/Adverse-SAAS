@@ -68,8 +68,46 @@ class InvitationService:
             datetime.now(UTC) + timedelta(hours=settings.invitation_expiry_hours),
         )
 
+    def _check_addresses(self, company_id: UUID, request: InvitationCreate) -> None:
+        """Owner request 2026-11-19: the login is an internal address (name@adverseindia.com)
+        that only works inside the app; their own Gmail gets the setup link and outside mail."""
+        login = str(request.email).lower()
+        gmail = str(request.notification_email).lower() if request.notification_email else ""
+        domain = settings.internal_email_domain.strip().lstrip("@")
+        if domain and not settings.is_internal_email(login):
+            raise AuthenticationError(
+                422,
+                "LOGIN_NOT_INTERNAL",
+                f"The login must be an internal address ending in @{domain}.",
+            )
+        if domain and not gmail:
+            raise AuthenticationError(
+                422, "GMAIL_REQUIRED", "Add their Gmail: the setup link goes there."
+            )
+        if gmail and settings.is_internal_email(gmail):
+            raise AuthenticationError(
+                422,
+                "GMAIL_IS_INTERNAL",
+                f"Their Gmail must be an outside address, not @{domain}.",
+            )
+        if gmail and gmail == login:
+            raise AuthenticationError(
+                422, "GMAIL_SAME_AS_LOGIN", "The Gmail and the login must be different."
+            )
+        if gmail:
+            other = self.repository.gmail_in_use(gmail, login)
+            if other:
+                raise AuthenticationError(
+                    409, "GMAIL_IN_USE", f"This Gmail is already used by the login {other}."
+                )
+        if request.department_id and not self.repository.department_ok(
+            company_id, request.department_id
+        ):
+            raise AuthenticationError(404, "DEPARTMENT_NOT_FOUND", "Department was not found.")
+
     def create(self, context: AuthContext, request: InvitationCreate) -> InvitationResponse:
         company_id = self._authorize(context, "CREATE")
+        self._check_addresses(company_id, request)
         token, token_hash, expires_at = self._new_token()
         invited_name = request.name.strip() if request.name else None
         provisioned_password_hash = (
@@ -88,6 +126,9 @@ class InvitationService:
                 request.phone_number,
                 provisioned_password_hash,
                 request.client_id,
+                designation=request.designation,
+                department_id=request.department_id,
+                joining_date=request.joining_date,
             )
         except InvitationConflict as error:
             code = str(error)
@@ -191,8 +232,9 @@ class InvitationService:
             raise AuthenticationError(
                 400, "INVALID_INVITATION", "Invitation is no longer available."
             )
-        login_email, notification_email, company_name, role_code = accepted
+        login_email, notification_email, company_name, role_code, *created = accepted
         try:
+            # To their Gmail: the login is ready (never to the internal address).
             email_service.send_account_ready(
                 notification_email,
                 company_name=company_name,
@@ -201,11 +243,38 @@ class InvitationService:
             )
         except Exception:
             logger.exception("Accepted invitation confirmation email failed for %s", login_email)
+        if len(created) == 2:
+            self._welcome(created[0], created[1], login_email, company_name, role_code)
         return InvitationAcceptedResponse(
             email=login_email,
             company_name=company_name,
             role_code=role_code,
             login_url=self._login_url(role_code),
+        )
+
+    @staticmethod
+    def _welcome(
+        user_id: UUID, company_id: UUID, login_email: str, company_name: str, role_code: str
+    ) -> None:
+        """The first mail in their internal mailbox: work mail arrives here from now on."""
+        from app.services.mail_service import mail_service
+
+        staff = role_code != "COMPANY_CLIENT"
+        body = [
+            f"Welcome to {company_name}.",
+            "",
+            f"Your login is {login_email}. This mailbox is where work mail arrives from now on:"
+            + (" tasks, changes, payments and meetings." if staff else " updates from the team."),
+            "Password resets and account mail go to your Gmail.",
+        ]
+        mail_service.system(
+            company_id,
+            [user_id],
+            f"Welcome to {company_name}",
+            "\n".join(body),
+            link="/dashboard",
+            kind="WELCOME",
+            notify=True,
         )
 
     def is_ready(self) -> bool:

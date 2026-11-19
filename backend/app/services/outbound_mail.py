@@ -35,8 +35,12 @@ def app_url(app: str, path: str = "/") -> str:
 
 
 def user_email(user_id: UUID) -> str | None:
+    """Where outside mail reaches this person: their own Gmail; the login only when no Gmail
+    is on file (an internal login is then filtered out by the mail sender)."""
     with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
-        cursor.execute("SELECT email FROM users WHERE id=%s", (user_id,))
+        cursor.execute(
+            "SELECT COALESCE(NULLIF(recovery_email,''), email) FROM users WHERE id=%s", (user_id,)
+        )
         row = cursor.fetchone()
         return str(row[0]) if row and row[0] else None
 

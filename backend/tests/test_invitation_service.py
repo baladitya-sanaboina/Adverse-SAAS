@@ -29,8 +29,8 @@ class InvitationServiceTests(unittest.TestCase):
         )
         self.record = InvitationRecord(
             id=uuid4(),
-            email="invitee@example.com",
-            notification_email="personal@example.com",
+            email="invitee@adverseindia.com",
+            notification_email="personal@gmail.com",
             company_name="Tenant A",
             invited_by_name="Company Admin",
             role_code="COMPANY_EMPLOYEE",
@@ -41,6 +41,8 @@ class InvitationServiceTests(unittest.TestCase):
         )
         self.repository = MagicMock()
         self.repository.create.return_value = self.record
+        self.repository.gmail_in_use.return_value = None
+        self.repository.department_ok.return_value = True
         self.service = InvitationService(self.repository)
 
     @patch("app.services.invitation_service.validate_user_action_access", return_value=True)
@@ -55,6 +57,7 @@ class InvitationServiceTests(unittest.TestCase):
             self.context,
             InvitationCreate(
                 email=self.record.email,
+                notification_email=self.record.notification_email,
                 name="Invited Employee",
                 phone_number="+91 98765 43210",
                 role_code="COMPANY_MANAGER",
@@ -78,7 +81,7 @@ class InvitationServiceTests(unittest.TestCase):
         self.assertEqual(company_id, self.company_id)
         self.assertEqual(actor_id, self.user_id)
         self.assertEqual(email, self.record.email)
-        self.assertEqual(notification_email, self.record.email)
+        self.assertEqual(notification_email, self.record.notification_email)
         self.assertEqual(role_code, "COMPANY_MANAGER")
         self.assertEqual(invited_name, "Invited Employee")
         self.assertEqual(phone_number, "+91 98765 43210")
@@ -123,6 +126,7 @@ class InvitationServiceTests(unittest.TestCase):
                 self.context,
                 InvitationCreate(
                     email=self.record.email,
+                    notification_email=self.record.notification_email,
                     name="Test",
                     phone_number="+91 98765 43210",
                 ),
@@ -211,6 +215,66 @@ class InvitationServiceTests(unittest.TestCase):
         self.assertEqual(self.repository.create.call_args.args[3], "person@gmail.com")
         self.assertEqual(send_email.call_args.args[0], self.record.notification_email)
         self.assertEqual(send_email.call_args.kwargs["login_email"], self.record.email)
+
+    @patch("app.services.invitation_service.validate_user_action_access", return_value=True)
+    @patch("app.services.invitation_service.email_service.send_invitation")
+    def test_login_is_internal_and_gmail_is_outside(
+        self, send_email: MagicMock, _: MagicMock
+    ) -> None:
+        """Owner request 2026-11-19: name@adverseindia.com logins; the link goes to their Gmail."""
+
+        def invite(**changes: object) -> str:
+            base: dict[str, object] = {
+                "email": "ravi.kumar@adverseindia.com",
+                "notification_email": "ravi@gmail.com",
+                "name": "Ravi Kumar",
+                "phone_number": "+91 98765 43210",
+            }
+            with self.assertRaises(AuthenticationError) as raised:
+                self.service.create(self.context, InvitationCreate(**{**base, **changes}))
+            return raised.exception.code
+
+        self.assertEqual(invite(email="ravi@gmail.com"), "LOGIN_NOT_INTERNAL")
+        self.assertEqual(invite(notification_email=None), "GMAIL_REQUIRED")
+        self.assertEqual(invite(notification_email="ravi@adverseindia.com"), "GMAIL_IS_INTERNAL")
+        self.repository.gmail_in_use.return_value = "someone@adverseindia.com"
+        self.assertEqual(invite(), "GMAIL_IN_USE")
+        self.repository.gmail_in_use.return_value = None
+        self.repository.department_ok.return_value = False
+        self.assertEqual(invite(department_id=uuid4()), "DEPARTMENT_NOT_FOUND")
+        send_email.assert_not_called()
+
+    @patch("app.services.invitation_service.validate_user_action_access", return_value=True)
+    @patch("app.services.invitation_service.email_service.send_invitation")
+    def test_staff_details_reach_the_repository(self, send_email: MagicMock, _: MagicMock) -> None:
+        from datetime import date
+
+        department = uuid4()
+        self.service.create(
+            self.context,
+            InvitationCreate(
+                email="ravi.kumar@adverseindia.com",
+                notification_email="ravi@gmail.com",
+                name="Ravi Kumar",
+                phone_number="+91 98765 43210",
+                designation="  Video Editor ",
+                department_id=department,
+                joining_date=date(2026, 12, 1),
+            ),
+        )
+        kwargs = self.repository.create.call_args.kwargs
+        self.assertEqual(kwargs["designation"], "Video Editor")
+        self.assertEqual(kwargs["department_id"], department)
+        self.assertEqual(kwargs["joining_date"], date(2026, 12, 1))
+        with self.assertRaises(ValueError):  # clients do not take staff details
+            InvitationCreate(
+                email="brand@adverseindia.com",
+                notification_email="brand@gmail.com",
+                name="Brand",
+                phone_number="+91 98765 43210",
+                role_code="COMPANY_CLIENT",
+                designation="Owner",
+            )
 
     def test_accept_schema_rejects_weak_or_mismatched_password(self) -> None:
         with self.assertRaises(ValidationError):

@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
@@ -22,6 +23,8 @@ from app.services.password_service import hash_password
 
 # A six-digit code has 900,000 values, so each code may be checked only a few times. A used-up
 # code stays on file until it expires, so the resend wait below still applies to it.
+logger = logging.getLogger(__name__)
+
 MAX_CODE_ATTEMPTS = 5
 RESEND_COOLDOWN_SECONDS = 60
 
@@ -70,8 +73,14 @@ class PasswordRecoveryService:
 
         otp = f"{secrets.randbelow(900000) + 100000:06d}"
         expires_at = datetime.now(UTC) + timedelta(minutes=settings.password_reset_expiry_minutes)
+        # The code goes to their own Gmail; an internal login (name@adverseindia.com) has no
+        # real mailbox outside the app.
+        destination = user.recovery_email or user.email
+        if settings.is_internal_email(destination):
+            logger.warning("Password reset asked for %s, but it has no Gmail on file.", user.email)
+            return ForgotPasswordResponse()
         self.repository.create_reset_token(user.id, reset_otp_hash(user.id, otp), expires_at)
-        self.email_sender.send_password_reset(user.email, otp)
+        self.email_sender.send_password_reset(destination, otp, login_email=user.email)
         return ForgotPasswordResponse()
 
     def reset_password(self, request: ResetPasswordRequest) -> ResetPasswordResponse:
