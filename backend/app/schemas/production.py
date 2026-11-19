@@ -917,3 +917,28 @@ class AdminDashboardResponse(BaseModel):
 
 ManagerEarningsResponse.model_rebuild()
 EmployeeSalaryResponse.model_rebuild()
+
+
+class FocusTask(BaseModel):
+    """A task on the dashboard's Today panel (owner request 2026-11-19)."""
+
+    id: UUID
+    code: str
+    title: str
+    client_name: str
+    service_name: str
+    priority: TaskPriority
+    status: TaskStatus
+    due_date: date | None
+    days_left: int | None  # negative: days late
+    assignee_name: str | None
+    monitor_name: str | None
+    my_role: Literal["ASSIGNEE", "MONITOR"] | None = None
+
+
+class TaskFocusResponse(BaseModel):
+    today: date
+    overdue: list[FocusTask]
+    due_today: list[FocusTask]
+    this_week: list[FocusTask]
+    to_review: list[FocusTask]

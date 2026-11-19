@@ -18,6 +18,7 @@ from app.schemas.production import (
     TaskCommentRequest,
     TaskCommentResponse,
     TaskFileResponse,
+    TaskFocusResponse,
     TaskStatusChangeRequest,
     WorkerTaskDetailResponse,
     WorkerTaskFilters,
@@ -71,6 +72,15 @@ def list_my_tasks(
             role=role, status=task_status, search=search.strip(), page=page, page_size=page_size
         ),
     )
+
+
+@router.get(
+    "/tasks/focus",
+    response_model=TaskFocusResponse,
+    summary="My overdue, today, this week and to-review tasks, most urgent first",
+)
+def my_task_focus(context: AuthenticatedContext) -> TaskFocusResponse:
+    return task_service.focus_worker(context)
 
 
 @router.get(

@@ -19,6 +19,7 @@ from app.schemas.production import (
     TaskCreateRequest,
     TaskFileKind,
     TaskFileResponse,
+    TaskFocusResponse,
     TaskListFilters,
     TaskMonitorRequest,
     TaskPriceChangeRequest,
@@ -110,6 +111,15 @@ def pricing_preview(
     return task_service.pricing_preview(
         context, client_id, service_id, assignee_user_id, client_price
     )
+
+
+@router.get(
+    "/focus",
+    response_model=TaskFocusResponse,
+    summary="Overdue, today, this week and to-review tasks, most urgent first",
+)
+def task_focus(context: AuthenticatedContext) -> TaskFocusResponse:
+    return task_service.focus_admin(context)
 
 
 @router.get(

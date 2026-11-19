@@ -25,6 +25,7 @@ import type { EmployeeSalary, ManagerEarnings, Paged, TaskStatus } from "../prod
 import type { WorkerTask, WorkspaceDashboard } from "./types";
 import { useLiveRefresh } from "../realtime/realtime";
 import { AvailabilityPanel } from "../chat/availability-panel";
+import { TodayFocus } from "./today-focus";
 
 type Role = "MANAGER" | "EMPLOYEE";
 type Me = { user: { name: string }; company: { name: string } | null };
@@ -170,6 +171,10 @@ function WorkspaceDashboardContent({ role }: { role: Role }) {
                 Approved by the Admin
               </Tile>
             )}
+          </section>
+
+          <section className="company-dashboard-grid production-dash-grid">
+            <TodayFocus endpoint="/api/workspace/tasks/focus" scope="WORKER" />
           </section>
 
           <section className="company-dashboard-grid production-dash-grid">

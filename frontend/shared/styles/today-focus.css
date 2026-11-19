@@ -1,0 +1,163 @@
+/* Today's focus panel on the dashboards (owner request 2026-11-19). App tokens only. */
+.today-focus {
+  grid-column: 1 / -1;
+}
+
+.today-focus-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: #b42335;
+  background: color-mix(in srgb, #d93a4a 11%, var(--surface));
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.today-focus-alert svg {
+  width: 14px;
+  height: 14px;
+}
+
+.today-focus-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 18px 4px;
+}
+
+.today-focus-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--surface);
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.today-focus-tabs button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.today-focus-tabs button b {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--foreground);
+  background: var(--surface-muted);
+  font-size: 0.56rem;
+  text-align: center;
+}
+
+.today-focus-tabs button.active {
+  border-color: #0876ed;
+  color: #0876ed;
+  background: color-mix(in srgb, #0876ed 8%, var(--surface));
+}
+
+.today-focus-tabs button.late b {
+  color: #fff;
+  background: #d93a4a;
+}
+
+.today-focus-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.today-focus-list a {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.today-focus-list a:hover {
+  background: var(--surface-muted);
+}
+
+.today-focus-list a.late {
+  box-shadow: inset 3px 0 0 #d93a4a;
+}
+
+.today-focus-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.today-focus-main strong {
+  overflow: hidden;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-focus-main em {
+  color: #0876ed;
+  font-style: normal;
+}
+
+.today-focus-main small,
+.today-focus-meta small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.58rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-focus-meta {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.today-focus-due {
+  font-size: 0.62rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.today-focus-list a.late .today-focus-due {
+  color: #b42335;
+}
+
+.dark .today-focus-list a.late .today-focus-due,
+.dark .today-focus-alert {
+  color: #f0a6af;
+}
+
+.today-focus-empty {
+  margin: 0;
+  padding: 18px 12px;
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+@media (max-width: 720px) {
+  .today-focus-list a {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .today-focus-list a > .production-priority {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}

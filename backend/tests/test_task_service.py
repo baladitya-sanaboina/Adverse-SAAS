@@ -340,3 +340,41 @@ class TaskServiceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TodayPanelTest(unittest.TestCase):
+    """The dashboard's Today panel (owner request 2026-11-19)."""
+
+    @patch("app.services.task_service.validate_user_action_access", return_value=True)
+    def test_groups_and_who_sees_review(self, _: Any) -> None:
+        from datetime import timedelta as days
+
+        repo = FakeTaskRepository()
+        service = TaskService(repo, FakeFinanceRepository())  # type: ignore[arg-type]
+        today = service._today(COMPANY)
+        rows = [
+            task_row(number=1, priority="URGENT", status="IN_PROGRESS", due_date=today - days(2)),
+            task_row(number=2, priority="HIGH", status="ASSIGNED", due_date=today),
+            task_row(number=3, priority="LOW", status="PENDING", due_date=today + days(3)),
+            task_row(number=4, priority="MEDIUM", status="SUBMITTED", due_date=today - days(1)),
+            task_row(
+                number=5,
+                status="REVIEW",
+                due_date=today,
+                monitor_user_id=MANAGER,
+                assignee_user_id=EMPLOYEE,
+            ),
+            task_row(number=6, status="ASSIGNED", due_date=None),
+        ]
+        repo.focus = lambda company_id, user_id, until: rows  # type: ignore[attr-defined]
+        admin = service.focus_admin(context("COMPANY_ADMIN", ADMIN))
+        self.assertEqual([t.code for t in admin.overdue], ["TSK-0001"])
+        self.assertEqual(admin.overdue[0].days_left, -2)
+        self.assertEqual([t.code for t in admin.due_today], ["TSK-0002"])
+        self.assertEqual([t.code for t in admin.this_week], ["TSK-0003"])
+        self.assertEqual([t.code for t in admin.to_review], ["TSK-0004", "TSK-0005"])
+        manager = service.focus_worker(context("COMPANY_MANAGER", MANAGER))
+        self.assertEqual([t.code for t in manager.to_review], ["TSK-0005"])  # they monitor it
+        self.assertEqual(manager.to_review[0].my_role, "MONITOR")
+        employee = service.focus_worker(context("COMPANY_EMPLOYEE", EMPLOYEE))
+        self.assertEqual(employee.to_review, [])  # handed in: waiting on the reviewer

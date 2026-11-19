@@ -429,6 +429,33 @@ class TaskRepository:
             params["search"] = f"%{filters.search}%"
         return self._page(clauses, params, filters.page, filters.page_size)
 
+    def focus(self, company_id: UUID, user_id: UUID | None, until: date) -> list[TaskRow]:
+        """Open tasks due up to `until` (overdue included) and tasks waiting for review, most
+        urgent first (owner request 2026-11-19). user_id None: every task (admin); otherwise
+        the tasks this person is assigned to or monitors."""
+        clauses = [
+            "t.company_id = %(company)s",
+            "t.status NOT IN ('APPROVED','COMPLETED','CANCELLED')",
+            "(t.due_date <= %(until)s OR t.status IN ('SUBMITTED','REVIEW'))",
+        ]
+        params: dict[str, Any] = {"company": company_id, "until": until, "user": user_id}
+        if user_id is not None:
+            clauses.append("(t.assignee_user_id = %(user)s OR t.monitor_user_id = %(user)s)")
+        where = " AND ".join(clauses)
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT {_TASK_COLUMNS} {_TASK_FROM} WHERE {where}
+                ORDER BY
+                  CASE t.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1
+                    WHEN 'MEDIUM' THEN 2 ELSE 3 END,
+                  t.due_date ASC NULLS LAST, t.number
+                LIMIT 300
+                """,
+                params,
+            )
+            return [self._task(row) for row in cursor.fetchall()]
+
     def _page(
         self, clauses: list[str], params: dict[str, Any], page: int, page_size: int
     ) -> tuple[list[TaskRow], int]:

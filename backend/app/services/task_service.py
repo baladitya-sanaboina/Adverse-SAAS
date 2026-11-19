@@ -32,6 +32,7 @@ from app.schemas.production import (
     AdminTaskResponse,
     AssigneeOptionResponse,
     BudgetCheckResponse,
+    FocusTask,
     NamedRef,
     PersonRef,
     PriceChangeResponse,
@@ -43,6 +44,7 @@ from app.schemas.production import (
     TaskCreateRequest,
     TaskFileKind,
     TaskFileResponse,
+    TaskFocusResponse,
     TaskListFilters,
     TaskMonitorRequest,
     TaskPriceChangeRequest,
@@ -930,6 +932,59 @@ class TaskService:
             total=total,
             total_pages=max(1, (total + filters.page_size - 1) // filters.page_size),
         )
+
+    # -- the dashboard's Today panel (owner request 2026-11-19) --------------------------------
+
+    def _focus(
+        self, company_id: UUID, user_id: UUID | None, viewer: UUID, admin: bool
+    ) -> TaskFocusResponse:
+        """Overdue, due today, this week, and waiting for review, most urgent first. Work the
+        person handed in (submitted / in review) waits on the reviewer: it shows under To review
+        for the admin and the monitor, not as the assignee's own work."""
+        today = self._today(company_id)
+        rows = self.repository.focus(company_id, user_id, today + timedelta(days=7))
+        result = TaskFocusResponse(
+            today=today, overdue=[], due_today=[], this_week=[], to_review=[]
+        )
+        for row in rows:
+            role = None
+            if not admin:
+                role = "MONITOR" if row.monitor_user_id == viewer else "ASSIGNEE"
+            item = FocusTask(
+                id=row.id,
+                code=f"TSK-{row.number:04d}",
+                title=row.title,
+                client_name=row.client_name,
+                service_name=row.service_name,
+                priority=row.priority,
+                status=row.status,
+                due_date=row.due_date,
+                days_left=(row.due_date - today).days if row.due_date else None,
+                assignee_name=row.assignee_name,
+                monitor_name=row.monitor_name,
+                my_role=role,
+            )
+            if row.status in ("SUBMITTED", "REVIEW"):
+                if admin or row.monitor_user_id == viewer:
+                    result.to_review.append(item)
+                continue
+            if row.due_date is None:
+                continue
+            if row.due_date < today:
+                result.overdue.append(item)
+            elif row.due_date == today:
+                result.due_today.append(item)
+            else:
+                result.this_week.append(item)
+        return result
+
+    def focus_admin(self, context: AuthContext) -> TaskFocusResponse:
+        company_id = self._admin(context, "VIEW")
+        return self._focus(company_id, None, context.user_id, True)
+
+    def focus_worker(self, context: AuthContext) -> TaskFocusResponse:
+        company_id, _ = self._worker(context)
+        return self._focus(company_id, context.user_id, context.user_id, False)
 
     def get_worker_task(self, context: AuthContext, task_id: UUID) -> WorkerTaskDetailResponse:
         company_id, _ = self._worker(context)

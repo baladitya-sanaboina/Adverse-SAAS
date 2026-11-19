@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TodayFocus } from "@loopless-shared/workspace/today-focus";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlarmClock,
@@ -287,6 +288,10 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
         <Tile title="Pending from clients" value={money(m.pending_client_payments, currency)} icon={<Wallet />}>
           To your team: {money(m.pending_team_payments, currency)}
         </Tile>
+      </section>
+
+      <section className="company-dashboard-grid production-dash-grid">
+        <TodayFocus endpoint="/api/company/tasks/focus" scope="ADMIN" />
       </section>
 
       <section className="company-dashboard-grid production-dash-grid">
