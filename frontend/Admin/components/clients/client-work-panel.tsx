@@ -24,6 +24,7 @@ import { PaymentSheets, type Sheet } from "@loopless-shared/production/payment-s
 import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
 import "@/styles/client-work.css";
 import { OrbitLoader } from "@loopless-shared/branding/orbit-loader";
+import { ClientImportButton } from "./client-import";
 
 type Invoice = {
   id: string;
@@ -156,6 +157,7 @@ export function ClientWorkPanel({ clientId }: { clientId: string }) {
           </h3>
         </div>
         <div className="client-detail-actions">
+          <ClientImportButton clientId={clientId} onImported={() => void load()} />
           <Link href={`/tasks?client=${clientId}`} className="management-secondary-action">
             <ClipboardList /> Open in Tasks
           </Link>

@@ -29,6 +29,7 @@ from app.api.developer_management import router as developer_management_router
 from app.api.employees import router as employees_router
 from app.api.finance import router as finance_router
 from app.api.health import router as health_router
+from app.api.imports import router as imports_router
 from app.api.invitations import router as invitations_router
 from app.api.invoices import client_router as client_billing_router
 from app.api.invoices import router as invoices_router
@@ -336,6 +337,7 @@ app.include_router(mail_router, prefix=settings.api_prefix)
 app.include_router(agenda_router, prefix=settings.api_prefix)
 app.include_router(push_router, prefix=settings.api_prefix)
 app.include_router(onboarding_router, prefix=settings.api_prefix)
+app.include_router(imports_router, prefix=settings.api_prefix)
 app.include_router(public_onboarding_router, prefix=settings.api_prefix)
 app.include_router(crm_router, prefix=settings.api_prefix)
 app.include_router(audit_logs_router, prefix=settings.api_prefix)

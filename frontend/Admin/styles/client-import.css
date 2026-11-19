@@ -1,0 +1,231 @@
+/* Spreadsheet import (owner request 2026-11-19). Theme tokens only. */
+
+.client-import-drop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+  background: var(--surface-muted);
+  cursor: pointer;
+  transition: border-color 160ms ease;
+}
+
+.client-import-drop:hover,
+.client-import-drop:focus-within {
+  border-color: #0876ed;
+}
+
+.client-import-drop.busy {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.client-import-drop > svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  color: #0876ed;
+}
+
+.client-import-drop span {
+  display: grid;
+  gap: 3px;
+}
+
+.client-import-drop strong {
+  font-size: 0.74rem;
+}
+
+.client-import-drop small {
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.client-import-drop input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.client-import-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #9a4551;
+  background: #fbf0f2;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.dark .client-import-error {
+  color: #f0a6af;
+  background: #2a1418;
+}
+
+.client-import-group {
+  display: grid;
+  gap: 8px;
+}
+
+.client-import-group h4 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.client-import-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.client-import-option input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: #0876ed;
+}
+
+.client-import-option span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.client-import-option strong {
+  font-size: 0.72rem;
+}
+
+.client-import-option small {
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.client-import-option em {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-import-lines {
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.client-import-lines table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.64rem;
+}
+
+.client-import-lines th {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.58rem;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.client-import-lines td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.client-import-lines :is(th, td):last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.client-import-lines td.plus {
+  color: #287150;
+  font-weight: 700;
+}
+
+.dark .client-import-lines td.plus {
+  color: #86d3a9;
+}
+
+.client-import-lines small {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.client-import-warnings {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.client-import-warnings li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #9a5a06;
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.dark .client-import-warnings li {
+  color: #f3b766;
+}
+
+.client-import-warnings svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.client-import-done {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #c5e7d2;
+  border-radius: 12px;
+  background: #ebf8f0;
+  color: #1d4d36;
+}
+
+.dark .client-import-done {
+  border-color: #23503a;
+  background: #13241b;
+  color: #b7e6cb;
+}
+
+.client-import-done svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  color: #287150;
+}
+
+.client-import-done strong {
+  font-size: 0.78rem;
+}
+
+.client-import-done p {
+  margin: 4px 0 0;
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
