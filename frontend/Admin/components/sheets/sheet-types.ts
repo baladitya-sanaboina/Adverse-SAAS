@@ -45,6 +45,6 @@ export function ownerLine(
   currency: string,
 ) {
   const left = Number(owner.left);
-  if (left < 0) return `Over by ${money(-left, currency)}`;
+  if (left < 0) return `${money(-left, currency)} extra used · next top-up opens a new sheet`;
   return `${money(left, currency)} left of ${money(owner.pot, currency)} · ${Math.round(owner.percent_used)}% used`;
 }

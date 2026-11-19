@@ -171,11 +171,18 @@ export function PaymentSheets({
                     </small>
                   </span>
                   <span className="sheet-tab-flow">
-                    {carried !== 0 && `${signed(carried)} carried + `}
+                    {carried > 0 && `${money(carried, currency)} from sheet ${item.index - 1} + `}
                     {money(item.paid, currency)} paid
+                    {carried < 0 && ` − ${money(-carried, currency)} extra from sheet ${item.index - 1}`}
                   </span>
                   <span className={`sheet-tab-left${left < 0 ? " minus" : ""}`}>
-                    {item.end ? `${signed(left)} moved to sheet ${item.index + 1}` : `${signed(left)} left now`}
+                    {item.end
+                      ? left < 0
+                        ? `${money(-left, currency)} extra used → sheet ${item.index + 1}`
+                        : `${money(left, currency)} left → sheet ${item.index + 1}`
+                      : left < 0
+                        ? `${money(-left, currency)} extra used`
+                        : `${money(left, currency)} left now`}
                   </span>
                 </button>
               </Fragment>
@@ -262,9 +269,11 @@ function SheetPage({
   const headline = noPayment
     ? "No payment yet"
     : closed
-      ? `${money(Math.abs(left), currency)} ${left < 0 ? "owed, carried" : "carried"} to sheet ${sheet.index + 1}`
+      ? left < 0
+        ? `${money(-left, currency)} extra used · taken from sheet ${sheet.index + 1}`
+        : `${money(left, currency)} left · carried to sheet ${sheet.index + 1}`
       : left < 0
-        ? `Over by ${money(-left, currency)}`
+        ? `${money(-left, currency)} extra used`
         : `${money(left, currency)} left`;
 
   return (
@@ -291,7 +300,13 @@ function SheetPage({
         </div>
         <dl className="sheet-figures">
           <div>
-            <dt>Carried in</dt>
+            <dt>
+              {carried < 0
+                ? `Extra from sheet ${sheet.index - 1}`
+                : carried > 0
+                  ? `From sheet ${sheet.index - 1}`
+                  : "Carried in"}
+            </dt>
             <dd className={carried < 0 ? "minus" : undefined}>
               {carried === 0 ? "—" : `${carried < 0 ? "−" : "+"}${money(Math.abs(carried), currency)}`}
             </dd>

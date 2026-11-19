@@ -446,11 +446,14 @@ def budget_cycles(
         lines: list[CycleLine] = []
         balance = carried
         if index > 0 and carried != 0:
-            lines.append(
-                CycleLine(
-                    start, "CARRIED", f"Carried from sheet {index}", money(carried), money(carried)
-                )
+            # Owner wording 2026-11-19: leftover money is "carried"; an overspend is "extra used",
+            # taken from the new top-up.
+            label = (
+                f"Balance carried from sheet {index}"
+                if carried > 0
+                else f"Extra used in sheet {index} (taken from this top-up)"
             )
+            lines.append(CycleLine(start, "CARRIED", label, money(carried), money(carried)))
         amount = Decimal("0")
         used = Decimal("0")
         items = 0

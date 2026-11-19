@@ -409,6 +409,16 @@ def render_invoice_pdf(
     return buffer.getvalue()
 
 
+def _carry_label(sheet: Any) -> str:
+    """What came in from the sheet before (owner wording 2026-11-19)."""
+    carried = Decimal(sheet.carried_in)
+    if carried < 0:
+        return f"Extra from sheet {sheet.index - 1}"
+    if carried > 0:
+        return f"From sheet {sheet.index - 1}"
+    return "Carried in"
+
+
 def render_sheet_statement_pdf(
     *,
     company: CompanyProfile,
@@ -491,7 +501,7 @@ def render_sheet_statement_pdf(
     period = f"{_day(sheet.start)} – {_day(sheet.end) if sheet.end else 'now'}"
     facts = [
         ("PERIOD", period),
-        ("CARRIED IN", amount_text(Decimal(sheet.carried_in), currency)),
+        (_carry_label(sheet).upper(), amount_text(Decimal(sheet.carried_in), currency)),
         ("PAID IN", amount_text(Decimal(sheet.paid), currency)),
         (f"{item_word.upper()}S", str(sheet.items)),
     ]
@@ -558,7 +568,7 @@ def render_sheet_statement_pdf(
 
     left = Decimal(sheet.left)
     total_rows = [
-        ["Carried in", amount_text(Decimal(sheet.carried_in), currency)],
+        [_carry_label(sheet), amount_text(Decimal(sheet.carried_in), currency)],
         ["Paid in", amount_text(Decimal(sheet.paid), currency)],
         [
             f"Used · {sheet.items} {item_word}{'' if sheet.items == 1 else 's'}",
@@ -566,9 +576,9 @@ def render_sheet_statement_pdf(
         ],
     ]
     closing = (
-        (f"Carried to sheet {sheet.index + 1}" if sheet.end else "Balance now")
+        (f"Left · carried to sheet {sheet.index + 1}" if sheet.end else "Balance now")
         if left >= 0
-        else ("Owed, carried to sheet " + str(sheet.index + 1) if sheet.end else "Over by")
+        else (f"Extra used · taken from sheet {sheet.index + 1}" if sheet.end else "Extra used")
     )
     totals = Table(
         [[Paragraph(a, s["muted"]), Paragraph(b, s["right"])] for a, b in total_rows]

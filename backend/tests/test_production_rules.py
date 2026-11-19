@@ -310,7 +310,37 @@ class ClientLedgerTest(unittest.TestCase):
         self.assertEqual(
             (second.carried_in, second.remaining), (Decimal("2000.00"), Decimal("7000.00"))
         )
-        self.assertEqual(second.lines[0].label, "Carried from sheet 1")
+        self.assertEqual(second.lines[0].label, "Balance carried from sheet 1")
+
+    def test_owner_example_overspend_moves_to_the_next_top_up(self) -> None:
+        # Owner example 2026-11-19: 10,000 → 9,000 work; 15,000 more → 16,000; 17,000 work →
+        # 1,000 extra used stays in sheet 2; the next 10,000 opens sheet 3 with 9,000.
+        payments = [
+            (date(2026, 11, 1), "TOP_UP", Decimal("10000")),
+            (date(2026, 11, 10), "TOP_UP", Decimal("15000")),
+            (date(2026, 11, 20), "TOP_UP", Decimal("10000")),
+        ]
+        work = [
+            (date(2026, 11, 5), Decimal("9000")),
+            (date(2026, 11, 15), Decimal("17000")),
+            (date(2026, 11, 25), Decimal("500")),  # after sheet 3 opens: stays in sheet 3
+        ]
+        first, second, third = budget_cycles(payments, work)
+        self.assertEqual(first.remaining, Decimal("1000.00"))
+        self.assertEqual(second.carried_in + second.amount, Decimal("16000.00"))
+        self.assertEqual(second.remaining, Decimal("-1000.00"))
+        self.assertEqual(second.lines[0].label, "Balance carried from sheet 1")
+        self.assertEqual(third.carried_in + third.amount, Decimal("9000.00"))
+        self.assertEqual(third.lines[0].label, "Extra used in sheet 2 (taken from this top-up)")
+        self.assertEqual(third.remaining, Decimal("8500.00"))
+
+    def test_a_new_sheet_opens_only_with_a_top_up(self) -> None:
+        # Going over, or more work, never opens a sheet: only the next payment does.
+        payments = [(date(2026, 11, 1), "TOP_UP", Decimal("1000"))]
+        work = [(date(2026, 11, d), Decimal("700")) for d in (2, 5, 9)]
+        (only,) = budget_cycles(payments, work)
+        self.assertEqual(only.remaining, Decimal("-1100.00"))
+        self.assertIsNone(only.end)
 
     def test_work_without_payment_opens_a_sheet_when_asked(self) -> None:
         work = [(date(2026, 11, 13), Decimal("500"), "Reel")]

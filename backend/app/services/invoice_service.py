@@ -667,13 +667,27 @@ class InvoiceService:
         rows = [
             ("Sheet", f"Sheet {sheet.index} · {'closed' if sheet.end else 'open'}"),
             ("Period", period),
-            ("Carried in", money_text(Decimal(sheet.carried_in), currency)),
+            (
+                (
+                    (
+                        f"Extra from sheet {sheet.index - 1}"
+                        if Decimal(sheet.carried_in) < 0
+                        else f"From sheet {sheet.index - 1}"
+                    )
+                    if Decimal(sheet.carried_in) != 0
+                    else "Carried in"
+                ),
+                money_text(Decimal(sheet.carried_in), currency),
+            ),
             ("Paid in", money_text(Decimal(sheet.paid), currency)),
             (
                 "Used",
                 f"{money_text(Decimal(sheet.used), currency)} · {sheet.items} {'video' if request.kind == 'CLIENT' else 'task'}{'' if sheet.items == 1 else 's'}",
             ),
-            ("Balance", money_text(Decimal(sheet.left), currency)),
+            (
+                "Extra used" if Decimal(sheet.left) < 0 else "Balance",
+                money_text(abs(Decimal(sheet.left)), currency),
+            ),
         ]
         from app.services.outbound_mail import app_url, deliver, user_email
 
