@@ -134,6 +134,7 @@ class DeliveryRow:
     delivered_on: date
     amount: Decimal
     kind: str = "WORK"  # WORK (a video) or PACKAGE (a monthly package charge)
+    delivered_at: datetime | None = None  # when it was approved (UTC), for sheet order
 
 
 @dataclass(frozen=True)
@@ -930,7 +931,7 @@ class FinanceRepository:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
                 f"""
-                SELECT x.id, x.title, x.service, x.day, x.amount, x.kind FROM (
+                SELECT x.id, x.title, x.service, x.day, x.amount, x.kind, x.sort_at FROM (
                   SELECT t.id, t.title, s.name AS service, {delivered} AS day,
                     t.client_price_final AS amount, 'WORK' AS kind, t.approved_at AS sort_at
                   FROM tasks t JOIN company_services s ON s.id = t.service_id

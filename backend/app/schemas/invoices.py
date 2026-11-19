@@ -238,6 +238,8 @@ class SheetInvoiceRequest(BaseModel):
 
     client_id: UUID
     start: date
+    # Which sheet: two top-ups on one day make two sheets with the same start (2026-11-19).
+    index: int | None = None
 
 
 class ClientGstRequest(BaseModel):

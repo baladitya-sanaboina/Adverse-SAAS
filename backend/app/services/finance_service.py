@@ -90,6 +90,7 @@ from app.services.production_rules import (
     SalaryRate,
     budget_cycles,
     budget_position,
+    entry_time,
     last_month_starts,
     money,
     monthly_totals,
@@ -255,14 +256,20 @@ class FinanceService:
                 money(payout.amount),
                 f"Top-up · {PAYMENT_METHOD_TEXT.get(payout.method, payout.method)}"
                 + (f" · {payout.reference}" if payout.reference else ""),
+                entry_time(payout.paid_on, payout.created_at),  # order of same-day top-ups
             )
             for payout in payouts
         ]
         topped = sum((amount for _, _, amount in top_ups), ZERO)
         earned = sum((amount for _, _, amount in commissions), ZERO)
+        approved = {
+            f"TSK-{task.number:04d} · {task.title}": task.approved_at
+            for task in tasks
+            if task.approved_at is not None
+        }
         cycles = budget_cycles(
             top_up_labels,
-            [(day, amount, title) for day, title, amount in commissions],
+            [(day, amount, title, True, approved.get(title)) for day, title, amount in commissions],
             open_without_payment=True,
         )
         lines = wallet_timeline(top_ups, commissions)

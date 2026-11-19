@@ -37,7 +37,7 @@ export function SheetInvoiceButton({
     try {
       const created = await api<{ id: string; code: string; status: string }>("/api/company/invoices/sheet", {
         method: "POST",
-        json: { client_id: clientId, start: sheet.start },
+        json: { client_id: clientId, start: sheet.start, index: sheet.index },
       });
       setMade({ id: created.id, code: created.code, status: created.status });
       onDone?.(`Invoice ${created.code} is ready for sheet ${sheet.index}. View the PDF or send it.`);

@@ -384,42 +384,73 @@ PAYMENT_METHOD_TEXT = {
 }
 
 
+def _moment(day: date, at: object, late: bool) -> tuple[date, datetime]:
+    """Sort key: the day, then the exact time when known (unknown = end or start of the day)."""
+    if isinstance(at, datetime):
+        return day, at.replace(tzinfo=None)
+    return day, datetime.max if late else datetime.min
+
+
+def entry_time(day: date, recorded_at: datetime | None) -> datetime | None:
+    """When a payment counts within its day: the time it was entered when it was entered on
+    that day; a backdated entry counts from the start of its day (before that day's work)."""
+    if recorded_at is None or recorded_at.date() != day:
+        return None
+    return recorded_at
+
+
 def budget_cycles(
-    entries: Sequence[tuple[date, str, Decimal] | tuple[date, str, Decimal, str]],
+    entries: Sequence[
+        tuple[date, str, Decimal]
+        | tuple[date, str, Decimal, str]
+        | tuple[date, str, Decimal, str, datetime | None]
+    ],
     deliveries: Sequence[
-        tuple[date, Decimal] | tuple[date, Decimal, str] | tuple[date, Decimal, str, bool]
+        tuple[date, Decimal]
+        | tuple[date, Decimal, str]
+        | tuple[date, Decimal, str, bool]
+        | tuple[date, Decimal, str, bool, datetime | None]
     ],
     *,
     open_without_payment: bool = False,
 ) -> list[BudgetCycle]:
-    """Split the money into payment sheets, one per top-up date (several top-ups on one day
-    merge). Work before the first payment counts in the first sheet; adjustments belong to the
-    sheet they fall in. Each sheet starts with the previous sheet's balance carried in, records
-    the day its money ran out, and lists its own lines with the running balance."""
-    starts: dict[date, Decimal] = {}
-    labels: dict[date, list[str]] = {}
+    """Split the money into payment sheets, one per top-up (owner request 2026-11-19: every
+    top-up opens a new sheet, even two on the same day). Sheets follow the order the top-ups were
+    recorded; a piece of work belongs to the sheet that was open when it was approved (same day
+    and no time known: the newest sheet that day). Work before the first payment counts in the
+    first sheet; adjustments belong to the sheet they fall in. Each sheet starts with the previous
+    sheet's balance carried in, records the day its money ran out, and lists its own lines with
+    the running balance."""
+    opened: list[tuple[date, datetime, Decimal, str]] = []
     for day, kind, amount, *rest in entries:
         if kind in ("INITIAL", "TOP_UP") and Decimal(amount) > 0:
-            starts[day] = starts.get(day, Decimal("0")) + Decimal(amount)
-            labels.setdefault(day, []).append(str(rest[0]) if rest else "Payment")
-    if not starts and open_without_payment and deliveries:
+            label = str(rest[0]) if rest else "Payment"
+            at = rest[1] if len(rest) > 1 else None
+            opened.append((*_moment(day, at, late=False), Decimal(amount), label))
+    if not opened and open_without_payment and deliveries:
         # Work but no payment yet: one open sheet from the first piece of work, starting at zero.
         first = min(delivery[0] for delivery in deliveries)
-        starts[first] = Decimal("0")
-        labels[first] = []
-    if not starts:
+        opened.append((first, datetime.min, Decimal("0"), ""))
+    if not opened:
         return []
-    ordered = sorted(starts)
+    opened.sort(key=lambda item: (item[0], item[1]))
+    ordered = [item[0] for item in opened]
     windows: list[tuple[date, date | None]] = []
     for index, start in enumerate(ordered):
-        end = ordered[index + 1] - timedelta(days=1) if index + 1 < len(ordered) else None
+        if index + 1 < len(ordered):
+            following = ordered[index + 1]
+            end: date | None = following - timedelta(days=1) if following > start else start
+        else:
+            end = None
         windows.append((start, end))
 
-    def window_of(day: date) -> int:
-        for index, (start, end) in enumerate(windows):
-            if (index == 0 or day >= start) and (end is None or day <= end):
-                return index
-        return len(windows) - 1
+    def window_of(day: date, at: object = None) -> int:
+        key = _moment(day, at, late=True)
+        found = 0
+        for index, (start, start_at, _, _) in enumerate(opened):
+            if (start, start_at) <= key:
+                found = index
+        return found
 
     # (day, order, kind, label, signed amount, counts as an item); on one day money in counts
     # before work. A monthly package charge is used money but not a video (counts=False).
@@ -435,7 +466,8 @@ def budget_cycles(
         day, amount = delivery[0], delivery[1]
         extra: list[object] = list(delivery[2:])
         counts = bool(extra[1]) if len(extra) > 1 else True
-        events[window_of(day)].append(
+        approved_at = extra[2] if len(extra) > 2 else None
+        events[window_of(day, approved_at)].append(
             (day, 1, "WORK", str(extra[0]) if extra else "", -Decimal(amount), counts)
         )
 
@@ -459,12 +491,11 @@ def budget_cycles(
         items = 0
         ran_out_on: date | None = start if index > 0 and carried < 0 else None
         # The payment is a dated line too, so work done before the first payment shows first.
-        names = labels[start]
-        payment = names[0] if len(names) == 1 else f"{len(names)} payments"
+        paid, payment = opened[index][2], opened[index][3]
         # The payment goes first so that, on the same day, it counts before that day's work.
         dated: list[
             tuple[date, int, Literal["PAYMENT", "ADJUSTMENT", "WORK"], str, Decimal, bool]
-        ] = ([(start, 0, "PAYMENT", payment, starts[start], False)] if starts[start] > 0 else [])
+        ] = ([(start, 0, "PAYMENT", payment, paid, False)] if paid > 0 else [])
         dated += events[index]
         for day, _, kind, label, signed, counts in sorted(dated, key=lambda item: item[:2]):
             balance += signed

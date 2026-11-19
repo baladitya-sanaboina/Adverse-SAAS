@@ -334,6 +334,28 @@ class ClientLedgerTest(unittest.TestCase):
         self.assertEqual(third.lines[0].label, "Extra used in sheet 2 (taken from this top-up)")
         self.assertEqual(third.remaining, Decimal("8500.00"))
 
+    def test_every_top_up_opens_its_own_sheet_even_on_one_day(self) -> None:
+        # Owner report 2026-11-19: two top-ups on 19 Nov showed as one sheet ("2 payments").
+        day = date(2026, 11, 19)
+        payments = [
+            (day, "TOP_UP", Decimal("10000"), "Top-up", datetime(2026, 11, 19, 5, 0)),
+            (day, "TOP_UP", Decimal("1000"), "Top-up", datetime(2026, 11, 19, 9, 0)),
+        ]
+        work = [
+            (day, Decimal("150"), "TSK-0001", True, datetime(2026, 11, 19, 7, 0)),  # before 2nd
+            (day, Decimal("200"), "TSK-0002", True, datetime(2026, 11, 19, 10, 0)),  # after 2nd
+        ]
+        first, second = budget_cycles(payments, work)
+        self.assertEqual(
+            (first.amount, first.used, first.remaining),
+            (Decimal("10000.00"), Decimal("150.00"), Decimal("9850.00")),
+        )
+        self.assertEqual((first.start, first.end), (day, day))
+        self.assertEqual(second.carried_in, Decimal("9850.00"))
+        self.assertEqual((second.amount, second.used), (Decimal("1000.00"), Decimal("200.00")))
+        self.assertEqual(second.remaining, Decimal("10650.00"))
+        self.assertIsNone(second.end)
+
     def test_a_new_sheet_opens_only_with_a_top_up(self) -> None:
         # Going over, or more work, never opens a sheet: only the next payment does.
         payments = [(date(2026, 11, 1), "TOP_UP", Decimal("1000"))]

@@ -64,6 +64,7 @@ from app.services.production_rules import (
     budget_cycles,
     budget_position,
     daily_summary,
+    entry_time,
     money,
     resolve_period,
     running_budget_left,
@@ -627,6 +628,7 @@ class InvoiceService:
                 item
                 for item in self._client_sheets(company_id, request.client_id)
                 if item.start == request.start
+                and (request.index is None or item.index == request.index)
             ),
             None,
         )
@@ -954,6 +956,7 @@ class InvoiceService:
                     Decimal(payment.amount),
                     f"Payment received · {PAYMENT_METHOD_TEXT.get(payment.method, payment.method)}"
                     + (f" · {payment.reference}" if payment.reference else ""),
+                    entry_time(payment.received_on, payment.created_at),  # same-day order
                 )
                 for payment in payments
             ],
@@ -963,6 +966,7 @@ class InvoiceService:
                     Decimal(row.amount),
                     row.title if row.kind == "PACKAGE" else f"{row.title} · {row.service_name}",
                     row.kind == "WORK",
+                    row.delivered_at if row.kind == "WORK" else None,
                 )
                 for row in rows
             ],
