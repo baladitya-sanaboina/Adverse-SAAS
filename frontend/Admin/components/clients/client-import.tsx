@@ -123,7 +123,7 @@ export function ClientImportButton({ clientId, onImported }: { clientId: string;
   return (
     <>
       <button type="button" className="management-secondary-action" onClick={() => setOpen(true)}>
-        <FileSpreadsheet /> Import from Excel
+        <FileSpreadsheet /> Import Excel / PDF
       </button>
       {open &&
         createPortal(
@@ -131,7 +131,7 @@ export function ClientImportButton({ clientId, onImported }: { clientId: string;
             open={open}
             eyebrow="Import"
             title="Import spreadsheets"
-            subtitle="Content calendar, payments and delivered work from an .xlsx file. You see everything before it is saved."
+            subtitle="Content calendar, payments and delivered work from an Excel or PDF file. You see everything before it is saved."
             icon={<FileSpreadsheet />}
             busy={busy}
             onClose={close}
@@ -170,14 +170,14 @@ export function ClientImportButton({ clientId, onImported }: { clientId: string;
                 <label className={`client-import-drop${busy && !preview ? " busy" : ""}`}>
                   <Upload aria-hidden="true" />
                   <span>
-                    <strong>{file ? file.name : "Choose an .xlsx file"}</strong>
+                    <strong>{file ? file.name : "Choose an Excel (.xlsx) or PDF file"}</strong>
                     <small>
                       {busy && !preview
                         ? "Reading the file…"
-                        : "From Google Sheets: File → Download → Microsoft Excel (.xlsx)."}
+                        : "From Google Sheets: File → Download → Excel or PDF. Excel keeps every tick and link."}
                     </small>
                   </span>
-                  <input type="file" accept=".xlsx" onChange={(event) => void choose(event)} disabled={busy} />
+                  <input type="file" accept=".xlsx,.pdf" onChange={(event) => void choose(event)} disabled={busy} />
                 </label>
 
                 {error && (

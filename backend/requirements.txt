@@ -15,3 +15,5 @@ reportlab==5.1.0
 # Web Push for notifications when the app is closed (2026-11-15).
 pywebpush==2.0.3
 py-vapid==1.9.6
+# Reading PDFs for the spreadsheet import (2026-11-19).
+pypdf==7.1.1

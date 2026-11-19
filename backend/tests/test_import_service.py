@@ -251,3 +251,85 @@ class ApplyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def make_pdf() -> bytes:
+    """A one-page PDF laid out like a Google Sheets export: a calendar table and a dashboard."""
+    from reportlab.lib.pagesizes import landscape
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    page = canvas.Canvas(buffer, pagesize=landscape((595, 842)))
+    page.setFont("Helvetica", 9)
+    page.drawString(40, 560, "Client Budget")
+    page.drawString(44, 545, "₹12,000".replace("₹", "Rs "))
+    page.drawString(160, 560, "Selected Date")
+    page.drawString(164, 545, "02-Nov-26")
+    page.drawString(280, 560, "Amount Used")
+    page.drawString(284, 545, "Rs 2,100")
+    headers = [
+        (40, "Date"),
+        (120, "Day"),
+        (200, "Video Topic"),
+        (330, "Reference Video"),
+        (460, "Youtube Posted"),
+    ]
+    for x, text in headers:
+        page.drawString(x, 500, text)
+    rows = [
+        ("09-11-2026", "Monday", "Gold reel", "https://www.instagram.com/reel/gold/", "posted"),
+        ("10-11-2026", "Tuesday", "PF reel", "Link", "Not posted"),
+    ]
+    for number, (day, weekday, topic, reference, posted) in enumerate(rows):
+        y = 480 - number * 18
+        page.drawString(38, y, day)
+        page.drawString(118, y, weekday)
+        page.drawString(205, y, topic)
+        page.drawString(300, y, reference)
+        page.drawString(462, y, posted)
+        if reference == "Link":
+            page.linkURL("https://docs.google.com/document/d/pf", (298, y - 2, 330, y + 9))
+    page.drawString(40, 400, "Date")
+    page.drawString(120, 400, "Videos")
+    page.drawString(200, 400, "Amount")
+    page.drawString(280, 400, "Budget Left")
+    page.drawString(40, 382, "09-Nov-26")
+    page.drawString(124, 382, "2")
+    page.drawString(204, 382, "Rs 1,400")
+    page.drawString(284, 382, "Rs 10,600")
+    page.save()
+    return buffer.getvalue()
+
+
+class PdfImportTest(unittest.TestCase):
+    def test_calendar_dashboard_and_links_from_a_pdf(self) -> None:
+        from app.services.pdf_reader import read_pdf
+
+        parsed = parse(read_pdf(make_pdf()), "Demo 02-Nov - Dashboard.pdf")
+        rows = next(iter(parsed.calendar.values()))
+        self.assertEqual([row.title for row in rows], ["Gold reel", "PF reel"])
+        self.assertEqual(rows[0].reference_url, "https://www.instagram.com/reel/gold/")
+        self.assertEqual(rows[1].reference_url, "https://docs.google.com/document/d/pf")
+        self.assertEqual([row.posted_youtube for row in rows], [True, False])
+        self.assertEqual(
+            [(p.day, p.amount) for p in parsed.payments], [(date(2026, 11, 2), Decimal("12000.0"))]
+        )
+        # The latest day as listed, and the rest of Amount Used as one earlier line.
+        self.assertEqual(
+            [(w.day, w.label, w.count, w.amount) for w in parsed.works],
+            [
+                (date(2026, 11, 2), "Earlier work", 1, Decimal("700.0")),
+                (date(2026, 11, 9), "Work delivered", 2, Decimal("1400.0")),
+            ],
+        )
+
+    def test_a_pdf_upload_is_accepted(self) -> None:
+        service = ImportService(FakeCalendar(), None, FakeTasks())  # type: ignore[arg-type]
+        preview = service.preview(context("COMPANY_ADMIN", uuid4()), uuid4(), make_pdf(), "a.pdf")
+        self.assertTrue(any(tab.kind == "CALENDAR" for tab in preview.tabs))
+
+    def test_a_broken_pdf_is_refused_clearly(self) -> None:
+        service = ImportService(FakeCalendar(), None, FakeTasks())  # type: ignore[arg-type]
+        with self.assertRaises(AuthenticationError) as refused:
+            service.preview(context("COMPANY_ADMIN", uuid4()), uuid4(), b"%PDF-broken", "a.pdf")
+        self.assertEqual(refused.exception.code, "XLSX_UNREADABLE")

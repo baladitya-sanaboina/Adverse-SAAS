@@ -239,15 +239,19 @@ def _calendar(
     return out, skipped, sample
 
 
-def _work_columns(texts: dict[int, str]) -> dict[str, int] | None:
-    if any("budget left" in text or "balance" in text for text in texts.values()):
-        return None  # a summary table (Recent Dates), not the work log
+def _work_columns(texts: dict[int, str], summary: bool = False) -> dict[str, int] | None:
+    """A work log's columns. A table with a "Budget Left" column is the dashboard's day summary
+    (Recent Dates): only read when `summary` is asked for (a PDF dashboard has nothing else)."""
+    if not summary and any("budget left" in text or "balance" in text for text in texts.values()):
+        return None
     columns: dict[str, int] = {}
     for column, text in sorted(texts.items()):
         if text == "date" or text.startswith("date"):
             columns.setdefault("date", column)
         elif text in {"videos", "no of videos", "no. of videos", "count", "qty", "quantity", "nos"}:
             columns.setdefault("count", column)
+        elif "budget left" in text or "balance" in text:
+            continue
         elif "amount" in text or text in {"total", "total amount"}:
             columns.setdefault("amount", column)
         elif "rate" in text or text in {"price", "per video"}:
@@ -308,9 +312,58 @@ def _date_from_name(file_name: str, year_hint: int) -> date | None:
     return as_date(Cell(f"{match.group(1)}-{match.group(2)}-{match.group(3) or year_hint}"))
 
 
+def _summary_works(
+    parsed: Parsed, sheets: list[Sheet], summaries: list[MoneyRow], start: date
+) -> None:
+    """A dashboard without a work log (e.g. its PDF) shows only the latest days and the totals.
+    Those days are added as they are, and the rest of "Amount Used" as one "Earlier work" line on
+    the budget date, so Used and Left in Adverse match the dashboard."""
+    used_cell = next((cell for sheet in sheets if (cell := _labelled(sheet, "amount used"))), None)
+    videos_cell = next(
+        (cell for sheet in sheets if (cell := _labelled(sheet, "total videos"))), None
+    )
+    used = Decimal(str(as_number(used_cell) or 0)) if used_cell else None
+    days = sorted(
+        {(item.day, item.label, item.amount): item for item in summaries}.values(),
+        key=lambda item: item.day,
+    )
+    for item in days:
+        item.label = "Work delivered" if item.label == "Video" else item.label
+    shown = sum((item.amount for item in days), Decimal("0"))
+    if used is not None and used > shown:
+        total_videos = int(as_number(videos_cell) or 0) if videos_cell else 0
+        earlier_videos = max(total_videos - sum(item.count for item in days), 1)
+        parsed.works.append(
+            MoneyRow(
+                day=start,
+                label="Earlier work",
+                amount=used - shown,
+                count=earlier_videos,
+            )
+        )
+        parsed.warnings.append(
+            "The dashboard lists only its latest days; the rest of Amount Used is added as one "
+            "'Earlier work' line on the budget date."
+        )
+    parsed.works += days
+    if parsed.works:
+        parsed.tabs.append(
+            ImportTab(
+                name="Dashboard days",
+                kind="WORK",
+                rows=len(parsed.works),
+                skipped=0,
+                first_day=min(item.day for item in parsed.works),
+                last_day=max(item.day for item in parsed.works),
+                sample=[f"{item.day:%d %b %Y} · {item.label}" for item in parsed.works[:3]],
+            )
+        )
+
+
 def parse(sheets: list[Sheet], file_name: str) -> Parsed:
     parsed = Parsed()
     budget_cell: tuple[Sheet, Cell] | None = None
+    summaries: list[MoneyRow] = []
     for sheet in sheets:
         header = _header(sheet)
         if header is not None:
@@ -352,6 +405,10 @@ def parse(sheets: list[Sheet], file_name: str) -> Parsed:
                         )
                     )
                     continue
+            summary_columns = _work_columns(texts, summary=True)
+            if summary_columns is not None:
+                found, _ = _works(sheet, row, summary_columns)
+                summaries += found
         budget = _labelled(sheet, "client budget")
         if budget is not None and as_number(budget):
             budget_cell = (sheet, budget)
@@ -371,6 +428,8 @@ def parse(sheets: list[Sheet], file_name: str) -> Parsed:
             parsed.payments.append(
                 MoneyRow(day=day, label="Client budget", amount=Decimal(str(as_number(cell))))
             )
+            if not parsed.works:
+                _summary_works(parsed, sheets, summaries, day)
         else:
             parsed.warnings.append("The budget has no date, so it cannot be imported.")
     if not parsed.calendar and not parsed.works and not parsed.payments:
@@ -407,13 +466,18 @@ class ImportService:
 
     @staticmethod
     def _read(content: bytes, file_name: str) -> Parsed:
-        if not file_name.lower().endswith(".xlsx"):
+        name = file_name.lower()
+        if not name.endswith((".xlsx", ".pdf")):
             raise AuthenticationError(
                 422,
                 "XLSX_REQUIRED",
-                "Upload an .xlsx file. In Google Sheets use File → Download → Microsoft Excel (.xlsx).",
+                "Upload an .xlsx or a .pdf file. From Google Sheets: File → Download.",
             )
         try:
+            if name.endswith(".pdf"):
+                from app.services.pdf_reader import read_pdf
+
+                return parse(read_pdf(content), file_name)
             return parse(read_workbook(content), file_name)
         except XlsxError as error:
             raise AuthenticationError(422, "XLSX_UNREADABLE", str(error)) from error
