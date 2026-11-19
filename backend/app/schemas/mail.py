@@ -31,6 +31,23 @@ class MailFile(BaseModel):
     size_bytes: int
 
 
+class MailCardRow(BaseModel):
+    label: str
+    value: str
+
+
+class MailCard(BaseModel):
+    """How an app mail is laid out (owner request 2026-11-19): a title, a few lines, detail rows,
+    an optional item table (first row = headings) and the label of the button for `link`."""
+
+    title: str
+    lines: list[str] = []
+    rows: list[MailCardRow] = []
+    table: list[list[str]] = []
+    action: str | None = None
+    note: str | None = None
+
+
 class MailItem(BaseModel):
     id: UUID
     thread_id: UUID
@@ -52,6 +69,7 @@ class MailItem(BaseModel):
     status: Literal["SENT", "SCHEDULED", "DRAFT"] = "SENT"
     scheduled_at: datetime | None = None
     attachments: list[MailFile]
+    card: MailCard | None = None
 
 
 class MailTicket(BaseModel):

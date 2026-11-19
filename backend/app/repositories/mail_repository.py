@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from psycopg.types.json import Jsonb
+
 from app.database.connectivity import database_pool
 
 FOLDERS = ("INBOX", "UPDATES", "STARRED", "SENT", "SCHEDULED", "DRAFTS", "ALL", "TRASH")
@@ -37,6 +39,7 @@ class MailRow:
     scheduled_at: datetime | None = None
     starred: bool = False
     trashed: bool = False
+    card: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -136,7 +139,8 @@ _SELECT = """
        OR (m.sender_id = %(me)s AND m.sender_starred_at IS NOT NULL)),
       (EXISTS (SELECT 1 FROM mail_recipients r WHERE r.message_id = m.id AND r.user_id = %(me)s
                AND r.deleted_at IS NOT NULL)
-       OR (m.sender_id = %(me)s AND m.sender_deleted_at IS NOT NULL))
+       OR (m.sender_id = %(me)s AND m.sender_deleted_at IS NOT NULL)),
+      m.card
     FROM mail_messages m
     LEFT JOIN users su ON su.id = m.sender_id
     LEFT JOIN roles sr ON sr.id = su.role_id
@@ -210,15 +214,17 @@ class MailRepository:
         files: builtins.list[tuple[str, str, str, int]] | None = None,
         status: str = "SENT",
         scheduled_at: datetime | None = None,
+        card: dict[str, Any] | None = None,
     ) -> UUID:
-        """recipients: user ids (all To) or (user id, TO|CC|BCC) pairs."""
+        """recipients: user ids (all To) or (user id, TO|CC|BCC) pairs. `card` is the mail's
+        structured layout (title, rows, table, button) for app mails."""
         pairs = [item if isinstance(item, tuple) else (item, "TO") for item in recipients]
         message_id = uuid4()
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO mail_messages (id, company_id, sender_id, thread_id, reply_to_id, kind, "
-                "subject, body, link, status, scheduled_at, created_at) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW() AT TIME ZONE 'UTC')",
+                "subject, body, link, status, scheduled_at, card, created_at) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW() AT TIME ZONE 'UTC')",
                 (
                     message_id,
                     company_id,
@@ -231,6 +237,7 @@ class MailRepository:
                     link,
                     status,
                     scheduled_at,
+                    Jsonb(card) if card else None,
                 ),
             )
             _insert_recipients(cursor, message_id, pairs)

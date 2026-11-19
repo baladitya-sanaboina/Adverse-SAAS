@@ -125,12 +125,13 @@ def run_once(now: datetime | None = None) -> None:
                 lines=[
                     f"Hello {client}, invoice {code} was due on {due:%d %b %Y}. "
                     f"{amount} is still to be paid.",
-                    "If you have already paid, thank you, please ignore this reminder.",
+                    "If you have already paid, thank you, and please ignore this reminder.",
                 ],
                 rows=[("Invoice", code), ("Due on", f"{due:%d %b %Y}"), ("Balance due", amount)],
                 action_label="View invoice",
                 action_url=app_url("CLIENT", "/billing"),
                 company_name=invoices.company_profile(company_id).name,
+                mailbox_user=notification_service.client_user(company_id, client_id),
             )
             notification_service.notify(
                 company_id,

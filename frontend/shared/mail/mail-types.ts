@@ -30,6 +30,17 @@ export type MailItem = {
   status: MailStatus;
   scheduled_at: string | null;
   attachments: MailFile[];
+  /** App mails: how the mail is laid out (owner request 2026-11-19). */
+  card?: MailCard | null;
+};
+
+export type MailCard = {
+  title: string;
+  lines: string[];
+  rows: { label: string; value: string }[];
+  table: string[][];
+  action: string | null;
+  note: string | null;
 };
 
 export type Ticket = {

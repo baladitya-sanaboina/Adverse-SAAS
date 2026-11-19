@@ -85,6 +85,7 @@ import {
   type Counts,
   type ListResponse,
   type MeetingCard,
+  type MailCard,
   type MailItem,
   type Person,
   type Priority,
@@ -178,6 +179,59 @@ function typing(target: EventTarget | null): boolean {
 }
 
 /** Text with links that can be clicked; quoted lines (> ...) shown as a quote. */
+/** An app mail laid out like a proper mail (owner request 2026-11-19). */
+function MailCardView({ card, onOpen }: { card: MailCard; onOpen?: () => void }) {
+  const [head, ...rows] = card.table;
+  return (
+    <div className="mailx-card">
+      <h3>{card.title}</h3>
+      {card.lines.map((line, index) => (
+        <p key={index}>{linkify(line)}</p>
+      ))}
+      {card.rows.length > 0 && (
+        <dl className="mailx-card-rows">
+          {card.rows.map((row) => (
+            <div key={row.label}>
+              <dt>{row.label}</dt>
+              <dd>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {head && rows.length > 0 && (
+        <div className="mailx-card-table">
+          <table>
+            <thead>
+              <tr>
+                {head.map((cell, index) => (
+                  <th key={index} scope="col">
+                    {cell}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={index}>
+                  {row.map((cell, column) => (
+                    <td key={column}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {card.action && onOpen && (
+        <button type="button" className="mailx-card-action" onClick={onOpen}>
+          {card.action}
+        </button>
+      )}
+      {card.note && <small>{card.note}</small>}
+    </div>
+  );
+}
+
 function MailBody({ text }: { text: string }) {
   const blocks: ReactNode[] = [];
   const lines = text.split("\n");
@@ -1875,8 +1929,12 @@ function MessageCard({
           </div>
         </dl>
       )}
-      <MailBody text={item.body} />
-      {item.link && (
+      {item.card ? (
+        <MailCardView card={item.card} onOpen={item.link ? openLink : undefined} />
+      ) : (
+        <MailBody text={item.body} />
+      )}
+      {item.link && !item.card?.action && (
         <button type="button" className="mailx-open-link" onClick={openLink}>
           <ExternalLink aria-hidden="true" /> Open in Adverse
         </button>

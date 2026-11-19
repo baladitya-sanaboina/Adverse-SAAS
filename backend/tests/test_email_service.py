@@ -56,7 +56,7 @@ class EmailTemplateTests(unittest.TestCase):
         html = message.get_body(preferencelist=("html",)).get_content()
         self.assertIn("Acme Operations", plain)
         self.assertIn("ACME_OPS", html)
-        self.assertIn("never included", html)
+        self.assertNotIn("expires", html)  # a plain sign-in link, not a one-time link
         self.assertNotIn("StrongPass", message.as_string())
 
     @patch.object(settings, "smtp_host", "mailpit")

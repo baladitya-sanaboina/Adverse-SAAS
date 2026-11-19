@@ -58,7 +58,7 @@ export function SheetInvoiceButton({
   );
 }
 
-/** "Email statement" (owner request 2026-11-15): a client gets an email; a manager gets internal mail. */
+/** "Email statement": the statement goes to their Gmail and their Adverse mailbox (2026-11-19). */
 export function SheetEmailButton({
   sheet,
   kind,
@@ -87,7 +87,7 @@ export function SheetEmailButton({
   }
   return (
     <button type="button" className="secondary" disabled={busy} onClick={() => void send()}>
-      <Mail aria-hidden="true" /> {busy ? "Sending…" : kind === "CLIENT" ? "Email statement" : "Send to their mailbox"}
+      <Mail aria-hidden="true" /> {busy ? "Sending…" : "Email statement"}
     </button>
   );
 }

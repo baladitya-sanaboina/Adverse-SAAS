@@ -7,7 +7,7 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ChevronRight, Contact, Plus, Search, UsersRound, Wallet } from "lucide-react";
+import { ArrowLeft, ChevronRight, Contact, FileDown, Plus, Search, UsersRound, Wallet } from "lucide-react";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { api, errorText, formatDate, money } from "@/lib/production/client";
@@ -208,6 +208,15 @@ export function PaymentSheetsPage() {
                       ownerId={current.id}
                       onDone={(message) => setNotice(message)}
                     />
+                    {current.kind === "MANAGER" && (
+                      <a
+                        className="secondary"
+                        href={`/api/company/finance/sheets/managers/${current.id}/${sheet.index}/statement.pdf`}
+                        download
+                      >
+                        <FileDown aria-hidden="true" /> Download PDF
+                      </a>
+                    )}
                   </>
                 )}
               />

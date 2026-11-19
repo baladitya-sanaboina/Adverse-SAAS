@@ -789,6 +789,7 @@ class FinanceService:
             action_url=app_url("EMPLOYEE", "/salary"),
             company_name=self._company_name(company_id),
             once_key=f"salary:{payment_id}",
+            mailbox_user=request.user_id,
         )
         return payment
 
@@ -896,14 +897,19 @@ class FinanceService:
                 action_url=app_url("CLIENT", "/billing"),
                 company_name=self._company_name(company_id),
                 once_key=f"receipt:{payment.id}",
+                mailbox_user=notification_service.client_user(company_id, client_id),
             )
         except Exception:  # noqa: BLE001
             logger.warning("Payment receipt mail failed", exc_info=True)
 
     def _top_up_mail(self, company_id: UUID, manager_id: UUID, payout: Any) -> None:
-        """Manager top-up: a statement in their internal mailbox (staff stay inside the app)."""
+        """Manager top-up (owner request 2026-11-19): to their Gmail and their internal mailbox,
+        with the statement of the sheet this top-up closed attached as a PDF."""
         try:
-            from app.services.mail_service import mail_service
+            from app.repositories.invoice_repository import InvoiceRepository
+            from app.services.invoice_pdf import render_sheet_statement_pdf
+            from app.services.invoice_service import _period_sheet
+            from app.services.outbound_mail import app_url, deliver
 
             tz, _ = self._zone(company_id)
             wallet = self._wallet(
@@ -912,29 +918,53 @@ class FinanceService:
                 self.repository.list_payouts_for(company_id, manager_id),
             )
             closed = next((period for period in reversed(wallet.periods) if period.end), None)
-            text = [
-                f"You received a top-up of {money_text(payout.amount, payout.currency)} on "
-                f"{payout.paid_on:%d %b %Y}.",
-                f"Advance left now: {money_text(wallet.balance, payout.currency)}.",
+            from app.repositories.chat_repository import ChatRepository
+
+            found = ChatRepository().person(company_id, manager_id)
+            person = found.name if found else "there"
+            lines = [
+                f"Hello {person}, you received a top-up of "
+                f"{money_text(payout.amount, payout.currency)}. It opens a new payment sheet."
             ]
-            if closed is not None:
-                text += [
-                    "",
-                    f"Sheet {closed.index} ({closed.start:%d %b} – {closed.end:%d %b %Y}) is closed:",
-                    *[
-                        f"{line.day:%d %b}  {line.label}  {money_text(Decimal(line.amount), payout.currency)}"
-                        f"  → {money_text(Decimal(line.balance), payout.currency)}"
-                        for line in closed.lines
-                    ],
-                ]
-            mail_service.system(
+            table: list[list[str]] = []
+            attachments: list[tuple[bytes, str, str]] = []
+            if closed is not None and closed.end is not None:
+                lines.append(
+                    f"Sheet {closed.index} ({closed.start:%d %b} – {closed.end:%d %b %Y}) is now "
+                    f"closed and {money_text(Decimal(closed.balance), payout.currency)} moved to "
+                    "the new sheet. Its statement is below."
+                )
+                table = self._sheet_table(closed.lines, payout.currency)
+                sheet = _period_sheet(closed)
+                pdf = render_sheet_statement_pdf(
+                    company=InvoiceRepository().company_profile(company_id),
+                    owner_label="Manager",
+                    owner_name=person,
+                    owner_code="",
+                    sheet=sheet,
+                    currency=payout.currency,
+                    item_word="task",
+                )
+                attachments.append((pdf, f"sheet-{closed.index}-statement.pdf", "application/pdf"))
+            deliver(
                 company_id,
-                [manager_id],
-                f"Top-up received · {money_text(payout.amount, payout.currency)}",
-                "\n".join(text),
-                "/earnings",
-                "PAYMENT",
+                to_email=None,
+                user_id=manager_id,
+                subject=f"Top-up received · {money_text(payout.amount, payout.currency)}",
+                title="Top-up received",
+                lines=lines,
+                rows=[
+                    ("Amount", money_text(payout.amount, payout.currency)),
+                    ("Paid on", f"{payout.paid_on:%d %b %Y}"),
+                    ("Advance left now", money_text(wallet.balance, payout.currency)),
+                ],
+                table=table,
+                action_label="Open My Earnings",
+                action_url=app_url("MANAGER", "/earnings"),
+                company_name=self._company_name(company_id),
                 once_key=f"topup:{payout.id}",
+                attachments=attachments,
+                mailbox_user=manager_id,
             )
         except Exception:  # noqa: BLE001
             logger.warning("Top-up mail failed", exc_info=True)

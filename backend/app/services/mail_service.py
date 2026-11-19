@@ -18,6 +18,7 @@ import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from fastapi import UploadFile
@@ -30,6 +31,7 @@ from app.schemas.authentication import AuthContext
 from app.schemas.mail import (
     MailAction,
     MailActionResponse,
+    MailCard,
     MailConversation,
     MailDraftResponse,
     MailFile,
@@ -159,6 +161,7 @@ class MailService:
                     subject=row.subject,
                     preview=_preview(row.body),
                     body=row.body,
+                    card=MailCard.model_validate(row.card) if row.card else None,
                     link=row.link,
                     created_at=row.created_at,
                     sender=(
@@ -741,11 +744,19 @@ class MailService:
         once_key: str | None = None,
         notify: bool = False,
         once_seconds: int | None = None,
+        *,
+        card: dict[str, Any] | None = None,
+        sender_id: UUID | None = None,
     ) -> None:
-        """A mail from the app itself. Never raises: a failed mail must not undo the work.
-        notify=False when the caller already sends its own bell notification."""
+        """A mail from the app. Never raises: a failed mail must not undo the work.
+        notify=False when the caller already sends its own bell notification.
+        `sender_id`: the person whose action caused it (owner request 2026-11-19: a submitted task
+        mails the admin from the employee, not from "Adverse"); they are never mailed themselves.
+        `card`: the mail's layout, see `mail_card`."""
         try:
-            people = [user_id for user_id in dict.fromkeys(recipients) if user_id]
+            people = [
+                user_id for user_id in dict.fromkeys(recipients) if user_id and user_id != sender_id
+            ]
             if once_key:
                 people = [
                     user_id
@@ -756,14 +767,17 @@ class MailService:
                 return
             message_id = self.repository.create(
                 company_id,
-                None,
+                sender_id,
                 people,
                 subject[:200],
                 body[:20000],
                 kind=kind[:40],
                 link=link[:300],
+                card=card,
             )
-            self._announce(company_id, people, message_id, "New mail from Adverse", subject, notify)
+            sender = self.people_repository.person(company_id, sender_id) if sender_id else None
+            title = f"Mail from {sender.name}" if sender else "New mail from Adverse"
+            self._announce(company_id, people, message_id, title, subject, notify)
         except Exception:  # noqa: BLE001
             logger.warning("System mail failed: %s", subject, exc_info=True)
 
@@ -776,6 +790,26 @@ class MailService:
             return bool(realtime._redis().set(f"mail:internal:{key}", "1", nx=True, ex=window))
         except Exception:  # noqa: BLE001 - without Redis, send rather than lose the mail
             return True
+
+
+def mail_card(
+    title: str,
+    lines: Sequence[str] = (),
+    rows: Sequence[tuple[str, str]] = (),
+    table: Sequence[Sequence[str]] = (),
+    action: str | None = None,
+    note: str | None = None,
+) -> dict[str, Any]:
+    """The layout of an app mail in the internal mailbox (title, lines, detail rows, an item
+    table whose first row is the headings, the button label for the mail's link, a small note)."""
+    return {
+        "title": title[:200],
+        "lines": [line for line in lines if line][:12],
+        "rows": [{"label": label, "value": value} for label, value in rows if value][:16],
+        "table": [[str(cell) for cell in row] for row in table][:200],
+        "action": action,
+        "note": note,
+    }
 
 
 mail_service = MailService()

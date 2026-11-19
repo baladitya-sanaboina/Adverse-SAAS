@@ -195,6 +195,23 @@ def client_payment_sheets(client_id: UUID, context: AuthenticatedContext) -> lis
     return invoice_service.client_sheets(context, client_id)
 
 
+@router.get(
+    "/sheets/managers/{manager_id}/{index}/statement.pdf",
+    summary="A manager's payment sheet as a statement PDF (Admin only)",
+    responses=ERRORS,
+    response_class=Response,
+)
+def manager_sheet_statement(
+    manager_id: UUID, index: int, context: AuthenticatedContext
+) -> Response:
+    content, filename = invoice_service.manager_statement_pdf(context, manager_id, index)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # -- client payments ----------------------------------------------------------------------
 
 

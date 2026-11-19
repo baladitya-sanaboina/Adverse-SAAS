@@ -11,7 +11,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from app.repositories.task_repository import TaskRepository, TaskRow
-from app.services.mail_service import MailService, mail_service
+from app.services.mail_service import MailService, mail_card, mail_service
 from app.services.notification_service import NotificationService, notification_service
 
 logger = logging.getLogger(__name__)
@@ -78,16 +78,40 @@ class TaskEvents:
         if self.mail is None:
             return
         people = [user_id for user_id in recipients if user_id and user_id != actor_id]
+        due = f"{row.due_date:%d %b %Y}" if row.due_date else "No date set"
         body = "\n".join(
             [
                 *lines,
                 "",
                 f"Task: {row.code} · {row.title}",
                 f"Client: {row.client_name} · {row.service_name}",
-                f"Due: {row.due_date:%d %b %Y}" if row.due_date else "Due: no date set",
+                f"Due: {due}",
             ]
         )
-        self.mail.system(company_id, people, subject, body, _link(row), "TASK", once_key=key)
+        card = mail_card(
+            subject,
+            lines,
+            rows=[
+                ("Task", f"{row.code} · {row.title}"),
+                ("Client", row.client_name),
+                ("Service", row.service_name),
+                ("Priority", row.priority.title()),
+                ("Due", due),
+            ],
+            action="Open task",
+        )
+        # From the person who acted (owner request 2026-11-19), not from "Adverse".
+        self.mail.system(
+            company_id,
+            people,
+            subject,
+            body,
+            _link(row),
+            "TASK",
+            once_key=key,
+            card=card,
+            sender_id=actor_id,
+        )
 
     def _row(self, company_id: UUID, task_id: UUID) -> TaskRow | None:
         try:

@@ -1,12 +1,22 @@
 import logging
 import smtplib
 from email.message import EmailMessage
-from html import escape
 from typing import Protocol
 
 from app.core.settings import settings
+from app.services.mail_templates import render_mail
 
 logger = logging.getLogger(__name__)
+
+
+def _expiry_text(minutes: int) -> str:
+    if minutes % (24 * 60) == 0:
+        days = minutes // (24 * 60)
+        return f"{days} day{'s' if days != 1 else ''}"
+    if minutes % 60 == 0:
+        hours = minutes // 60
+        return f"{hours} hour{'s' if hours != 1 else ''}"
+    return f"{minutes} minutes"
 
 
 def branded_email_html(
@@ -19,98 +29,26 @@ def branded_email_html(
     expiry_minutes: int | None,
     details: list[tuple[str, str]] | None = None,
 ) -> str:
-    """Render a light-mode, email-client-safe Adverse transactional template. `details` adds a
-    box of label/value rows (e.g. the login and password); no expiry note when it is None."""
-    safe_url = escape(action_url, quote=True)
-    details_html = ""
-    if details:
-        rows = "".join(
-            '<tr><td style="padding:6px 14px 6px 0;color:#67788E;font-size:13px;white-space:nowrap;">'
-            f"{escape(label)}</td>"
-            '<td style="padding:6px 0;color:#241f2b;font-size:15px;font-weight:700;'
-            'font-family:Menlo,Consolas,monospace;word-break:break-all;">'
-            f"{escape(value)}</td></tr>"
-            for label, value in details
-        )
-        details_html = (
-            '<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
-            'style="width:100%;margin:0 0 22px;padding:14px 18px;border:1px solid #D8ECFF;'
-            f'border-radius:12px;background:#EDF6FF;">{rows}</table>'
-        )
-    expiry_html = (
-        '<div style="margin:0 0 26px;padding:13px 15px;border:1px solid #e5deed;border-radius:12px;'
-        'background:#faf8fc;color:#5f5668;font-size:13px;line-height:1.5;">'
-        "This secure, single-use link expires in "
-        f'<strong style="color:#0876ED;">{expiry_minutes} minutes</strong>.</div>'
-        if expiry_minutes is not None
-        else ""
+    """An account mail in the shared Adverse layout (mail_templates.render_mail). `details` are
+    label/value rows (e.g. the login and password); a link that expires says so under the button
+    and carries the "did not ask for this" note. `eyebrow` is kept for callers and not shown."""
+    del eyebrow
+    expires = expiry_minutes is not None
+    return render_mail(
+        title=title,
+        lines=[description],
+        rows=details or (),
+        monospace_rows=bool(details),
+        action_label=action_label,
+        action_url=action_url,
+        after=(
+            [f"This link works once and expires in {_expiry_text(expiry_minutes)}."]
+            if expiry_minutes is not None
+            else ()
+        ),
+        show_link=True,
+        footnote="If you were not expecting this mail, you can ignore it." if expires else None,
     )
-    return f"""<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
-    <meta name="supported-color-schemes" content="light">
-    <title>{escape(title)}</title>
-  </head>
-  <body style="margin:0;padding:0;background:#F4FAFF;color:#241f2b;font-family:Poppins,Arial,Helvetica,sans-serif;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F4FAFF;">
-      <tr>
-        <td align="center" style="padding:40px 16px;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;">
-            <tr>
-              <td style="padding:0 4px 18px;color:#0876ED;font-size:22px;font-weight:800;letter-spacing:-0.5px;">
-                Adverse
-              </td>
-            </tr>
-            <tr>
-              <td style="overflow:hidden;border:1px solid #ded6e8;border-radius:20px;background:#ffffff;box-shadow:0 16px 44px rgba(55,38,72,.08);">
-                <div style="height:7px;background:#0876ED;font-size:0;line-height:0;">&nbsp;</div>
-                <div style="padding:42px 42px 38px;">
-                  <div style="display:inline-block;margin-bottom:20px;padding:7px 11px;border-radius:999px;background:#f1ebf7;color:#0876ED;font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;">
-                    {escape(eyebrow)}
-                  </div>
-                  <h1 style="margin:0 0 14px;color:#241f2b;font-size:30px;line-height:1.25;font-weight:800;letter-spacing:-.7px;">
-                    {escape(title)}
-                  </h1>
-                  <p style="margin:0 0 22px;color:#67788E;font-size:15px;line-height:1.75;">
-                    {escape(description)}
-                  </p>
-                  {details_html}
-                  {expiry_html}
-                  <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                    <tr>
-                      <td style="border-radius:11px;background:#0876ED;">
-                        <a href="{safe_url}" style="display:inline-block;padding:14px 24px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:800;">
-                          {escape(action_label)}
-                        </a>
-                      </td>
-                    </tr>
-                  </table>
-                  <div style="margin:30px 0 0;padding-top:24px;border-top:1px solid #eee9f3;">
-                    <p style="margin:0 0 9px;color:#67788E;font-size:12px;line-height:1.6;">
-                      If the button does not work, copy and paste this link into your browser:
-                    </p>
-                    <p style="margin:0;overflow-wrap:anywhere;word-break:break-all;color:#0876ED;font-size:11px;line-height:1.6;">
-                      <a href="{safe_url}" style="color:#0876ED;text-decoration:underline;">{safe_url}</a>
-                    </p>
-                  </div>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:18px 12px 0;text-align:center;color:#7C8DA3;font-size:11px;line-height:1.7;">
-                If you did not request this action, you can safely ignore this email.<br>
-                © Adverse · Secure business management
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>"""
 
 
 def branded_code_email_html(
@@ -123,78 +61,17 @@ def branded_code_email_html(
     action_label: str | None = None,
     action_url: str | None = None,
 ) -> str:
-    safe_url = escape(action_url, quote=True) if action_url else None
-    return f"""<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
-    <meta name="supported-color-schemes" content="light">
-    <title>{escape(title)}</title>
-  </head>
-  <body style="margin:0;padding:0;background:#F4FAFF;color:#241f2b;font-family:Poppins,Arial,Helvetica,sans-serif;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F4FAFF;">
-      <tr>
-        <td align="center" style="padding:40px 16px;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;">
-            <tr>
-              <td style="padding:0 4px 18px;color:#0876ED;font-size:22px;font-weight:800;letter-spacing:-0.5px;">
-                Adverse
-              </td>
-            </tr>
-            <tr>
-              <td style="overflow:hidden;border:1px solid #ded6e8;border-radius:20px;background:#ffffff;box-shadow:0 16px 44px rgba(55,38,72,.08);">
-                <div style="height:7px;background:#0876ED;font-size:0;line-height:0;">&nbsp;</div>
-                <div style="padding:42px 42px 38px;">
-                  <div style="display:inline-block;margin-bottom:20px;padding:7px 11px;border-radius:999px;background:#f1ebf7;color:#0876ED;font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;">
-                    {escape(eyebrow)}
-                  </div>
-                  <h1 style="margin:0 0 14px;color:#241f2b;font-size:30px;line-height:1.25;font-weight:800;letter-spacing:-.7px;">
-                    {escape(title)}
-                  </h1>
-                  <p style="margin:0 0 22px;color:#67788E;font-size:15px;line-height:1.75;">
-                    {escape(description)}
-                  </p>
-                  <div style="margin:0 0 22px;padding:22px;border-radius:18px;background:#f6f1fb;border:1px dashed #d7c7ec;text-align:center;">
-                    <div style="margin-bottom:8px;color:#7B8DA7;font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;">One-time code</div>
-                    <div style="color:#241f2b;font-size:36px;font-weight:800;letter-spacing:10px;font-family:Menlo,Consolas,monospace;">{escape(code)}</div>
-                  </div>
-                  <div style="padding:13px 15px;border:1px solid #e5deed;border-radius:12px;background:#faf8fc;color:#5f5668;font-size:13px;line-height:1.5;">
-                    This secure code expires in <strong style="color:#0876ED;">{expiry_minutes} minutes</strong>.
-                  </div>
-                  {f'''<div style="margin-top:22px;">
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                      <tr>
-                        <td style="border-radius:11px;background:#0876ED;">
-                          <a href="{safe_url}" style="display:inline-block;padding:14px 24px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:800;">
-                            {escape(action_label or 'Open verification page')}
-                          </a>
-                        </td>
-                      </tr>
-                    </table>
-                    <div style="margin:18px 0 0;color:#67788E;font-size:12px;line-height:1.6;">
-                      You can also tap the button above to open the correct workspace confirmation page automatically.
-                    </div>
-                    <div style="margin:12px 0 0;overflow-wrap:anywhere;word-break:break-all;color:#0876ED;font-size:11px;line-height:1.6;">
-                      <a href="{safe_url}" style="color:#0876ED;text-decoration:underline;">{safe_url}</a>
-                    </div>
-                  </div>''' if safe_url else ''}
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:18px 12px 0;text-align:center;color:#7C8DA3;font-size:11px;line-height:1.7;">
-                If you did not request this action, you can safely ignore this email.<br>
-                © Adverse · Secure business management
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>"""
+    """A one-time code mail in the shared Adverse layout."""
+    del eyebrow
+    return render_mail(
+        title=title,
+        lines=[description],
+        code=code,
+        action_label=action_label,
+        action_url=action_url,
+        after=[f"The code works once and expires in {_expiry_text(expiry_minutes)}."],
+        footnote="If you did not ask for this code, you can ignore this mail; nothing changes.",
+    )
 
 
 class PasswordResetEmailSender(Protocol):
@@ -330,8 +207,7 @@ class EmailService:
                 eyebrow="Account security",
                 title="Reset your password",
                 description=(
-                    f"We received a request to update the password for your Adverse login {login}. "
-                    "Enter this one-time code to choose a new, secure password."
+                    f"Use the code below to set a new password for your Adverse login {login}."
                 ),
                 code=reset_code,
                 expiry_minutes=settings.password_reset_expiry_minutes,
@@ -368,10 +244,7 @@ class EmailService:
             branded_code_email_html(
                 eyebrow="Welcome to Adverse",
                 title="Verify your email address",
-                description=(
-                    "Your workspace is almost ready. Confirm this email address to activate "
-                    "your account and continue to Adverse."
-                ),
+                description="Enter this code in Adverse to confirm your email and activate your account.",
                 code=verification_code,
                 expiry_minutes=settings.email_verification_expiry_minutes,
                 action_label="Verify your email",
@@ -400,13 +273,12 @@ class EmailService:
                 eyebrow="Workspace ready",
                 title=f"Welcome, {admin_name}",
                 description=(
-                    f"Your {company_name} workspace ({company_code}) is ready. "
-                    "Verify your email using the separate activation message, then sign in. "
-                    "For security, your password is never included in email."
+                    f"Your {company_name} workspace ({company_code}) is ready. Verify your email "
+                    "with the code we sent in a separate mail, then sign in."
                 ),
                 action_label="Open Adverse",
                 action_url=login_url,
-                expiry_minutes=settings.email_verification_expiry_minutes,
+                expiry_minutes=None,
             ),
             subtype="html",
         )
@@ -432,12 +304,13 @@ class EmailService:
         message.add_alternative(
             branded_email_html(
                 eyebrow="Account setup",
-                title=f"Set up your {company_name} access",
+                title=f"You're invited to {company_name}",
                 description=(
-                    f"Your company administrator prepared access for the Adverse login {login_identity} in {company_name}. "
-                    "Set your password to activate the account and continue."
+                    f"{company_name} has created an Adverse account for you. Set your password to "
+                    "start using it."
                 ),
-                action_label="Set up access",
+                details=[("Your login", login_identity)],
+                action_label="Set your password",
                 action_url=invitation_url,
                 expiry_minutes=settings.invitation_expiry_hours * 60,
             ),
@@ -488,15 +361,9 @@ class EmailService:
                 eyebrow="Welcome",
                 title=f"Welcome to {company_name}",
                 description=(
-                    (
-                        "Your Adverse account is ready. Sign in with your Gmail or your Adverse "
-                        "ID. Keep this mail private; you can change your password anytime."
-                    )
+                    "Your account is ready. Sign in with your Gmail or your Adverse ID."
                     if gmail_login
-                    else (
-                        "Your Adverse account is ready. Sign in with these details. Keep this "
-                        "mail private; you can change your password anytime from your profile."
-                    )
+                    else "Your account is ready. Sign in with the details below."
                 ),
                 action_label="Sign in to Adverse",
                 action_url=login_url,
@@ -530,34 +397,21 @@ class EmailService:
             f"covering work delivered {period}.\n\nYou can also view all your invoices and "
             f"payments in your client portal: {portal_url}\n\nThank you,\n{company_name}"
         )
-        safe = {
-            key: escape(value)
-            for key, value in {
-                "company": company_name,
-                "client": client_name,
-                "code": invoice_code,
-                "amount": amount,
-                "period": period,
-                "url": portal_url,
-            }.items()
-        }
         message.add_alternative(
-            f"""<!doctype html><html lang="en"><body style="margin:0;padding:24px;background:#f4f7fb;
-font-family:Arial,Helvetica,sans-serif;color:#0f172a">
-<table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;
-border:1px solid #e2e8f0;border-radius:14px;border-top:4px solid #0876ED">
-<tr><td style="padding:28px 28px 8px"><p style="margin:0;color:#0876ED;font-size:12px;
-font-weight:700;letter-spacing:.08em;text-transform:uppercase">Invoice {safe["code"]}</p>
-<h1 style="margin:8px 0 6px;font-size:22px">{safe["amount"]}</h1>
-<p style="margin:0;color:#64748b;font-size:14px">Work delivered {safe["period"]}</p></td></tr>
-<tr><td style="padding:16px 28px;font-size:14px;line-height:1.6">Hello {safe["client"]},<br>
-The invoice is attached as a PDF. Every video in this period is listed with its date and amount.
-</td></tr>
-<tr><td style="padding:4px 28px 28px"><a href="{safe["url"]}" style="display:inline-block;
-padding:12px 18px;border-radius:9px;background:#0876ED;color:#ffffff;text-decoration:none;
-font-weight:700;font-size:14px">Open client portal</a>
-<p style="margin:18px 0 0;color:#64748b;font-size:12px">{safe["company"]}</p></td></tr>
-</table></body></html>""",
+            render_mail(
+                title=f"Invoice {invoice_code}",
+                greeting=f"Hello {client_name},",
+                lines=[
+                    f"Please find attached invoice {invoice_code} for the work delivered "
+                    f"{period}. Each video is listed in the PDF with its date and amount."
+                ],
+                rows=[("Invoice", invoice_code), ("Period", period), ("Amount", amount)],
+                action_label="View in your client portal",
+                action_url=portal_url,
+                after=["If anything looks wrong, just reply to this mail and we will sort it out."],
+                sign_off=company_name,
+                company=company_name,
+            ),
             subtype="html",
         )
         message.add_attachment(pdf, maintype="application", subtype="pdf", filename=filename)

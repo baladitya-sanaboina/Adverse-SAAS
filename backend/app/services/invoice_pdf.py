@@ -407,3 +407,203 @@ def render_invoice_pdf(
 
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
     return buffer.getvalue()
+
+
+def render_sheet_statement_pdf(
+    *,
+    company: CompanyProfile,
+    owner_label: str,
+    owner_name: str,
+    owner_code: str,
+    sheet: Any,
+    currency: str,
+    item_word: str,
+) -> bytes:
+    """A payment sheet as a statement PDF (owner request 2026-11-19: managers get and can make
+    their sheet statement, like a client invoice). `sheet` is a PaymentSheet: carried in + paid
+    in, every line with its running balance, and what is left."""
+    _fonts()
+    s = _styles()
+    buffer = BytesIO()
+    width = A4[0] - 32 * mm
+    number = f"Sheet {sheet.index}"
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=16 * mm,
+        rightMargin=16 * mm,
+        topMargin=16 * mm,
+        bottomMargin=18 * mm,
+        title=f"{owner_name} · {number} statement",
+        author=company.name,
+    )
+    story: list[Any] = []
+    logo = Image(str(ASSETS / "adverse-logo.png"), width=46 * mm, height=46 * mm * 419 / 1600)
+    status = "Closed" if sheet.end else "Open"
+    header = Table(
+        [
+            [
+                logo,
+                [
+                    Paragraph("STATEMENT", s["title"]),
+                    Paragraph(f"{number} · {status}", s["right_muted"]),
+                ],
+            ]
+        ],
+        colWidths=[width * 0.5, width * 0.5],
+    )
+    header.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    story += [header, Spacer(1, 8 * mm)]
+
+    def block(label: str, name: str, details: list[str | None]) -> list[Any]:
+        return [Paragraph(label, s["label"]), Paragraph(_escape(name), s["strong"])] + [
+            Paragraph(_escape(item), s["muted"]) for item in details if item
+        ]
+
+    parties = Table(
+        [
+            [
+                block("FROM", company.name, [company.email, company.phone, company.address]),
+                block(owner_label.upper(), owner_name, [owner_code]),
+            ]
+        ],
+        colWidths=[width * 0.5, width * 0.5],
+    )
+    parties.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+    story += [parties, Spacer(1, 6 * mm)]
+
+    period = f"{_day(sheet.start)} – {_day(sheet.end) if sheet.end else 'now'}"
+    facts = [
+        ("PERIOD", period),
+        ("CARRIED IN", amount_text(Decimal(sheet.carried_in), currency)),
+        ("PAID IN", amount_text(Decimal(sheet.paid), currency)),
+        (f"{item_word.upper()}S", str(sheet.items)),
+    ]
+    strip = Table(
+        [[[Paragraph(label, s["label"]), Paragraph(value, s["strong"])] for label, value in facts]],
+        colWidths=[width * 0.37, width * 0.22, width * 0.22, width * 0.19],
+    )
+    strip.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), TINT),
+                ("BOX", (0, 0), (-1, -1), 0.6, LINE),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    story += [strip, Spacer(1, 7 * mm)]
+
+    right = ParagraphStyle("r", parent=s["cell"], alignment=TA_RIGHT)
+    rows: list[list[Any]] = [
+        [
+            Paragraph("Date", s["head"]),
+            Paragraph("Details", s["head"]),
+            Paragraph("Paid in", s["head_right"]),
+            Paragraph("Used", s["head_right"]),
+            Paragraph("Balance", s["head_right"]),
+        ]
+    ]
+    for line in sheet.lines:
+        amount = Decimal(line.amount)
+        rows.append(
+            [
+                Paragraph(_day(line.day), s["cell"]),
+                Paragraph(_escape(line.label), s["cell"]),
+                Paragraph(amount_text(amount, currency) if amount > 0 else "", right),
+                Paragraph(amount_text(-amount, currency) if amount < 0 else "", right),
+                Paragraph(amount_text(Decimal(line.balance), currency), right),
+            ]
+        )
+    if not sheet.lines:
+        rows.append(["", Paragraph("Nothing on this sheet yet.", s["muted"]), "", "", ""])
+    table = Table(
+        rows,
+        colWidths=[width * 0.16, width * 0.39, width * 0.15, width * 0.15, width * 0.15],
+        repeatRows=1,
+    )
+    zebra = [("BACKGROUND", (0, index), (-1, index), TINT) for index in range(2, len(rows), 2)]
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), BLUE),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("LINEBELOW", (0, 1), (-1, -1), 0.4, LINE),
+                *zebra,
+            ]
+        )
+    )
+    story += [table, Spacer(1, 6 * mm)]
+
+    left = Decimal(sheet.left)
+    total_rows = [
+        ["Carried in", amount_text(Decimal(sheet.carried_in), currency)],
+        ["Paid in", amount_text(Decimal(sheet.paid), currency)],
+        [
+            f"Used · {sheet.items} {item_word}{'' if sheet.items == 1 else 's'}",
+            amount_text(Decimal(sheet.used), currency),
+        ],
+    ]
+    closing = (
+        (f"Carried to sheet {sheet.index + 1}" if sheet.end else "Balance now")
+        if left >= 0
+        else ("Owed, carried to sheet " + str(sheet.index + 1) if sheet.end else "Over by")
+    )
+    totals = Table(
+        [[Paragraph(a, s["muted"]), Paragraph(b, s["right"])] for a, b in total_rows]
+        + [
+            [
+                Paragraph(closing, s["strong"]),
+                Paragraph(
+                    f'<font name="Poppins-Bold" size="13" color="{"#B74858" if left < 0 else "#0876ED"}">'
+                    f"{amount_text(abs(left), currency)}</font>",
+                    s["right"],
+                ),
+            ]
+        ],
+        colWidths=[width * 0.36, width * 0.2],
+        hAlign="RIGHT",
+    )
+    totals.setStyle(
+        TableStyle(
+            [
+                ("LINEABOVE", (0, len(total_rows)), (-1, len(total_rows)), 0.8, INK),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, len(total_rows)), (-1, len(total_rows)), 8),
+            ]
+        )
+    )
+    story += [KeepTogether([totals])]
+
+    def footer(canvas: Any, document: Any) -> None:
+        canvas.saveState()
+        canvas.setFont("Poppins", 7.5)
+        canvas.setFillColor(MUTED)
+        canvas.drawString(16 * mm, 10 * mm, f"{company.name} · {owner_name} · {number} statement")
+        canvas.drawRightString(A4[0] - 16 * mm, 10 * mm, f"Page {document.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    return buffer.getvalue()

@@ -47,10 +47,16 @@ from app.schemas.invoices import (
     SheetsOverviewResponse,
     SheetStatus,
 )
-from app.schemas.production import ClientBudgetSummary, ClientPaymentLine, NamedRef, SheetLine
+from app.schemas.production import (
+    ClientBudgetSummary,
+    ClientPaymentLine,
+    NamedRef,
+    SheetLine,
+    WalletPeriod,
+)
 from app.services.authentication_service import AuthenticationError
 from app.services.finance_service import finance_service
-from app.services.invoice_pdf import amount_text, render_invoice_pdf
+from app.services.invoice_pdf import amount_text, render_invoice_pdf, render_sheet_statement_pdf
 from app.services.notification_service import notification_service
 from app.services.permission_service import validate_user_action_access
 from app.services.production_rules import (
@@ -72,6 +78,22 @@ ZERO = Decimal("0")
 
 def _pages(total: int, size: int) -> int:
     return max(1, (total + size - 1) // size)
+
+
+def _period_sheet(period: WalletPeriod) -> PaymentSheet:
+    """A manager's top-up period in the shared payment sheet shape."""
+    return PaymentSheet(
+        index=period.index,
+        start=period.start,
+        end=period.end,
+        paid=period.topped_up,
+        carried_in=period.carried_in,
+        used=period.earned,
+        left=period.balance,
+        items=period.items,
+        ran_out_on=period.ran_out_on,
+        lines=period.lines,
+    )
 
 
 class InvoiceService:
@@ -460,6 +482,47 @@ class InvoiceService:
         )
         return content, f"{row.code}.pdf"
 
+    def _invoice_to_mailbox(self, company_id: UUID, row: InvoiceRow, company: str) -> None:
+        """The invoice also lands in the client's internal mailbox (owner request 2026-11-19)."""
+        try:
+            from app.services.mail_service import mail_card, mail_service
+
+            client_user = notification_service.client_user(company_id, row.client_id)
+            if client_user is None:
+                return
+            period = f"{row.period_start:%d %b %Y} – {row.period_end:%d %b %Y}"
+            amount = amount_text(row.total, row.currency)
+            lines = self.repository.lines(row.id)
+            table = [["Date", "Work", "Amount"]] + [
+                [
+                    f"{line.delivered_on:%d %b %Y}",
+                    line.title,
+                    amount_text(line.amount, row.currency),
+                ]
+                for line in lines
+            ]
+            mail_service.system(
+                company_id,
+                [client_user],
+                f"Invoice {row.code} from {company}",
+                f"Your invoice {row.code} for {period} is ready: {amount}.",
+                "/billing",
+                "PAYMENT",
+                once_key=f"invoice-box:{row.id}",
+                card=mail_card(
+                    f"Invoice {row.code}",
+                    [
+                        f"Hello {row.client_name}, your invoice for the work delivered {period} is ready."
+                    ],
+                    rows=[("Invoice", row.code), ("Period", period), ("Amount", amount)],
+                    table=table if lines else [],
+                    action="Open billing",
+                    note="The PDF is attached to the mail sent to your Gmail and can be downloaded from Billing.",
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("Invoice mailbox copy failed", exc_info=True)
+
     def send(self, context: AuthContext, invoice_id: UUID) -> InvoiceSendResponse:
         company_id = self._admin(context, "EDIT")
         row = self.repository.get(company_id, invoice_id)
@@ -490,6 +553,7 @@ class InvoiceService:
             except Exception:  # noqa: BLE001 - the invoice is still available in the portal
                 logger.warning("Invoice email failed", exc_info=True)
                 message = "The email could not be sent; the invoice is in the client portal."
+        self._invoice_to_mailbox(company_id, row, company.name)
         if row.status == "DRAFT":
             self.repository.update(
                 company_id,
@@ -611,57 +675,110 @@ class InvoiceService:
             ),
             ("Balance", money_text(Decimal(sheet.left), currency)),
         ]
+        from app.services.outbound_mail import app_url, deliver, user_email
+
+        company = self.repository.company_profile(company_id)
+        table = finance_service._sheet_table(sheet.lines, currency)
         if request.kind == "MANAGER":
-            from app.services.mail_service import mail_service
-
-            body = "\n".join(
-                [
-                    f"Your payment sheet {sheet.index} ({period}).",
-                    "",
-                    *[f"{label}: {value}" for label, value in rows],
-                    "",
-                    *[
-                        f"{line.day:%d %b}  {line.label}  {money_text(Decimal(line.amount), currency)}"
-                        f"  → {money_text(Decimal(line.balance), currency)}"
-                        for line in sheet.lines
-                    ],
-                ]
+            # Gmail with the statement PDF, plus their internal mailbox (owner request 2026-11-19).
+            pdf = render_sheet_statement_pdf(
+                company=company,
+                owner_label="Manager",
+                owner_name=owner.name,
+                owner_code=owner.code,
+                sheet=sheet,
+                currency=currency,
+                item_word="task",
             )
-            mail_service.system(
+            deliver(
                 company_id,
-                [owner.id],
-                f"Payment sheet {sheet.index} statement",
-                body,
-                "/sheets",
-                "PAYMENT",
-                notify=True,
+                to_email=None,
+                user_id=owner.id,
+                subject=f"Payment sheet {sheet.index} statement · {owner.name}",
+                title=f"Payment sheet {sheet.index}",
+                lines=[f"Hello {owner.name}, here is your statement for {period}."],
+                rows=rows,
+                table=table,
+                action_label="Open My Earnings",
+                action_url=app_url("MANAGER", "/earnings"),
+                company_name=company.name,
+                notify_type="sheet.statement",
+                notify_link="/earnings",
+                attachments=[(pdf, f"{owner.code}-sheet-{sheet.index}.pdf", "application/pdf")],
+                mailbox_user=owner.id,
             )
+            address = user_email(owner.id)
             return SheetEmailResponse(
-                sent_to=owner.name, message=f"Sent to {owner.name}'s mailbox."
+                sent_to=owner.name,
+                message=(
+                    f"Sent to {owner.name}'s mailbox and {address}."
+                    if address and not settings.is_internal_email(address)
+                    else f"Sent to {owner.name}'s mailbox (no Gmail on file)."
+                ),
             )
-        from app.services.outbound_mail import app_url, deliver
-
         email = self.repository.client_login_email(company_id, owner.id)
         if not email:
             raise AuthenticationError(
                 422, "NO_CLIENT_EMAIL", "This client has no email address. Add one on their page."
             )
+        client_user = notification_service.client_user(company_id, owner.id)
         deliver(
             company_id,
             to_email=email,
-            user_id=notification_service.client_user(company_id, owner.id),
+            user_id=client_user,
             subject=f"Payment sheet {sheet.index} statement · {owner.name}",
             title=f"Payment sheet {sheet.index}",
             lines=[f"Hello {owner.name}, here is the statement for {period}."],
             rows=rows,
-            table=finance_service._sheet_table(sheet.lines, currency),
+            table=table,
             action_label="Open billing",
             action_url=app_url("CLIENT", "/billing"),
-            company_name=self.repository.company_profile(company_id).name,
+            company_name=company.name,
             notify_type="sheet.statement",
             notify_link="/billing",
+            mailbox_user=client_user,
         )
-        return SheetEmailResponse(sent_to=email, message=f"Emailed to {email}.")
+        return SheetEmailResponse(sent_to=email, message=f"Emailed to {email} and their mailbox.")
+
+    def manager_statement_pdf(
+        self, context: AuthContext, manager_id: UUID | None, index: int
+    ) -> tuple[bytes, str]:
+        """A manager's sheet statement PDF: the admin for any manager, a manager for their own."""
+        from app.services.finance_service import finance_service
+
+        if manager_id is None:
+            earnings = finance_service.my_commission(context)
+            company_id = context.company_id
+            assert company_id is not None
+            me = next(
+                (p for p in self.tasks.list_people(company_id) if p.id == context.user_id), None
+            )
+            sheets = [
+                _period_sheet(p) for p in (earnings.wallet.periods if earnings.wallet else [])
+            ]
+            name, code = (me.name, me.code) if me else ("Manager", "MGR")
+            currency = earnings.currency
+        else:
+            overview = self.sheets_overview(context)
+            company_id = context.company_id
+            assert company_id is not None
+            owner = next((item for item in overview.managers if item.id == manager_id), None)
+            if owner is None:
+                raise AuthenticationError(404, "SHEET_NOT_FOUND", "That manager was not found.")
+            sheets, name, code, currency = owner.sheets, owner.name, owner.code, overview.currency
+        sheet = next((item for item in sheets if item.index == index), None)
+        if sheet is None:
+            raise AuthenticationError(404, "SHEET_NOT_FOUND", "That payment sheet was not found.")
+        pdf = render_sheet_statement_pdf(
+            company=self.repository.company_profile(company_id),
+            owner_label="Manager",
+            owner_name=name,
+            owner_code=code,
+            sheet=sheet,
+            currency=currency,
+            item_word="task",
+        )
+        return pdf, f"{code}-sheet-{index}.pdf"
 
     # -- GST and monthly packages per client (owner requests 2026-11-15) ----------------------
 
@@ -897,21 +1014,7 @@ class InvoiceService:
                 self._owner(
                     "MANAGER",
                     NamedRef(id=person.id, name=person.name, code=person.code),
-                    [
-                        PaymentSheet(
-                            index=period.index,
-                            start=period.start,
-                            end=period.end,
-                            paid=period.topped_up,
-                            carried_in=period.carried_in,
-                            used=period.earned,
-                            left=period.balance,
-                            items=period.items,
-                            ran_out_on=period.ran_out_on,
-                            lines=period.lines,
-                        )
-                        for period in wallet.periods
-                    ],
+                    [_period_sheet(period) for period in wallet.periods],
                 )
             )
         urgency = {"OVER": 0, "USED_UP": 1, "NEAR": 2, "OK": 3}

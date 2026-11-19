@@ -1464,7 +1464,15 @@ function ManagerFinance({
   const currency = earnings.currency;
   return (
     <>
-      {earnings.wallet && <AdvanceWallet wallet={earnings.wallet} currency={currency} money={money} viewer="ADMIN" />}
+      {earnings.wallet && (
+        <AdvanceWallet
+          wallet={earnings.wallet}
+          currency={currency}
+          money={money}
+          viewer="ADMIN"
+          statementUrl={(index) => `/api/company/finance/sheets/managers/${data.person.id}/${index}/statement.pdf`}
+        />
+      )}
       <div className="services-pricing-summary-grid production-summary">
         <article>
           <span>Earned</span>

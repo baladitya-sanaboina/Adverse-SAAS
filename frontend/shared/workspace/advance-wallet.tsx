@@ -7,6 +7,7 @@
  * Each top-up opens a payment sheet; the previous sheet's balance carries over (2026-11-14).
  * Used on the Manager's My Earnings page and in the Admin's manager view.
  */
+import { FileDown } from "lucide-react";
 import { formatDate } from "../production/client";
 import { PaymentSheets } from "../production/payment-sheets";
 import type { ManagerWallet } from "../production/types";
@@ -17,11 +18,14 @@ export function AdvanceWallet({
   currency,
   money,
   viewer,
+  statementUrl,
 }: {
   wallet: ManagerWallet;
   currency: string;
   money: (value: string | number, currency?: string) => string;
   viewer: "ADMIN" | "MANAGER";
+  /** Where a sheet's statement PDF downloads from (owner request 2026-11-19). */
+  statementUrl?: (index: number) => string;
 }) {
   const balance = Number(wallet.balance);
   const owed = balance < 0;
@@ -68,6 +72,15 @@ export function AdvanceWallet({
           money={money}
           date={formatDate}
           itemWord="task"
+          sheetAction={
+            statementUrl
+              ? (sheet) => (
+                  <a className="secondary" href={statementUrl(sheet.index)} download>
+                    <FileDown aria-hidden="true" /> Download statement PDF
+                  </a>
+                )
+              : undefined
+          }
           empty={
             viewer === "ADMIN"
               ? "No top-ups yet. Each top-up you send opens a new sheet."

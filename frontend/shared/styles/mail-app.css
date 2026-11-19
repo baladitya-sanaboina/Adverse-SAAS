@@ -1051,6 +1051,131 @@
   color: var(--mx-accent);
 }
 
+/* App mails laid out like a proper mail (owner request 2026-11-19). */
+.mailx-card {
+  max-width: 640px;
+  margin: 16px 0 0 54px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.mailx-card h3 {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.mailx-card p {
+  margin: 0 0 8px;
+  color: var(--foreground);
+  font-size: 0.72rem;
+  line-height: 1.7;
+}
+
+.mailx-card p a {
+  color: var(--mx-accent);
+}
+
+.mailx-card-rows {
+  display: grid;
+  margin: 14px 0 4px;
+  border-top: 1px solid var(--border);
+}
+
+.mailx-card-rows div {
+  display: grid;
+  grid-template-columns: minmax(90px, 140px) 1fr;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.mailx-card-rows dt {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.mailx-card-rows dd {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.mailx-card-table {
+  margin: 14px 0 4px;
+  overflow-x: auto;
+}
+
+.mailx-card-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.66rem;
+}
+
+.mailx-card-table th {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mailx-card-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mailx-card-table :is(th, td):not(:first-child, :nth-child(2)) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mailx-card-action {
+  min-height: 40px;
+  margin-top: 16px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  background: var(--mx-accent);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mailx-card-action:hover {
+  filter: brightness(1.08);
+}
+
+.mailx-card small {
+  display: block;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 700px) {
+  .mailx-card {
+    margin-left: 0;
+    padding: 18px 16px;
+  }
+
+  .mailx-card-rows div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
 .mailx-quote {
   margin: 8px 0;
   padding: 2px 0 2px 12px;

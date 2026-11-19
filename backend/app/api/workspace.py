@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, File, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app.middleware.authentication import AuthenticatedContext
 from app.schemas.production import (
@@ -157,6 +157,23 @@ def delete_my_upload(
 )
 def my_commission(context: AuthenticatedContext) -> ManagerEarningsResponse:
     return finance_service.my_commission(context)
+
+
+@router.get(
+    "/earnings/sheets/{index}/statement.pdf",
+    summary="One of my payment sheets as a statement PDF (managers)",
+    responses=ERRORS,
+    response_class=Response,
+)
+def my_sheet_statement(index: int, context: AuthenticatedContext) -> Response:
+    from app.services.invoice_service import invoice_service
+
+    content, filename = invoice_service.manager_statement_pdf(context, None, index)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get(

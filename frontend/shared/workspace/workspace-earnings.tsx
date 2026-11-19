@@ -83,6 +83,7 @@ function ManagerSheetsPageContent() {
               currency={data.currency}
               money={money}
               viewer="MANAGER"
+              statementUrl={(index) => `/api/workspace/earnings/sheets/${index}/statement.pdf`}
             />
           )}
         </section>
@@ -120,7 +121,15 @@ function ManagerEarningsPageContent() {
             <TableSkeleton />
           ) : (
             <>
-              {data.wallet && <AdvanceWallet wallet={data.wallet} currency={currency} money={money} viewer="MANAGER" />}
+              {data.wallet && (
+                <AdvanceWallet
+                  wallet={data.wallet}
+                  currency={currency}
+                  money={money}
+                  viewer="MANAGER"
+                  statementUrl={(index) => `/api/workspace/earnings/sheets/${index}/statement.pdf`}
+                />
+              )}
               <div className="services-pricing-summary-grid production-summary">
                 <article>
                   <span>This month</span>

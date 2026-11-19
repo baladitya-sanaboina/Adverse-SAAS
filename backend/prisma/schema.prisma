@@ -1832,6 +1832,7 @@ model MailMessage {
   subject         String           @db.VarChar(200)
   body            String           @default("")
   link            String           @default("") @db.VarChar(300)
+  card            Json?            @db.JsonB
   senderDeletedAt DateTime?        @map("sender_deleted_at")
   status          String           @default("SENT") @db.VarChar(12)
   scheduledAt     DateTime?        @map("scheduled_at")
