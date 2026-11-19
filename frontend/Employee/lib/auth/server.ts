@@ -10,6 +10,48 @@ async function backend(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${authConfig.backendUrl}${path}`, { ...init, cache: "no-store" });
 }
 
+// One refresh per refresh token (2026-11-19). When the 30-minute access token has expired, a
+// page load fires many requests at once; each used to refresh on its own with the same refresh
+// token, only the first won (the backend allows each refresh token once) and the rest failed,
+// leaving blank pages and sudden logouts. Requests that arrive together share one refresh, and
+// late ones within a minute get the same new tokens, so every response saves the same cookies.
+type RefreshedTokens = { access_token: string; refresh_token: string };
+type RefreshOutcome = { tokens: RefreshedTokens } | { status: number; body: string; contentType: string };
+const REFRESH_REUSE_MS = 60_000;
+const refreshes = new Map<string, { at: number; outcome: Promise<RefreshOutcome> }>();
+
+function refreshOnce(refreshToken: string): Promise<RefreshOutcome> {
+  const now = Date.now();
+  for (const [key, entry] of refreshes) if (now - entry.at > REFRESH_REUSE_MS) refreshes.delete(key);
+  const known = refreshes.get(refreshToken);
+  if (known) return known.outcome;
+  const outcome: Promise<RefreshOutcome> = backend("/auth/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  }).then(async (response) =>
+    response.ok
+      ? { tokens: (await response.json()) as RefreshedTokens }
+      : {
+          status: response.status,
+          body: await response.text(),
+          contentType: response.headers.get("content-type") ?? "application/json",
+        },
+  );
+  refreshes.set(refreshToken, { at: now, outcome });
+  // Only successes are shared; a failure is not remembered.
+  void outcome
+    .then((result) => {
+      if (!("tokens" in result)) refreshes.delete(refreshToken);
+    })
+    .catch(() => refreshes.delete(refreshToken));
+  return outcome;
+}
+
+function refreshFailure(outcome: Exclude<RefreshOutcome, { tokens: RefreshedTokens }>): Response {
+  return new Response(outcome.body, { status: outcome.status, headers: { "Content-Type": outcome.contentType } });
+}
+
 function companyIdFromAccessToken(token: string): string | undefined {
   try {
     const payload = token.split(".")[1];
@@ -46,13 +88,9 @@ export async function authenticatedBackend(
   };
   let response = await request(access);
   if (response.status !== 401 || !refresh) return { response };
-  const refreshed = await backend("/auth/refresh", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refresh }),
-  });
-  if (!refreshed.ok) return { response: refreshed };
-  const tokens = (await refreshed.json()) as { access_token: string; refresh_token: string };
+  const outcome = await refreshOnce(refresh);
+  if (!("tokens" in outcome)) return { response: refreshFailure(outcome) };
+  const tokens = outcome.tokens;
   access = tokens.access_token;
   response = await request(access);
   return { response, access, refresh: tokens.refresh_token };
@@ -82,13 +120,9 @@ export async function currentUserWithRefresh(): Promise<{ response: Response; ac
   if (!access) return { response: new Response(null, { status: 401 }) };
   let response = await backend("/users/me", { headers: { Authorization: `Bearer ${access}` } });
   if (response.status !== 401 || !refresh) return { response };
-  const refreshed = await backend("/auth/refresh", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refresh }),
-  });
-  if (!refreshed.ok) return { response: refreshed };
-  const tokens = (await refreshed.json()) as { access_token: string; refresh_token: string };
+  const outcome = await refreshOnce(refresh);
+  if (!("tokens" in outcome)) return { response: refreshFailure(outcome) };
+  const tokens = outcome.tokens;
   access = tokens.access_token;
   response = await backend("/users/me", { headers: { Authorization: `Bearer ${access}` } });
   return { response, access, refresh: tokens.refresh_token };
