@@ -751,6 +751,66 @@
   color: #8cc8ff;
 }
 
+/* Link chips (owner request 2026-11-19): what the link is, like a Google Sheets file chip. */
+.sheet-cell.link a.sheet-chip,
+a.sheet-chip {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--foreground);
+  background: var(--surface);
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1.5;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+a.sheet-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+a.sheet-chip:hover {
+  border-color: #0876ed;
+}
+
+a.sheet-chip svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: #5f6368;
+}
+
+a.sheet-chip.doc svg {
+  color: #4285f4;
+}
+
+a.sheet-chip.sheet svg {
+  color: #0f9d58;
+}
+
+a.sheet-chip.slides svg {
+  color: #f4b400;
+}
+
+a.sheet-chip.pdf svg,
+a.sheet-chip.youtube svg {
+  color: #d93025;
+}
+
+a.sheet-chip.insta svg {
+  color: #c13584;
+}
+
+.dark .sheet-cell.link a.sheet-chip {
+  color: var(--foreground);
+}
+
 .sheet-check button {
   width: 16px;
   height: 16px;
@@ -1429,6 +1489,20 @@ a.cal-card-title {
   background: transparent;
   font-family: inherit;
   font-size: 0.62rem;
+}
+
+/* The date picker sits inside the filter's own box: no second border (2026-11-19). */
+.cal-filter-date .loopless-date {
+  min-width: 128px;
+}
+
+.cal-filter-date .loopless-date > button {
+  min-height: 34px !important;
+  padding: 0 4px !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 0.62rem !important;
 }
 
 @media (max-width: 720px) {

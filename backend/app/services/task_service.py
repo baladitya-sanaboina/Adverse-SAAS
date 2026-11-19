@@ -48,6 +48,7 @@ from app.schemas.production import (
     TaskListFilters,
     TaskMonitorRequest,
     TaskPriceChangeRequest,
+    TaskPriority,
     TaskStatusChangeRequest,
     TaskUpdateRequest,
     TaskWriteResponse,
@@ -829,9 +830,11 @@ class TaskService:
         title: str,
         description: str,
         due_date: date,
+        priority: TaskPriority | None = None,
     ) -> UUID | None:
         """Turn a calendar entry into a Pending, unassigned task. The service is the one the
-        client uses most that has a client rate; priority comes from how soon the date is.
+        client uses most that has a client rate; priority is the one chosen on the entry, or
+        comes from how soon the date is.
         Returns None when no service has a rate for this client (the admin creates it by hand)."""
         client = self.repository.get_client(company_id, client_id)
         if client is None or client.status != "ACTIVE":
@@ -849,7 +852,7 @@ class TaskService:
                     "service_id": service_id,
                     "title": title[:200],
                     "description": description[:5000],
-                    "priority": calendar_priority(due_date, self._today(company_id)),
+                    "priority": priority or calendar_priority(due_date, self._today(company_id)),
                     "status": "PENDING",
                     "assignee_user_id": None,
                     "assignee_type": None,

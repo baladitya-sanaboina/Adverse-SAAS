@@ -13,6 +13,7 @@ import { api, errorText, formatDate, money } from "@/lib/production/client";
 import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
 import { OrbitLoader } from "@loopless-shared/branding/orbit-loader";
 import "@/styles/client-work.css";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type PackageItem = {
   id: string;
@@ -212,13 +213,7 @@ export function ClientBillingSettings({ clientId }: { clientId: string }) {
                   <div className="client-billing-end">
                     <label className="management-field">
                       <span>End on</span>
-                      <input
-                        className="management-input"
-                        type="date"
-                        min={current.starts_on}
-                        value={endOn}
-                        onChange={(event) => setEndOn(event.target.value)}
-                      />
+                      <LooplessDate value={endOn} onValueChange={setEndOn} ariaLabel="End on" min={current.starts_on} />
                     </label>
                     <button
                       type="button"
@@ -334,13 +329,7 @@ export function ClientBillingSettings({ clientId }: { clientId: string }) {
                 </label>
                 <label className="management-field">
                   <span>Starts on</span>
-                  <input
-                    className="management-input"
-                    type="date"
-                    required
-                    value={startsOn}
-                    onChange={(event) => setStartsOn(event.target.value)}
-                  />
+                  <LooplessDate value={startsOn} onValueChange={setStartsOn} ariaLabel="Starts on" clearable={false} />
                 </label>
                 <p className="client-billing-note">
                   The price is charged on the start date and then on the 1st of every month. Videos over the number

@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.schemas.production import NamedRef
+from app.schemas.production import NamedRef, TaskPriority
 from app.services.production_rules import TaskStatus
 
 
@@ -15,10 +15,16 @@ def _strip(value: str) -> str:
 
 
 def _check_url(value: str) -> str:
+    """A web link. "docs.google.com/..." gets https:// added; plain words are refused clearly."""
     value = value.strip()
-    if value and not value.lower().startswith(("http://", "https://")):
-        raise ValueError("The reference link must start with http:// or https://.")
-    return value
+    if not value or value.lower().startswith(("http://", "https://")):
+        return value
+    host = value.split("/", 1)[0]
+    if " " not in value and "." in host and not host.startswith(".") and not host.endswith("."):
+        return f"https://{value}"
+    raise ValueError(
+        "Links must be web addresses, like https://docs.google.com/… (not plain text)."
+    )
 
 
 class CalendarTaskRef(BaseModel):
@@ -74,6 +80,8 @@ class CalendarEntryCreate(BaseModel):
     pdf_url: str = Field(default="", max_length=1000)
     notes: str = Field(default="", max_length=2000)
     no_post: bool = False
+    # The priority of the task this entry opens (owner request 2026-11-19); empty = from the date.
+    priority: TaskPriority | None = None
 
     _strip_text = field_validator("title", "notes")(_strip)
     _url = field_validator("reference_url", "script_url", "pdf_url")(_check_url)

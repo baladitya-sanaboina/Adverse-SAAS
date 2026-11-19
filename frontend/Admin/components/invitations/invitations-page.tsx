@@ -1,22 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  BriefcaseBusiness,
-  CalendarDays,
-  Mail,
-  MailPlus,
-  Phone,
-  RefreshCw,
-  RotateCw,
-  UserRound,
-  X,
-} from "lucide-react";
+import { BriefcaseBusiness, Mail, MailPlus, Phone, RefreshCw, RotateCw, UserRound, X } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { ManagementModal } from "@/components/foundation/management-modal";
 import "@/styles/invitations.css";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type InvitationRoleCode = "COMPANY_EMPLOYEE" | "COMPANY_MANAGER" | "COMPANY_CLIENT";
 type Invitation = {
@@ -493,10 +484,7 @@ export function InvitationsPage() {
               </label>
               <label className="management-field">
                 <span>Joining date</span>
-                <span className="management-input">
-                  <CalendarDays aria-hidden="true" />
-                  <input type="date" value={joiningDate} onChange={(event) => setJoiningDate(event.target.value)} />
-                </span>
+                <LooplessDate value={joiningDate} onValueChange={setJoiningDate} ariaLabel="Joining date" />
               </label>
             </>
           )}

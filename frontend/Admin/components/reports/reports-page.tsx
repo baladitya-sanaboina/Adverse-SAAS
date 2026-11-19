@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { BriefcaseBusiness, CalendarDays, Contact, UsersRound } from "lucide-react";
+import { BriefcaseBusiness, Contact, UsersRound } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { TableSkeleton } from "@/components/production/production-ui";
 import { PERIOD_OPTIONS, api, errorText, formatDate, money, query, today } from "@/lib/production/client";
@@ -99,19 +100,8 @@ export function ReportsPage() {
             />
             {custom && (
               <>
-                <label>
-                  <CalendarDays />
-                  <input
-                    type="date"
-                    aria-label="From"
-                    value={start}
-                    onChange={(event) => setStart(event.target.value)}
-                  />
-                </label>
-                <label>
-                  <CalendarDays />
-                  <input type="date" aria-label="To" value={end} onChange={(event) => setEnd(event.target.value)} />
-                </label>
+                <LooplessDate value={start} onValueChange={setStart} ariaLabel="From" max={end || undefined} />
+                <LooplessDate value={end} onValueChange={setEnd} ariaLabel="To" min={start || undefined} />
               </>
             )}
           </div>

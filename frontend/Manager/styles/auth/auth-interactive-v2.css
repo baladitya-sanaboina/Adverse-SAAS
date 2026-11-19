@@ -776,3 +776,37 @@
     padding-bottom: 16px !important;
   }
 }
+
+/* Owner request 2026-11-19: the normal mouse cursor (the drawn one did not sit where the click
+   lands), and a show/hide password button big enough to hit. */
+.auth-cursor {
+  display: none !important;
+}
+.interactive-auth,
+.interactive-auth input {
+  cursor: auto;
+}
+.interactive-auth button,
+.interactive-auth a,
+.interactive-auth .remember-row {
+  cursor: pointer;
+}
+.interactive-auth .auth-password input {
+  padding-right: 46px;
+}
+.interactive-auth .auth-password button {
+  top: 50%;
+  right: 5px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 8px;
+  transform: translateY(-50%);
+}
+.interactive-auth .auth-password button:hover,
+.interactive-auth .auth-password button:focus-visible {
+  background: rgba(8, 118, 237, 0.08);
+  outline: 0;
+}

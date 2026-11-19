@@ -31,6 +31,7 @@ import { CalendarSheet } from "./calendar-sheet";
 import { MeetingCard, localDay, meetingTime, useMeetings } from "./meetings";
 import "../styles/content-calendar.css";
 import { OrbitLoader } from "../branding/orbit-loader";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type Role = "ADMIN" | "CLIENT";
 type TaskStatus =
@@ -493,11 +494,11 @@ export function ContentCalendarPage({ role }: { role: Role }) {
             />
             <label className="cal-filter-date">
               <span>From</span>
-              <input type="date" value={from} max={to || undefined} onChange={(event) => setFrom(event.target.value)} />
+              <LooplessDate value={from} onValueChange={setFrom} ariaLabel="From" max={to || undefined} />
             </label>
             <label className="cal-filter-date">
               <span>To</span>
-              <input type="date" value={to} min={from || undefined} onChange={(event) => setTo(event.target.value)} />
+              <LooplessDate value={to} onValueChange={setTo} ariaLabel="To" min={from || undefined} />
             </label>
             {filtering && (
               <button type="button" className="cal-btn" onClick={clearFilters}>
@@ -875,6 +876,7 @@ function EntryDialog({
     pdf_url: entry?.pdf_url ?? "",
     notes: entry?.notes ?? "",
     no_post: entry?.no_post ?? false,
+    priority: "",
   });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -912,7 +914,11 @@ function EntryDialog({
         onCreated(
           await send<CalendarEntry>(
             base,
-            json("POST", role === "ADMIN" ? { ...payload, client_id: form.client_id } : payload),
+            json("POST", {
+              ...payload,
+              ...(role === "ADMIN" ? { client_id: form.client_id } : {}),
+              ...(form.priority && !form.no_post ? { priority: form.priority } : {}),
+            }),
           ),
         );
       }
@@ -980,12 +986,12 @@ function EntryDialog({
           )}
           <label className="cal-field">
             <span>Date</span>
-            <input
-              type="date"
+            <LooplessDate
               value={form.entry_date}
+              onValueChange={(value) => setForm((current) => ({ ...current, entry_date: value }))}
+              ariaLabel="Date"
               disabled={locked}
-              onChange={(event) => setForm((current) => ({ ...current, entry_date: event.target.value }))}
-              required
+              clearable={false}
             />
           </label>
           <div className="cal-field">
@@ -1013,6 +1019,23 @@ function EntryDialog({
                   onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
                 />
               </label>
+              {!entry && (
+                <div className="cal-field wide">
+                  <span>Priority</span>
+                  <LooplessSelect
+                    value={form.priority}
+                    ariaLabel="Priority"
+                    onValueChange={(value) => setForm((current) => ({ ...current, priority: value }))}
+                    options={[
+                      { value: "", label: "Automatic (by how soon the date is)" },
+                      { value: "LOW", label: "Low" },
+                      { value: "MEDIUM", label: "Medium" },
+                      { value: "HIGH", label: "High" },
+                      { value: "URGENT", label: "Urgent" },
+                    ]}
+                  />
+                </div>
+              )}
               <label className="cal-field wide">
                 <span>Reference link</span>
                 <input

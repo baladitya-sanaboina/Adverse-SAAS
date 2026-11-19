@@ -260,14 +260,41 @@ async def authentication_error_handler(_: Request, error: AuthenticationError) -
 async def request_validation_error_handler(
     _: Request, error: RequestValidationError
 ) -> JSONResponse:
+    errors = jsonable_encoder(error.errors())
     return JSONResponse(
         status_code=422,
         content={
             "code": "VALIDATION_ERROR",
-            "detail": "Request validation failed.",
-            "errors": jsonable_encoder(error.errors()),
+            "detail": _readable_validation(errors),
+            "errors": errors,
         },
     )
+
+
+def _readable_validation(errors: list[dict[str, object]]) -> str:
+    """The first problem in plain words, so every form says what to fix (owner report 2026-11-19)."""
+    if not errors:
+        return "Please check the form and try again."
+    first = errors[0]
+    message = str(first.get("msg") or "is not valid").removeprefix("Value error, ")
+    if first.get("type") == "value_error":
+        return message
+    location = first.get("loc")
+    names = (
+        [
+            part
+            for part in location
+            if isinstance(part, str) and part not in {"body", "query", "path"}
+        ]
+        if isinstance(location, list | tuple)
+        else []
+    )
+    field = (
+        names[-1].replace("_url", " link").replace("_id", "").replace("_", " ").strip().capitalize()
+        if names
+        else ""
+    )
+    return f"{field}: {message}" if field else message
 
 
 if settings.health_check_enabled:

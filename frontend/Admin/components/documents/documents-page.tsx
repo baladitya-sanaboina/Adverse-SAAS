@@ -28,6 +28,7 @@ import { OrbitLoader } from "@loopless-shared/branding/orbit-loader";
 import "@/styles/organization.css";
 import "@/styles/production.css";
 import "@/styles/documents.css";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type Status = "SENT" | "OPENED" | "COMPLETED" | "CANCELLED" | "EXPIRED";
 type Packet = {
@@ -580,13 +581,7 @@ function EmployeeForm({ staff, onSent }: { staff: Overview["staff"]; onSent: (me
         </label>
         <label className="management-field">
           <span>Joining date</span>
-          <input
-            className="management-input"
-            type="date"
-            required
-            value={joining}
-            onChange={(e) => setJoining(e.target.value)}
-          />
+          <LooplessDate value={joining} onValueChange={setJoining} ariaLabel="Joining date" clearable={false} />
         </label>
         <label className="management-field">
           <span>Reports to</span>

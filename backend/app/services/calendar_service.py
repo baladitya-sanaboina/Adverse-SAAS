@@ -32,7 +32,7 @@ from app.schemas.calendar import (
     StaffCalendarResponse,
     StaffCalendarTask,
 )
-from app.schemas.production import NamedRef
+from app.schemas.production import NamedRef, TaskPriority
 from app.services.authentication_service import AuthenticationError
 from app.services.notification_service import notification_service
 from app.services.permission_service import validate_user_action_access
@@ -154,7 +154,13 @@ class CalendarService:
 
     # -- tickets ------------------------------------------------------------------------------
 
-    def _open_ticket(self, company_id: UUID, entry_id: UUID, actor_id: UUID) -> UUID | None:
+    def _open_ticket(
+        self,
+        company_id: UUID,
+        entry_id: UUID,
+        actor_id: UUID,
+        priority: TaskPriority | None = None,
+    ) -> UUID | None:
         """Make the ticket for an entry (never blocks saving the entry itself)."""
         row = self.repository.get(company_id, entry_id)
         if row is None or row.no_post or row.task_id is not None:
@@ -172,7 +178,13 @@ class CalendarService:
         )
         try:
             task_id = self.tickets.create_calendar_ticket(
-                company_id, row.client_id, actor_id, row.title, description, row.entry_date
+                company_id,
+                row.client_id,
+                actor_id,
+                row.title,
+                description,
+                row.entry_date,
+                priority=priority,
             )
         except Exception:  # noqa: BLE001 - the entry is saved even if the ticket fails
             logger.warning("Could not create the calendar ticket", exc_info=True)
@@ -271,7 +283,7 @@ class CalendarService:
         entry_id = self.repository.create(
             company_id, client.id, context.user_id, request.model_dump(exclude={"client_id"})
         )
-        self._open_ticket(company_id, entry_id, context.user_id)
+        self._open_ticket(company_id, entry_id, context.user_id, request.priority)
         notification_service.notify(
             company_id,
             [notification_service.client_user(company_id, client.id)],
@@ -340,7 +352,7 @@ class CalendarService:
         entry_id = self.repository.create(
             company_id, client.id, context.user_id, request.model_dump(exclude={"client_id"})
         )
-        task_id = self._open_ticket(company_id, entry_id, context.user_id)
+        task_id = self._open_ticket(company_id, entry_id, context.user_id, request.priority)
         if not request.no_post:
             notification_service.notify(
                 company_id,

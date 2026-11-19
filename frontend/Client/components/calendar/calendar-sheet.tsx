@@ -11,8 +11,19 @@
  */
 import Link from "next/link";
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
-import { MoreHorizontal } from "lucide-react";
+import {
+  CirclePlay,
+  FileSpreadsheet,
+  FileText,
+  Film,
+  HardDrive,
+  Link2,
+  MoreHorizontal,
+  Presentation,
+  type LucideIcon,
+} from "lucide-react";
 import type { CalendarEntry } from "./content-calendar";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type Role = "ADMIN" | "CLIENT";
 type Tick = "recorded" | "script_ready" | "edited" | "posted_instagram" | "posted_youtube";
@@ -63,6 +74,23 @@ function EditCell({
     else setDraft(value);
   }
 
+  if (editing && type === "date") {
+    return (
+      <td className={`sheet-cell editing ${className ?? ""}`}>
+        <LooplessDate
+          value={value}
+          ariaLabel="Date"
+          clearable={false}
+          defaultOpen
+          onClose={() => setEditing(false)}
+          onValueChange={(next) => {
+            setEditing(false);
+            if (next && next !== value) onSave(next);
+          }}
+        />
+      </td>
+    );
+  }
   if (editing) {
     return (
       <td className={`sheet-cell editing ${className ?? ""}`}>
@@ -99,6 +127,54 @@ function EditCell({
   );
 }
 
+/*
+ * A link shows as a chip with what it points to, the way Google Sheets shows a Doc
+ * (owner request 2026-11-19): Google Doc, Google Sheet, Slides, Drive, PDF, Instagram, YouTube.
+ */
+export function linkInfo(url: string): { kind: string; label: string; Icon: LucideIcon } {
+  let host = "";
+  let path = "";
+  try {
+    const parsed = new URL(url);
+    host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    path = parsed.pathname.toLowerCase();
+  } catch {
+    return { kind: "web", label: "Link", Icon: Link2 };
+  }
+  if (host === "docs.google.com") {
+    if (path.startsWith("/spreadsheets")) return { kind: "sheet", label: "Google Sheet", Icon: FileSpreadsheet };
+    if (path.startsWith("/presentation")) return { kind: "slides", label: "Google Slides", Icon: Presentation };
+    if (path.startsWith("/forms")) return { kind: "doc", label: "Google Form", Icon: FileText };
+    return { kind: "doc", label: "Google Doc", Icon: FileText };
+  }
+  if (path.endsWith(".pdf")) return { kind: "pdf", label: "PDF", Icon: FileText };
+  if (host === "drive.google.com") return { kind: "drive", label: "Drive file", Icon: HardDrive };
+  if (host.endsWith("instagram.com")) {
+    return { kind: "insta", label: path.startsWith("/p/") ? "Instagram post" : "Instagram reel", Icon: Film };
+  }
+  if (host === "youtu.be" || host.endsWith("youtube.com"))
+    return { kind: "youtube", label: "YouTube", Icon: CirclePlay };
+  return { kind: "web", label: host || "Link", Icon: Link2 };
+}
+
+export function LinkChip({ url, label }: { url: string; label?: string }) {
+  const info = linkInfo(url);
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer noopener"
+      className={`sheet-chip ${info.kind}`}
+      aria-label={label ? `${label}: ${info.label}` : info.label}
+      title={url}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <info.Icon aria-hidden="true" />
+      <span>{info.label}</span>
+    </a>
+  );
+}
+
 function LinkCell({ value, label, onSave }: { value: string; label: string; onSave: (value: string) => void }) {
   return (
     <EditCell
@@ -106,19 +182,7 @@ function LinkCell({ value, label, onSave }: { value: string; label: string; onSa
       type="url"
       placeholder="Add link"
       className="link"
-      display={
-        value ? (
-          <a
-            href={value}
-            target="_blank"
-            rel="noreferrer noopener"
-            aria-label={label}
-            onClick={(event) => event.stopPropagation()}
-          >
-            Link
-          </a>
-        ) : undefined
-      }
+      display={value ? <LinkChip url={value} label={label} /> : undefined}
       onSave={onSave}
     />
   );
@@ -336,11 +400,10 @@ export function CalendarSheet({
           {canAdd && (
             <tr className="sheet-new">
               <td className="sheet-cell date">
-                <input
-                  type="date"
-                  aria-label="New row date"
+                <LooplessDate
                   value={draft.entry_date || nextDate}
-                  onChange={(event) => setDraft((current) => ({ ...current, entry_date: event.target.value }))}
+                  onValueChange={(value) => setDraft((current) => ({ ...current, entry_date: value }))}
+                  ariaLabel="New row date"
                 />
               </td>
               <td className="sheet-cell muted" colSpan={2 + (showClient ? 1 : 0)}>

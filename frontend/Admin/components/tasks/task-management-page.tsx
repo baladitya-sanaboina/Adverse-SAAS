@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
-  CalendarDays,
   ClipboardList,
   Download,
   FileText,
@@ -63,6 +62,7 @@ import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
 import "@/styles/organization.css";
 import "@/styles/service-pricing-settings.css";
 import "@/styles/production.css";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type ChoiceItem = { id: string; name: string; code?: string; status?: string };
 /** What the slide-in panel shows; null when it is closed and only the board is visible. */
@@ -853,10 +853,11 @@ function TaskForm({
             />
           </Field>
           <Field label="Due date">
-            <span className="management-input">
-              <CalendarDays aria-hidden="true" />
-              <input type="date" value={values.due_date} onChange={(event) => update("due_date", event.target.value)} />
-            </span>
+            <LooplessDate
+              value={values.due_date}
+              onValueChange={(value) => update("due_date", value)}
+              ariaLabel="Due date"
+            />
           </Field>
           {!editing && (
             <>

@@ -7,7 +7,6 @@ import {
   BadgeIndianRupee,
   BriefcaseBusiness,
   Building2,
-  CalendarDays,
   CircleDollarSign,
   Columns3,
   ContactRound,
@@ -26,6 +25,7 @@ import {
 } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { CrudActionButtons } from "@/components/foundation/crud-action-buttons";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import type { CurrentUser } from "@/lib/auth/types";
 import type {
@@ -1700,13 +1700,11 @@ function OpportunityEditor({
           />
         </Field>
         <Field label="Expected close">
-          <InputShell icon={<CalendarDays />}>
-            <input
-              type="date"
-              value={form.expected_close_date}
-              onChange={(e) => onChange("expected_close_date", e.target.value)}
-            />
-          </InputShell>
+          <LooplessDate
+            value={form.expected_close_date}
+            onValueChange={(value) => onChange("expected_close_date", value)}
+            ariaLabel="Expected close"
+          />
         </Field>
         <Field label="Description" wide error={errors.description}>
           <InputShell icon={<Filter />}>

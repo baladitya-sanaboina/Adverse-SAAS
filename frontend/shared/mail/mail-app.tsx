@@ -93,6 +93,7 @@ import {
   type TicketStatus,
 } from "./mail-types";
 import "../styles/mail-app.css";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type Folder = "INBOX" | "UPDATES" | "STARRED" | "SENT" | "SCHEDULED" | "DRAFTS" | "TICKETS" | "ALL" | "TRASH";
 type Action = "archive" | "inbox" | "trash" | "restore" | "purge" | "star" | "unstar" | "read" | "unread";
@@ -2545,12 +2546,12 @@ function Composer({
         <div className="mailx-meeting">
           <CalendarPlus aria-hidden="true" />
           <strong>Meeting</strong>
-          <input
-            type="date"
-            aria-label="Meeting date"
+          <LooplessDate
             value={draft.meeting.day}
-            onChange={(event) =>
-              update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), day: event.target.value } })
+            ariaLabel="Meeting date"
+            clearable={false}
+            onValueChange={(value) =>
+              update({ meeting: { ...(draft.meeting as NonNullable<Draft["meeting"]>), day: value } })
             }
           />
           <input
@@ -2763,12 +2764,11 @@ function ScheduleDialog({ onClose, onPick }: { onClose: () => void; onPick: (whe
         >
           <strong>Pick a date and time</strong>
           <div>
-            <input
-              type="date"
+            <LooplessDate
               value={day}
-              aria-label="Date"
+              onValueChange={setDay}
+              ariaLabel="Date"
               min={new Date().toISOString().slice(0, 10)}
-              onChange={(event) => setDay(event.target.value)}
             />
             <input type="time" value={time} aria-label="Time" onChange={(event) => setTime(event.target.value)} />
           </div>

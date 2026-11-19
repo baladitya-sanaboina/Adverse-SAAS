@@ -7,6 +7,7 @@ import { CrudActionButtons } from "@/components/foundation/crud-action-buttons";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { ManagementModal } from "@/components/foundation/management-modal";
 import "@/styles/service-pricing-settings.css";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type ServiceStatus = "ACTIVE" | "INACTIVE";
 type PricingModeCode = "PER_VIDEO" | "PER_PIECE" | "MONTHLY_FIXED" | "MONTHLY_PACKAGE" | "COMMISSION_PER_DELIVERABLE";
@@ -1064,15 +1065,11 @@ export function ServicesPricingSettings({ currency }: { currency: string }) {
             </label>
             <label className="management-field">
               <span>Effective date</span>
-              <div className="management-input">
-                <input
-                  type="date"
-                  value={pricingForm.effective_date}
-                  onChange={(event) =>
-                    setPricingForm((current) => ({ ...current, effective_date: event.target.value }))
-                  }
-                />
-              </div>
+              <LooplessDate
+                value={pricingForm.effective_date}
+                ariaLabel="Effective date"
+                onValueChange={(value) => setPricingForm((current) => ({ ...current, effective_date: value }))}
+              />
             </label>
             <label className="management-field">
               <span>Currency</span>

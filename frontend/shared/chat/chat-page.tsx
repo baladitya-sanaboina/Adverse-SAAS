@@ -68,6 +68,7 @@ import {
 import { STATUS_EVENT, announceStatus } from "./topbar-status";
 import "../styles/chat.css";
 import { OrbitLoader } from "../branding/orbit-loader";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type Folder = "INBOX" | "CLIENTS" | "TEAM" | "DIRECT";
 type Tab = "ALL" | "UNREAD" | "MINE";
@@ -2186,10 +2187,10 @@ function ScheduleDialog({ chatId, onClose, onSaved }: { chatId: string; onClose:
         <div className="chat-form-row">
           <label className="chat-field">
             <span>Date</span>
-            <input
-              type="date"
+            <LooplessDate
               value={form.date}
-              onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
+              onValueChange={(value) => setForm((current) => ({ ...current, date: value }))}
+              ariaLabel="Date"
             />
           </label>
           <label className="chat-field">

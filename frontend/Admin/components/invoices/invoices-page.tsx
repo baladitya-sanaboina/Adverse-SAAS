@@ -9,7 +9,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Ban,
-  CalendarDays,
   CheckCircle2,
   Download,
   ExternalLink,
@@ -30,6 +29,7 @@ import type { Paged } from "@/lib/production/types";
 import "@/styles/organization.css";
 import "@/styles/production.css";
 import "@/styles/invoices.css";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type InvoiceStatus = "DRAFT" | "SENT" | "PAID" | "VOID";
 type Invoice = {
@@ -552,16 +552,10 @@ function CreateInvoice({
           {clientId && range === "custom" && (
             <div className="invoice-dates">
               <Field label="From">
-                <span className="management-input">
-                  <CalendarDays aria-hidden="true" />
-                  <input type="date" value={start} max={today} onChange={(event) => setStart(event.target.value)} />
-                </span>
+                <LooplessDate value={start} onValueChange={setStart} ariaLabel="From" max={today} />
               </Field>
               <Field label="To">
-                <span className="management-input">
-                  <CalendarDays aria-hidden="true" />
-                  <input type="date" value={end} max={today} onChange={(event) => setEnd(event.target.value)} />
-                </span>
+                <LooplessDate value={end} onValueChange={setEnd} ariaLabel="To" max={today} />
               </Field>
             </div>
           )}
@@ -634,10 +628,7 @@ function CreateInvoice({
               <summary>Due date and notes (optional)</summary>
               <div className="invoice-dates">
                 <Field label="Due date">
-                  <span className="management-input">
-                    <CalendarDays aria-hidden="true" />
-                    <input type="date" value={due} onChange={(event) => setDue(event.target.value)} />
-                  </span>
+                  <LooplessDate value={due} onValueChange={setDue} ariaLabel="Due date" />
                 </Field>
               </div>
               <Field label="Notes">

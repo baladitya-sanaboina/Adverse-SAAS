@@ -40,6 +40,7 @@ import { startCall } from "../chat/call-manager";
 import { OrbitLoader } from "../branding/orbit-loader";
 import { openMail } from "../mail/mail-types";
 import "../styles/agenda.css";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type Role = "ADMIN" | "MANAGER" | "EMPLOYEE";
 type Person = { id: string; name: string; role: string; image?: string | null };
@@ -1369,12 +1370,7 @@ function EventEditor({
         <div className="agenda-row">
           <label className="agenda-field">
             <span>Date</span>
-            <input
-              type="date"
-              value={draft.day}
-              aria-label="Date"
-              onChange={(event) => update({ day: event.target.value })}
-            />
+            <LooplessDate value={draft.day} onValueChange={(value) => update({ day: value })} ariaLabel="Date" />
           </label>
           {!draft.allDay && (
             <>
@@ -1621,7 +1617,7 @@ function TodoPanel({
         </div>
         {more && (
           <div className="agenda-todo-when">
-            <input type="date" value={day} aria-label="Due date" onChange={(event) => setDay(event.target.value)} />
+            <LooplessDate value={day} onValueChange={setDay} ariaLabel="Due date" />
             <input
               type="time"
               value={time}

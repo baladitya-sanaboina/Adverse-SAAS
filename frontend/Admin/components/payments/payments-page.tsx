@@ -53,6 +53,7 @@ import type {
 import "@/styles/organization.css";
 import "@/styles/service-pricing-settings.css";
 import "@/styles/production.css";
+import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type Tab = "client-payments" | "budgets" | "salaries" | "payouts";
 type ChoiceItem = { id: string; name: string; status?: string };
@@ -174,10 +175,7 @@ function PaymentFields({
         </span>
       </Field>
       <Field label={dateLabel}>
-        <span className="management-input">
-          <CalendarDays aria-hidden="true" />
-          <input type="date" value={values.date} onChange={(event) => onChange("date", event.target.value)} />
-        </span>
+        <LooplessDate value={values.date} onValueChange={(value) => onChange("date", value)} ariaLabel={dateLabel} />
       </Field>
       <Field label="Method">
         <LooplessSelect
@@ -410,10 +408,7 @@ function PaymentEditor({
         </Field>
         {kind === "salary" && (
           <Field label="For month">
-            <span className="management-input">
-              <CalendarDays aria-hidden="true" />
-              <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
-            </span>
+            <LooplessDate value={month} onValueChange={setMonth} ariaLabel="For month" mode="month" />
           </Field>
         )}
         <PaymentFields
@@ -525,15 +520,12 @@ function SalaryEditor({
           </span>
         </Field>
         <Field label="Starts from">
-          <span className={`management-input${editing ? " readonly" : ""}`}>
-            <CalendarDays aria-hidden="true" />
-            <input
-              type="date"
-              value={values.from}
-              readOnly={editing}
-              onChange={(event) => setValues({ ...values, from: event.target.value })}
-            />
-          </span>
+          <LooplessDate
+            value={values.from}
+            onValueChange={(value) => setValues({ ...values, from: value })}
+            ariaLabel="Starts from"
+            disabled={editing}
+          />
         </Field>
         <Field label="Note" wide>
           <span className="management-input">
