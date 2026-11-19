@@ -125,7 +125,10 @@ export function TodayFocus({ endpoint, scope }: { endpoint: string; scope: "ADMI
           <ul className="today-focus-list">
             {items.map((task) => (
               <li key={task.id}>
-                <Link href={`/tasks?task=${task.id}`} className={task.days_left !== null && task.days_left < 0 ? "late" : undefined}>
+                <Link
+                  href={`/tasks?task=${task.id}`}
+                  className={task.days_left !== null && task.days_left < 0 ? "late" : undefined}
+                >
                   <span className={`production-priority priority-${task.priority.toLowerCase()}`}>
                     {PRIORITY_LABELS[task.priority]}
                   </span>
