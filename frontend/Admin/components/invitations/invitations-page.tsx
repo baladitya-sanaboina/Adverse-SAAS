@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BriefcaseBusiness, CalendarDays, Mail, MailPlus, Phone, RefreshCw, RotateCw, UserRound, X } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  CalendarDays,
+  Mail,
+  MailPlus,
+  Phone,
+  RefreshCw,
+  RotateCw,
+  UserRound,
+  X,
+} from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
