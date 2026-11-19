@@ -9,7 +9,7 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { AlarmClock, CalendarCheck, CalendarRange, ClipboardCheck } from "lucide-react";
+import { AlarmClock, CalendarCheck, CalendarRange, ClipboardCheck, UserPlus } from "lucide-react";
 import { PanelHead } from "../dashboard/role-dashboard-ui";
 import { PRIORITY_LABELS, STATUS_LABELS, api, errorText } from "../production/client";
 import type { TaskPriority, TaskStatus } from "../production/types";
@@ -37,11 +37,14 @@ type Focus = {
   due_today: FocusTask[];
   this_week: FocusTask[];
   to_review: FocusTask[];
+  to_assign?: FocusTask[];
 };
-type Tab = "overdue" | "due_today" | "this_week" | "to_review";
+type Tab = "overdue" | "to_assign" | "due_today" | "this_week" | "to_review";
 
 const TABS: { key: Tab; label: string; icon: typeof AlarmClock; empty: string }[] = [
   { key: "overdue", label: "Overdue", icon: AlarmClock, empty: "Nothing overdue. Well done." },
+  // Admin only: Pending with nobody assigned, e.g. new items from a client's calendar.
+  { key: "to_assign", label: "To assign", icon: UserPlus, empty: "Every task has someone on it." },
   { key: "due_today", label: "Today", icon: CalendarCheck, empty: "Nothing due today." },
   { key: "this_week", label: "This week", icon: CalendarRange, empty: "Nothing due in the next 7 days." },
   { key: "to_review", label: "To review", icon: ClipboardCheck, empty: "Nothing waiting for review." },
@@ -76,11 +79,13 @@ export function TodayFocus({ endpoint, scope }: { endpoint: string; scope: "ADMI
   }, [load]);
   useLiveRefresh(["task."], () => void load());
 
+  const tabs = TABS.filter((item) => item.key !== "to_assign" || scope === "ADMIN");
+  const listOf = (key: Tab): FocusTask[] => (focus ? (focus[key] ?? []) : []);
   // Open on the most pressing list that has something in it.
   const active: Tab =
-    tab ?? (focus ? (TABS.find((item) => focus[item.key].length > 0)?.key ?? "due_today") : "due_today");
-  const items = focus ? focus[active] : [];
-  const meta = TABS.find((item) => item.key === active) ?? TABS[1];
+    tab ?? (focus ? (tabs.find((item) => listOf(item.key).length > 0)?.key ?? "due_today") : "due_today");
+  const items = listOf(active);
+  const meta = tabs.find((item) => item.key === active) ?? tabs.find((item) => item.key === "due_today")!;
 
   return (
     <article className="company-dashboard-panel production-dash-panel today-focus">
@@ -96,8 +101,8 @@ export function TodayFocus({ endpoint, scope }: { endpoint: string; scope: "ADMI
         }
       />
       <div className="today-focus-tabs" role="tablist" aria-label="Today's focus">
-        {TABS.map(({ key, label, icon: Icon }) => {
-          const count = focus ? focus[key].length : 0;
+        {tabs.map(({ key, label, icon: Icon }) => {
+          const count = listOf(key).length;
           return (
             <button
               key={key}

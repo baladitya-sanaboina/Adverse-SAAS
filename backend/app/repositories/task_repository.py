@@ -436,7 +436,8 @@ class TaskRepository:
         clauses = [
             "t.company_id = %(company)s",
             "t.status NOT IN ('APPROVED','COMPLETED','CANCELLED')",
-            "(t.due_date <= %(until)s OR t.status IN ('SUBMITTED','REVIEW'))",
+            "(t.due_date <= %(until)s OR t.status IN ('SUBMITTED','REVIEW') "
+            "OR (t.status = 'PENDING' AND t.assignee_user_id IS NULL))",
         ]
         params: dict[str, Any] = {"company": company_id, "until": until, "user": user_id}
         if user_id is not None:

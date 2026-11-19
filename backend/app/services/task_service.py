@@ -944,7 +944,7 @@ class TaskService:
         today = self._today(company_id)
         rows = self.repository.focus(company_id, user_id, today + timedelta(days=7))
         result = TaskFocusResponse(
-            today=today, overdue=[], due_today=[], this_week=[], to_review=[]
+            today=today, overdue=[], due_today=[], this_week=[], to_review=[], to_assign=[]
         )
         for row in rows:
             role = None
@@ -964,6 +964,9 @@ class TaskService:
                 monitor_name=row.monitor_name,
                 my_role=role,
             )
+            if admin and row.status == "PENDING" and row.assignee_user_id is None:
+                result.to_assign.append(item)  # waiting for the admin to pick someone
+                continue
             if row.status in ("SUBMITTED", "REVIEW"):
                 if admin or row.monitor_user_id == viewer:
                     result.to_review.append(item)

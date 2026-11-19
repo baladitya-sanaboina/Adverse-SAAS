@@ -942,3 +942,4 @@ class TaskFocusResponse(BaseModel):
     due_today: list[FocusTask]
     this_week: list[FocusTask]
     to_review: list[FocusTask]
+    to_assign: list[FocusTask] = []  # admin only: Pending and nobody assigned

@@ -179,7 +179,51 @@ class CalendarService:
             return None
         if task_id is not None:
             self.repository.set_task(company_id, entry_id, task_id)
+        self._tell_admins(company_id, row, task_id, actor_id)
         return task_id
+
+    @staticmethod
+    def _tell_admins(
+        company_id: UUID, row: CalendarEntryRow, task_id: UUID | None, actor_id: UUID
+    ) -> None:
+        """A new calendar item is work to assign (owner request 2026-11-19): every admin gets a
+        bell and an internal mail with a link to the task (or a note when no task could be made
+        because the client has no rate yet). Never raises."""
+        try:
+            from app.repositories.chat_repository import ChatRepository
+            from app.services.mail_service import mail_service
+
+            admins = [user for user in ChatRepository().admin_ids(company_id) if user != actor_id]
+            if not admins:
+                return
+            when = row.entry_date.strftime("%a %d %b")
+            if task_id is not None:
+                subject = f"New task from {row.client_name}: {row.title}"
+                body = (
+                    f'{row.client_name} added "{row.title}" to their content calendar for {when}.\n\n'
+                    "It is in Tasks as Pending and not assigned yet. Open it to assign someone."
+                )
+                link = f"/tasks?task={task_id}"
+            else:
+                subject = f"Calendar item needs a task: {row.title}"
+                body = (
+                    f'{row.client_name} added "{row.title}" to their content calendar for {when}, '
+                    "but no task could be made: this client has no service rate yet.\n\n"
+                    "Set the client's rate, or create the task by hand."
+                )
+                link = "/tasks?mode=create"
+            mail_service.system(
+                company_id,
+                admins,
+                subject,
+                body,
+                link=link,
+                kind="TASK",
+                once_key=f"calendar-task:{row.id}",
+                notify=True,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("Could not tell the admins about a calendar item", exc_info=True)
 
     def _follow(self, company_id: UUID, before: CalendarEntryRow, actor_id: UUID) -> None:
         """After an edit: keep the ticket in step, cancel it for a no-post day, or open one."""

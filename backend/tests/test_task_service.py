@@ -378,3 +378,23 @@ class TodayPanelTest(unittest.TestCase):
         self.assertEqual(manager.to_review[0].my_role, "MONITOR")
         employee = service.focus_worker(context("COMPANY_EMPLOYEE", EMPLOYEE))
         self.assertEqual(employee.to_review, [])  # handed in: waiting on the reviewer
+
+
+class ToAssignTest(unittest.TestCase):
+    """Client calendar items arrive as Pending with nobody assigned (owner request 2026-11-19)."""
+
+    @patch("app.services.task_service.validate_user_action_access", return_value=True)
+    def test_unassigned_pending_goes_to_the_admin_to_assign_list(self, _: Any) -> None:
+        repo = FakeTaskRepository()
+        service = TaskService(repo, FakeFinanceRepository())  # type: ignore[arg-type]
+        today = service._today(COMPANY)
+        rows = [
+            task_row(number=7, status="PENDING", assignee_user_id=None, due_date=today),
+            task_row(number=8, status="PENDING", assignee_user_id=None, due_date=None),
+        ]
+        repo.focus = lambda company_id, user_id, until: rows  # type: ignore[attr-defined]
+        admin = service.focus_admin(context("COMPANY_ADMIN", ADMIN))
+        self.assertEqual([t.code for t in admin.to_assign], ["TSK-0007", "TSK-0008"])
+        self.assertEqual(admin.due_today, [])  # shown once, under To assign
+        worker = service.focus_worker(context("COMPANY_MANAGER", MANAGER))
+        self.assertEqual(worker.to_assign, [])
