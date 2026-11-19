@@ -204,6 +204,8 @@ class ClientRepository:
         try:
             with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
                 self._ensure_unique_email(cursor, company_id, email)
+                if not normalized.get("code"):
+                    normalized["code"] = self._next_code(cursor, company_id)
                 client_id = uuid4()
                 columns = ["id", "company_id", *normalized]
                 params = [client_id, company_id, *normalized.values()]
@@ -222,6 +224,28 @@ class ClientRepository:
                 return record
         except UniqueViolation as error:
             raise ClientConflict(self._conflict_field(error)) from error
+
+    @staticmethod
+    def _next_code(cursor: Any, company_id: UUID) -> str:
+        """The next automatic client code in this company: CLT-0001, CLT-0002, ... A lock per
+        company keeps two clients added at the same moment from getting the same code."""
+        cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"client-code:{company_id}",))
+        cursor.execute(
+            "SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM '^CLT-([0-9]+)$') AS INTEGER)), 0) "
+            "FROM clients WHERE company_id = %s AND code ~ '^CLT-[0-9]+$'",
+            (company_id,),
+        )
+        row = cursor.fetchone()
+        number = int(row[0] if row else 0) + 1
+        while True:
+            code = f"CLT-{number:04d}"
+            cursor.execute(
+                "SELECT 1 FROM clients WHERE company_id = %s AND UPPER(code) = %s",
+                (company_id, code),
+            )
+            if cursor.fetchone() is None:
+                return code
+            number += 1
 
     def update(
         self,

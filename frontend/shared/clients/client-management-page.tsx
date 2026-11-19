@@ -509,6 +509,8 @@ export function ClientManagementPage({
   function validateField(key: keyof Form, value: string) {
     if (key === "name" && value.trim().length < 2) return "Enter at least 2 characters.";
     if (key === "name" && value.trim().length > 160) return "Use no more than 160 characters.";
+    // New clients get their code automatically (CLT-0001, ...; owner request 2026-11-19).
+    if (key === "code" && mode === "create") return "";
     if (key === "code" && !/^[A-Za-z0-9-]{2,30}$/.test(value.trim())) return "Use 2–30 letters, numbers or hyphens.";
     if (key === "email" && mode === "create" && !value.trim()) return "Business email is required.";
     if (key === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid email address.";
@@ -543,7 +545,7 @@ export function ClientManagementPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: form.name.trim(),
-          code: form.code.trim(),
+          ...(editing ? { code: form.code.trim() } : {}),
           email: form.email.trim() || null,
           phone: form.phone.trim() || null,
           website: form.website.trim() || null,
@@ -577,7 +579,9 @@ export function ClientManagementPage({
         }
         throw new Error(messageFrom(data, "Unable to save client."));
       }
-      let nextNotice = `Client ${editing ? "updated" : "created"} successfully.`;
+      let nextNotice = editing
+        ? "Client updated successfully."
+        : `Client created successfully. Client code: ${typeof data.code === "string" ? data.code : "set automatically"}.`;
       if (!editing && form.portal_login_email.trim()) {
         try {
           const inviteResponse = await fetch("/api/company/invitations", {
@@ -596,7 +600,7 @@ export function ClientManagementPage({
           if (!inviteResponse.ok) {
             throw new Error(messageFrom(inviteData, "Unable to send the client activation email."));
           }
-          nextNotice = `Client created successfully. Activation email sent to ${form.email.trim()} for login ${form.portal_login_email.trim()}.`;
+          nextNotice = `Client created successfully (code ${typeof data.code === "string" ? data.code : "set automatically"}). Activation email sent to ${form.email.trim()} for login ${form.portal_login_email.trim()}.`;
         } catch (inviteReason) {
           nextNotice =
             inviteReason instanceof Error
@@ -907,7 +911,7 @@ export function ClientManagementPage({
 
   const fields: Array<{ key: keyof Form; label: string; icon: typeof Building2; wide?: boolean }> = [
     { key: "name", label: "Client name", icon: Building2 },
-    { key: "code", label: "Client code", icon: Hash },
+    ...(mode === "edit" ? ([{ key: "code", label: "Client code", icon: Hash }] as const) : []),
     { key: "email", label: "Business email", icon: Mail },
     ...(mode === "create" ? ([{ key: "portal_login_email", label: "Internal login email", icon: Mail }] as const) : []),
     { key: "phone", label: "Mobile number", icon: Phone },

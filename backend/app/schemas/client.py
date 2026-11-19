@@ -30,7 +30,8 @@ ClientActivityType = Literal[
 
 class ClientCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
-    code: str = Field(min_length=2, max_length=30, pattern=r"^[A-Za-z0-9-]+$")
+    # Left out: made automatically, CLT-0001, CLT-0002, ... per company (owner request 2026-11-19).
+    code: str | None = Field(default=None, min_length=2, max_length=30, pattern=r"^[A-Za-z0-9-]+$")
     email: EmailStr | None = None
     phone: str | None = Field(default=None, pattern=r"^\+?[0-9 ()-]{7,24}$")
     website: HttpUrl | None = None
@@ -48,10 +49,17 @@ class ClientCreate(BaseModel):
             raise ValueError("Client name cannot be blank.")
         return normalized
 
+    @field_validator("code", mode="before")
+    @classmethod
+    def blank_code_is_automatic(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
     @field_validator("code")
     @classmethod
-    def normalize_code(cls, value: str) -> str:
-        return value.strip().upper()
+    def normalize_code(cls, value: str | None) -> str | None:
+        return value.strip().upper() if value is not None else None
 
     @field_validator("email")
     @classmethod
