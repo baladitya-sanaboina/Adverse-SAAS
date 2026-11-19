@@ -18,6 +18,7 @@
 /* Sheet tabs, oldest first, as the app's filter chips. */
 .sheet-tabs {
   display: flex;
+  align-items: center;
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 2px;
@@ -26,10 +27,10 @@
 .sheet-tabs button {
   flex: 0 0 auto;
   min-height: 38px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 14px;
+  display: inline-grid;
+  justify-items: start;
+  gap: 3px;
+  padding: 8px 14px;
   border: 1px solid var(--border);
   border-radius: 9px;
   color: var(--foreground);
@@ -37,6 +38,7 @@
   font-family: inherit;
   font-size: 0.64rem;
   font-weight: 700;
+  text-align: left;
   white-space: nowrap;
   cursor: pointer;
   transition:
@@ -45,10 +47,38 @@
     color 160ms ease;
 }
 
-.sheet-tabs button small {
+.sheet-tab-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet-tabs button small,
+.sheet-tab-flow {
   color: var(--muted);
   font-size: 0.58rem;
   font-weight: 500;
+}
+
+.sheet-tab-left {
+  color: var(--foreground);
+  font-size: 0.58rem;
+  font-weight: 650;
+}
+
+.sheet-tab-left.minus {
+  color: #b74858;
+}
+
+.dark .sheet-tab-left.minus {
+  color: #f0a6af;
+}
+
+.sheet-tab-arrow {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--muted);
 }
 
 .sheet-tabs button:hover {

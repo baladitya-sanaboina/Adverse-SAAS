@@ -38,14 +38,49 @@
 
 .organization-table.sheets-owner-table :is(.organization-table-head, button) {
   display: grid;
-  grid-template-columns: minmax(160px, 1.3fr) minmax(130px, 1fr) 130px 120px minmax(110px, 0.8fr) 130px;
+  grid-template-columns: minmax(170px, 1.4fr) minmax(130px, 1fr) 140px minmax(110px, 0.8fr) 130px 18px;
   align-items: center;
   gap: 22px;
   padding: 0 16px;
 }
 
-.organization-table.sheets-owner-table .organization-table-head > span:last-child {
+.organization-table.sheets-owner-table .organization-table-head > span:nth-child(5) {
   text-align: left;
+}
+
+.sheets-owner-table .production-cell.production-money {
+  justify-items: end;
+}
+
+.sheets-owner-table .production-cell.production-money strong.sheets-minus {
+  color: #b74858;
+}
+
+.dark .sheets-owner-table .production-cell.production-money strong.sheets-minus {
+  color: #f0a6af;
+}
+
+.sheets-row-open {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  transition:
+    transform 160ms ease,
+    color 160ms ease;
+}
+
+.organization-table.sheets-owner-table button:hover .sheets-row-open {
+  color: #0876ed;
+  transform: translateX(2px);
+}
+
+.sheets-no-match {
+  margin: 0;
+  padding: 22px 16px;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-align: center;
 }
 
 .organization-table.sheets-owner-table button {
@@ -68,11 +103,6 @@
 
 .organization-table.sheets-owner-table button:hover {
   background: color-mix(in srgb, var(--surface-muted) 64%, transparent);
-}
-
-.organization-table.sheets-owner-table button.active {
-  background: color-mix(in srgb, #0876ed 7%, var(--surface));
-  box-shadow: inset 3px 0 0 #0876ed;
 }
 
 .sheets-owner-table .production-money {
@@ -181,6 +211,33 @@
 .sheets-owner-detail .management-toolbar a {
   text-decoration: none;
   white-space: nowrap;
+}
+
+/* Detail view (owner request 2026-11-19): back button, the person's name, then their sheets. */
+.sheets-owner-detail .management-toolbar .sheets-detail-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.sheets-detail-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  color: var(--foreground);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+@media (max-width: 640px) {
+  .sheets-owner-detail .management-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .organization-tools.sheets-tools {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 900px) {

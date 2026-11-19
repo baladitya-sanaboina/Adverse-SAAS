@@ -7,7 +7,8 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Contact, Plus, UsersRound, Wallet } from "lucide-react";
+import { ArrowLeft, ChevronRight, Contact, Plus, Search, UsersRound, Wallet } from "lucide-react";
+import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { api, errorText, formatDate, money } from "@/lib/production/client";
 import { PaymentSheets } from "@loopless-shared/production/payment-sheets";
@@ -21,12 +22,32 @@ import { OrbitLoader } from "@loopless-shared/branding/orbit-loader";
 
 type Tab = "MANAGER" | "CLIENT";
 
+/** Reads ?tab=clients&owner=<id> so a link (or the browser Back button) opens the right view. */
+function fromUrl(): { tab: Tab; owner: string | null } {
+  const params = new URLSearchParams(window.location.search);
+  return { tab: params.get("tab") === "clients" ? "CLIENT" : "MANAGER", owner: params.get("owner") };
+}
+
+function toUrl(tab: Tab, owner: string | null) {
+  const params = new URLSearchParams();
+  if (tab === "CLIENT") params.set("tab", "clients");
+  if (owner) params.set("owner", owner);
+  const query = params.toString();
+  window.history.pushState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+}
+
+/*
+ * Owner request 2026-11-19: first a clean list of people; clicking one opens only that person's
+ * sheets. Each later sheet starts with what was left on the one before.
+ */
 export function PaymentSheetsPage() {
   const [data, setData] = useState<SheetsOverview | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [tab, setTab] = useState<Tab>("MANAGER");
   const [selected, setSelected] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [show, setShow] = useState("");
 
   const load = useCallback(async () => {
     setError("");
@@ -38,60 +59,85 @@ export function PaymentSheetsPage() {
   }, []);
 
   useEffect(() => {
+    const sync = () => {
+      const state = fromUrl();
+      setTab(state.tab);
+      setSelected(state.owner);
+    };
     const timer = window.setTimeout(() => {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("tab") === "clients") setTab("CLIENT");
-      const owner = params.get("owner");
-      if (owner) setSelected(owner);
+      sync();
       void load();
     }, 0);
-    return () => window.clearTimeout(timer);
+    window.addEventListener("popstate", sync);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("popstate", sync);
+    };
   }, [load]);
 
   useLiveRefresh(["task.", "payout.", "budget.", "payment."], () => void load());
 
   const owners = useMemo(() => (data ? (tab === "MANAGER" ? data.managers : data.clients) : []), [data, tab]);
-  const current = owners.find((owner) => owner.id === selected) ?? owners[0] ?? null;
+  const current = selected ? (owners.find((owner) => owner.id === selected) ?? null) : null;
+  const shown = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return owners.filter((owner) => {
+      if (show === "attention" && owner.status === "OK") return false;
+      if (show === "ok" && owner.status !== "OK") return false;
+      return !term || `${owner.name} ${owner.code}`.toLowerCase().includes(term);
+    });
+  }, [owners, search, show]);
   const alerts = (list: SheetOwner[]) => list.filter((owner) => owner.status !== "OK").length;
   const currency = data?.currency ?? "INR";
+  const people = tab === "MANAGER" ? "managers" : "clients";
+
+  const open = (owner: string | null) => {
+    setSelected(owner);
+    setNotice("");
+    toUrl(tab, owner);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <>
       <DashboardHero
         title=""
         highlight="Payment Sheets"
-        description="Every payment opens a new sheet: a top-up you send a manager, or a payment a client sends you. See who has money left and who needs a top-up."
+        description="Every payment opens a new sheet. Whatever is left on a sheet moves into the next one, so each sheet starts with the old balance plus the new payment."
         compact
       />
       <div className="dash-content">
         <section className="organization-workspace production-workspace" aria-live="polite">
-          <nav className="production-tabs" aria-label="Payment sheet sections">
-            {(
-              [
-                { id: "MANAGER", label: "Managers", icon: <UsersRound />, list: data?.managers ?? [] },
-                { id: "CLIENT", label: "Clients", icon: <Contact />, list: data?.clients ?? [] },
-              ] as const
-            ).map((item) => (
-              <button
-                type="button"
-                key={item.id}
-                className={tab === item.id ? "active" : ""}
-                aria-pressed={tab === item.id}
-                onClick={() => {
-                  setTab(item.id);
-                  setSelected(null);
-                }}
-              >
-                {item.icon}
-                {item.label}
-                {alerts(item.list) > 0 && (
-                  <em className="sheets-tab-alert">
-                    {alerts(item.list)} {alerts(item.list) === 1 ? "needs" : "need"} attention
-                  </em>
-                )}
-              </button>
-            ))}
-          </nav>
+          {!current && (
+            <nav className="production-tabs" aria-label="Payment sheet sections">
+              {(
+                [
+                  { id: "MANAGER", label: "Managers", icon: <UsersRound />, list: data?.managers ?? [] },
+                  { id: "CLIENT", label: "Clients", icon: <Contact />, list: data?.clients ?? [] },
+                ] as const
+              ).map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  className={tab === item.id ? "active" : ""}
+                  aria-pressed={tab === item.id}
+                  onClick={() => {
+                    setTab(item.id);
+                    setSelected(null);
+                    toUrl(item.id, null);
+                  }}
+                >
+                  {item.icon}
+                  {item.label}
+                  {alerts(item.list) > 0 && (
+                    <em className="sheets-tab-alert">
+                      {alerts(item.list)} {alerts(item.list) === 1 ? "needs" : "need"} attention
+                    </em>
+                  )}
+                </button>
+              ))}
+            </nav>
+          )}
 
           {notice && (
             <p className="sheets-notice" role="status">
@@ -112,6 +158,60 @@ export function PaymentSheetsPage() {
             <div className="sheets-page-state">
               <OrbitLoader size={56} label="Loading payment sheets" />
             </div>
+          ) : current ? (
+            <section className="sheets-owner-detail" aria-label={`${current.name} sheets`}>
+              <header className="management-toolbar">
+                <button type="button" className="management-back" onClick={() => open(null)}>
+                  <ArrowLeft /> Back to {people}
+                </button>
+                <div className="sheets-detail-title">
+                  <span>
+                    {current.kind === "MANAGER" ? "Manager" : "Client"} · {current.code} · {current.sheets.length}{" "}
+                    {current.sheets.length === 1 ? "sheet" : "sheets"}
+                  </span>
+                  <strong>{current.name}</strong>
+                </div>
+                <Link
+                  href={current.kind === "CLIENT" ? `/clients/${current.id}` : "/payments"}
+                  className="management-primary-action"
+                >
+                  {current.kind === "CLIENT" ? (
+                    "Open client"
+                  ) : (
+                    <>
+                      <Plus /> Send a top-up
+                    </>
+                  )}
+                </Link>
+              </header>
+              <p className="sheets-detail-line">
+                <em className={`sheets-status ${current.status.toLowerCase()}`}>{STATUS_TEXT[current.status]}</em>
+                {ownerLine(current, money, currency)}
+                {current.ran_out_on ? ` · ran out ${formatDate(current.ran_out_on)}` : ""}
+              </p>
+              <PaymentSheets
+                key={current.id}
+                sheets={current.sheets}
+                currency={currency}
+                money={money}
+                date={formatDate}
+                itemWord={current.kind === "MANAGER" ? "task" : "video"}
+                empty="No sheets yet."
+                sheetAction={(sheet) => (
+                  <>
+                    {current.kind === "CLIENT" && (
+                      <SheetInvoiceButton sheet={sheet} clientId={current.id} onError={setNotice} />
+                    )}
+                    <SheetEmailButton
+                      sheet={sheet}
+                      kind={current.kind}
+                      ownerId={current.id}
+                      onDone={(message) => setNotice(message)}
+                    />
+                  </>
+                )}
+              />
+            </section>
           ) : owners.length === 0 ? (
             <div className="sheets-page-state">
               <Wallet />
@@ -121,6 +221,27 @@ export function PaymentSheetsPage() {
             </div>
           ) : (
             <>
+              <div className="organization-tools sheets-tools">
+                <label>
+                  <Search />
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={`Search ${people} by name or code`}
+                    aria-label={`Search ${people}`}
+                  />
+                </label>
+                <LooplessSelect
+                  value={show}
+                  onValueChange={setShow}
+                  ariaLabel={`Filter ${people}`}
+                  options={[
+                    { value: "", label: `All ${people}` },
+                    { value: "attention", label: "Needs attention" },
+                    { value: "ok", label: "OK" },
+                  ]}
+                />
+              </div>
               <div
                 className="organization-table sheets-owner-table"
                 role="table"
@@ -129,12 +250,13 @@ export function PaymentSheetsPage() {
                 <div className="organization-table-head" role="row">
                   <span>{tab === "MANAGER" ? "Manager" : "Client"}</span>
                   <span>Current sheet</span>
-                  <span className="production-money">Paid in + carried</span>
-                  <span className="production-money">Left</span>
+                  <span className="production-money">Money left</span>
                   <span>Used</span>
                   <span>Status</span>
+                  <span aria-hidden="true" />
                 </div>
-                {owners.map((owner) => {
+                {shown.length === 0 && <p className="sheets-no-match">No {people} match this search.</p>}
+                {shown.map((owner) => {
                   const latest = owner.sheets[owner.sheets.length - 1];
                   const left = Number(owner.left);
                   return (
@@ -142,23 +264,27 @@ export function PaymentSheetsPage() {
                       type="button"
                       role="row"
                       key={owner.id}
-                      className={current?.id === owner.id ? "active" : undefined}
-                      aria-selected={current?.id === owner.id}
-                      onClick={() => setSelected(owner.id)}
+                      onClick={() => open(owner.id)}
+                      aria-label={`Open ${owner.name} sheets`}
                     >
                       <div className="production-cell">
                         <strong>{owner.name}</strong>
                         <small>{owner.code}</small>
                       </div>
                       <div className="production-cell">
-                        <strong>Sheet {latest?.index ?? 1}</strong>
+                        <strong>
+                          Sheet {latest?.index ?? 1}
+                          {owner.sheets.length > 1 ? ` of ${owner.sheets.length}` : ""}
+                        </strong>
                         <small>{latest ? `Since ${formatDate(latest.start)}` : "No sheet yet"}</small>
                       </div>
-                      <span className="production-money">{money(owner.pot, currency)}</span>
-                      <span className={`production-money${left < 0 ? " sheets-minus" : ""}`}>
-                        {left < 0 ? "−" : ""}
-                        {money(Math.abs(left), currency)}
-                      </span>
+                      <div className="production-cell production-money">
+                        <strong className={left < 0 ? "sheets-minus" : undefined}>
+                          {left < 0 ? "−" : ""}
+                          {money(Math.abs(left), currency)}
+                        </strong>
+                        <small>of {money(owner.pot, currency)}</small>
+                      </div>
                       <span className="sheets-used">
                         <i aria-hidden="true">
                           <b
@@ -171,60 +297,11 @@ export function PaymentSheetsPage() {
                       <span>
                         <em className={`sheets-status ${owner.status.toLowerCase()}`}>{STATUS_TEXT[owner.status]}</em>
                       </span>
+                      <ChevronRight className="sheets-row-open" aria-hidden="true" />
                     </button>
                   );
                 })}
               </div>
-
-              {current && (
-                <section className="sheets-owner-detail" aria-label={`${current.name} sheets`}>
-                  <header className="management-toolbar">
-                    <div>
-                      <span>
-                        {current.kind === "MANAGER" ? "Manager" : "Client"} · {current.name}
-                      </span>
-                      <strong>
-                        {ownerLine(current, money, currency)}
-                        {current.ran_out_on ? ` · ran out ${formatDate(current.ran_out_on)}` : ""}
-                      </strong>
-                    </div>
-                    <Link
-                      href={current.kind === "CLIENT" ? `/clients/${current.id}` : "/payments"}
-                      className="management-primary-action"
-                    >
-                      {current.kind === "CLIENT" ? (
-                        "Open client"
-                      ) : (
-                        <>
-                          <Plus /> Send a top-up
-                        </>
-                      )}
-                    </Link>
-                  </header>
-                  <PaymentSheets
-                    key={current.id}
-                    sheets={current.sheets}
-                    currency={currency}
-                    money={money}
-                    date={formatDate}
-                    itemWord={current.kind === "MANAGER" ? "task" : "video"}
-                    empty="No sheets yet."
-                    sheetAction={(sheet) => (
-                      <>
-                        {current.kind === "CLIENT" && (
-                          <SheetInvoiceButton sheet={sheet} clientId={current.id} onError={setNotice} />
-                        )}
-                        <SheetEmailButton
-                          sheet={sheet}
-                          kind={current.kind}
-                          ownerId={current.id}
-                          onDone={(message) => setNotice(message)}
-                        />
-                      </>
-                    )}
-                  />
-                </section>
-              )}
             </>
           )}
         </section>

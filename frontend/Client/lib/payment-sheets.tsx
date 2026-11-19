@@ -6,13 +6,14 @@
  * received from a client) opens a new sheet; the previous sheet closes the day before and
  * whatever was left, plus or minus, is carried into the new one. Old sheets stay with their dates.
  * Shown like a statement: sheet tabs, a summary, then Date | Details | Paid in | Used | Balance.
+ * Each tab shows carried + paid and what moved on to the next sheet (owner request 2026-11-19).
  * Styled like the rest of the app (owner request 2026-11-15): chip tabs, a summary bar like
  * Payments, and the app's table.
  * Used on Manager earnings and sheets, the Admin's manager view and sheets page, Admin client
  * details and Client billing.
  */
-import { useMemo, useState, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { ArrowRight, X } from "lucide-react";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import "@/styles/payment-sheets.css";
 
@@ -79,21 +80,38 @@ export function PaymentSheets({
     <div className="sheet-book">
       {sheets.length > 1 && (
         <div className="sheet-tabs" role="tablist" aria-label="Payment sheets">
-          {sheets.map((item) => (
-            <button
-              key={item.index}
-              type="button"
-              role="tab"
-              aria-selected={item.index === sheet.index}
-              className={item.index === sheet.index ? "active" : undefined}
-              onClick={() => setChosen(item.index)}
-            >
-              Sheet {item.index}
-              <small>
-                {date(item.start)} – {item.end ? date(item.end) : "now"}
-              </small>
-            </button>
-          ))}
+          {sheets.map((item, position) => {
+            // Each tab shows how the money moves: what came in and what went on to the next sheet.
+            const carried = Number(item.carried_in);
+            const left = Number(item.left);
+            const signed = (value: number) => `${value < 0 ? "−" : ""}${money(Math.abs(value), currency)}`;
+            return (
+              <Fragment key={item.index}>
+                {position > 0 && <ArrowRight className="sheet-tab-arrow" aria-hidden="true" />}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={item.index === sheet.index}
+                  className={item.index === sheet.index ? "active" : undefined}
+                  onClick={() => setChosen(item.index)}
+                >
+                  <span className="sheet-tab-title">
+                    Sheet {item.index}
+                    <small>
+                      {date(item.start)} – {item.end ? date(item.end) : "now"}
+                    </small>
+                  </span>
+                  <span className="sheet-tab-flow">
+                    {carried !== 0 && `${signed(carried)} carried + `}
+                    {money(item.paid, currency)} paid
+                  </span>
+                  <span className={`sheet-tab-left${left < 0 ? " minus" : ""}`}>
+                    {item.end ? `${signed(left)} moved to sheet ${item.index + 1}` : `${signed(left)} left now`}
+                  </span>
+                </button>
+              </Fragment>
+            );
+          })}
         </div>
       )}
       <SheetPage
