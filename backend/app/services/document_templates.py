@@ -284,6 +284,75 @@ EMPLOYEE_KINDS = ["EMPLOYEE_WELCOME", "EMPLOYEE_OFFER", "EMPLOYEE_JOINING", "EMP
 _TOKEN = re.compile(r"\{\{\s*([a-z_]+)\s*\}\}")
 
 
+_EMPTY_CONTACT = (
+    (re.compile(r"\s+or call\s*([.,])"), r"\1"),  # "... or call ." when no phone is on file
+    (re.compile(r"reply to\s+or call\s+"), "call "),  # no email on file
+    (re.compile(r"[ \t]+([.,])"), r"\1"),
+)
+
+
 def render(text: str, values: dict[str, str]) -> str:
-    """Fill {{placeholders}}; unknown ones become empty."""
-    return _TOKEN.sub(lambda match: values.get(match.group(1), ""), text)
+    """Fill {{placeholders}}; unknown ones become empty, and a contact phrase left with nothing
+    in it ("or call .") is tidied away."""
+    filled = _TOKEN.sub(lambda match: values.get(match.group(1), ""), text)
+    for pattern, replacement in _EMPTY_CONTACT:
+        filled = pattern.sub(replacement, filled)
+    return filled
+
+
+_LIST_ITEM = re.compile(r"^(\d+[.)]|[-•*])\s+(.*)$")
+_SECTION = re.compile(r"^\d+[.)]\s+\S.{0,58}$")
+
+
+def blocks(body: str) -> list[tuple[str, list[str]]]:
+    """A document body as layout blocks (owner request 2026-11-19: documents must read like
+    proper letters). Kinds: "heading" (a numbered section title such as "1. Services"),
+    "paragraph" (wrapped lines joined), "list" (numbered or bulleted items) and "lines" (short
+    lines kept as they are, e.g. a sign-off). A first all-capitals line repeats the document title
+    and is left out. The web page uses the same rules (onboarding-page.tsx documentBlocks)."""
+    out: list[tuple[str, list[str]]] = []
+    chunks = [chunk for chunk in re.split(r"\n\s*\n", body.strip()) if chunk.strip()]
+    for position, chunk in enumerate(chunks):
+        lines = [line.strip() for line in chunk.splitlines() if line.strip()]
+        if (
+            position == 0
+            and len(lines) == 1
+            and lines[0].upper() == lines[0]
+            and len(lines[0]) <= 60
+        ):
+            continue
+        if len(lines) > 1 and _SECTION.match(lines[0]) and not _LIST_ITEM.match(lines[1]):
+            out.append(("heading", [lines[0]]))
+            lines = lines[1:]
+        paragraph: list[str] = []
+        items: list[str] = []
+
+        def flush_paragraph() -> None:
+            if paragraph:
+                out.append(("paragraph", [" ".join(paragraph)]))
+                paragraph.clear()
+
+        def flush_items() -> None:
+            if items:
+                out.append(("list", list(items)))
+                items.clear()
+
+        if (
+            len(lines) >= 2
+            and all(len(line) <= 45 for line in lines)
+            and not any(_LIST_ITEM.match(line) for line in lines)
+        ):
+            out.append(("lines", lines))
+            continue
+        for line in lines:
+            match = _LIST_ITEM.match(line)
+            if match:
+                flush_paragraph()
+                items.append(match.group(2))
+            elif items:
+                items[-1] = f"{items[-1]} {line}"
+            else:
+                paragraph.append(line)
+        flush_paragraph()
+        flush_items()
+    return out

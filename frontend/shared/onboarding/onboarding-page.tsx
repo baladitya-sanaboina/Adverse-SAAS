@@ -15,6 +15,8 @@ type Field = { key: string; label: string; required: boolean; multiline: boolean
 type Doc = { kind: string; label: string; signable: boolean; title: string; body: string };
 type Packet = {
   company_name: string;
+  company_email?: string;
+  company_phone?: string;
   audience: "CLIENT" | "EMPLOYEE";
   recipient_name: string;
   status: "SENT" | "OPENED" | "COMPLETED" | "CANCELLED" | "EXPIRED";
@@ -26,6 +28,118 @@ type Packet = {
   signed_name: string | null;
   signed_at: string | null;
 };
+
+type Block = { kind: "heading" | "paragraph" | "list" | "lines"; parts: string[] };
+
+const LIST_ITEM = /^(\d+[.)]|[-•*])\s+(.*)$/;
+const SECTION = /^\d+[.)]\s+\S.{0,58}$/;
+
+/**
+ * A document body as layout blocks (owner request 2026-11-19: documents must read like proper
+ * letters). Same rules as document_templates.blocks in the backend, which lays out the PDF.
+ */
+function documentBlocks(body: string): Block[] {
+  const out: Block[] = [];
+  const chunks = body
+    .trim()
+    .split(/\n\s*\n/)
+    .filter((chunk) => chunk.trim());
+  chunks.forEach((chunk, position) => {
+    let lines = chunk
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (position === 0 && lines.length === 1 && lines[0] === lines[0].toUpperCase() && lines[0].length <= 60) return;
+    if (lines.length > 1 && SECTION.test(lines[0]) && !LIST_ITEM.test(lines[1])) {
+      out.push({ kind: "heading", parts: [lines[0]] });
+      lines = lines.slice(1);
+    }
+    if (lines.length >= 2 && lines.every((line) => line.length <= 45) && !lines.some((line) => LIST_ITEM.test(line))) {
+      out.push({ kind: "lines", parts: lines });
+      return;
+    }
+    let paragraph: string[] = [];
+    let items: string[] = [];
+    const flushParagraph = () => {
+      if (paragraph.length) out.push({ kind: "paragraph", parts: [paragraph.join(" ")] });
+      paragraph = [];
+    };
+    const flushItems = () => {
+      if (items.length) out.push({ kind: "list", parts: items });
+      items = [];
+    };
+    for (const line of lines) {
+      const match = LIST_ITEM.exec(line);
+      if (match) {
+        flushParagraph();
+        items.push(match[2]);
+      } else if (items.length) {
+        items[items.length - 1] = `${items[items.length - 1]} ${line}`;
+      } else {
+        paragraph.push(line);
+      }
+    }
+    flushParagraph();
+    flushItems();
+  });
+  return out;
+}
+
+/** One document drawn like paper: letterhead, title, sections, and a signature block. */
+function DocumentPaper({ doc, packet }: { doc: Doc; packet: Packet }) {
+  const party = packet.audience === "CLIENT" ? "Client" : "Employee";
+  return (
+    <article className="onb-paper">
+      <header className="onb-letterhead">
+        {/* A plain image: this public page is also printed, and the logo is a small static file. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logos/adverse-logo-blue.png" alt="Adverse" width={132} height={35} />
+        <div>
+          <strong>{packet.company_name}</strong>
+          {packet.company_email && <span>{packet.company_email}</span>}
+          {packet.company_phone && <span>{packet.company_phone}</span>}
+        </div>
+      </header>
+      <h3>{doc.title}</h3>
+      <p className="onb-paper-meta">
+        {doc.label} · Prepared for {packet.recipient_name}
+      </p>
+      {documentBlocks(doc.body).map((block, index) =>
+        block.kind === "heading" ? (
+          <h4 key={index}>{block.parts[0]}</h4>
+        ) : block.kind === "list" ? (
+          <ol key={index}>
+            {block.parts.map((item, itemIndex) => (
+              <li key={itemIndex}>{item}</li>
+            ))}
+          </ol>
+        ) : block.kind === "lines" ? (
+          <p key={index} className="onb-paper-lines">
+            {block.parts.join("\n")}
+          </p>
+        ) : (
+          <p key={index}>{block.parts[0]}</p>
+        ),
+      )}
+      {doc.signable && (
+        <div className="onb-sign">
+          <div>
+            <small>For {packet.company_name}</small>
+            <strong>{packet.company_name}</strong>
+            <span>Authorised signatory</span>
+          </div>
+          <div>
+            <small>{party}</small>
+            <strong>{packet.signed_name || packet.recipient_name}</strong>
+            <span>
+              {packet.signed_at ? `Accepted online on ${when(packet.signed_at)}` : "Accept below to sign online"}
+            </span>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
 
 function when(value: string): string {
   const date = new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? value : `${value}Z`);
@@ -210,10 +324,7 @@ export function OnboardingPage({ token }: { token: string }) {
                     <small>{doc.signable ? "To accept" : "For your information"}</small>
                   </span>
                 </summary>
-                <article>
-                  <h3>{doc.title}</h3>
-                  <p>{doc.body}</p>
-                </article>
+                <DocumentPaper doc={doc} packet={packet} />
               </details>
             ))}
           </div>

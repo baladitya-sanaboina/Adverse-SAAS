@@ -245,6 +245,143 @@
   white-space: pre-wrap;
 }
 
+/* Documents drawn like paper (owner request 2026-11-19). Always light, like a printed letter. */
+.onb-doc article.onb-paper {
+  max-height: 560px;
+  margin: 0 12px 14px;
+  padding: 28px 32px 30px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  color: #111827;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+}
+
+.onb-letterhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.onb-letterhead img {
+  width: 132px;
+  height: auto;
+}
+
+.onb-letterhead div {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  color: #6b7280;
+  font-size: 0.72rem;
+  text-align: right;
+}
+
+.onb-letterhead strong {
+  color: #111827;
+  font-size: 0.8rem;
+}
+
+.onb-paper h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 1.15rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.onb-paper .onb-paper-meta {
+  margin: 4px 0 18px;
+  color: #6b7280;
+  font-size: 0.74rem;
+}
+
+.onb-paper h4 {
+  margin: 18px 0 6px;
+  color: #111827;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.onb-doc article.onb-paper p {
+  margin: 0 0 10px;
+  color: #1f2937;
+  font-size: 0.84rem;
+  line-height: 1.75;
+  text-align: justify;
+  white-space: normal;
+}
+
+.onb-doc article.onb-paper p.onb-paper-lines {
+  text-align: left;
+  white-space: pre-line;
+}
+
+.onb-paper ol {
+  margin: 0 0 12px;
+  padding-left: 22px;
+  color: #1f2937;
+  font-size: 0.84rem;
+  line-height: 1.75;
+}
+
+.onb-sign {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.onb-sign div {
+  display: grid;
+  gap: 2px;
+}
+
+.onb-sign small {
+  color: #6b7280;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.onb-sign strong {
+  color: #111827;
+  font-size: 0.86rem;
+}
+
+.onb-sign span {
+  color: #4b5563;
+  font-size: 0.76rem;
+}
+
+@media (max-width: 640px) {
+  .onb-doc article.onb-paper {
+    margin: 0 6px 10px;
+    padding: 20px 16px;
+  }
+
+  .onb-letterhead {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .onb-letterhead div {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .onb-sign {
+    grid-template-columns: 1fr;
+  }
+}
+
 .onb-link {
   display: inline-flex;
   align-items: center;

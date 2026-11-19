@@ -110,6 +110,8 @@ class PublicField(BaseModel):
 
 class PublicPacket(BaseModel):
     company_name: str
+    company_email: str = ""
+    company_phone: str = ""
     audience: Literal["CLIENT", "EMPLOYEE"]
     recipient_name: str
     status: PacketStatus

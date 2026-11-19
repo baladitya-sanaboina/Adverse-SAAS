@@ -235,60 +235,186 @@ class OnboardingService:
         return out
 
     def _pdf(self, packet: PacketRow) -> bytes:
+        """The documents as a formal PDF (owner request 2026-11-19): Adverse letterhead, the
+        document title, real headings, numbered lists, a signature block on documents to accept,
+        and a footer with page numbers."""
+        from reportlab.lib import colors  # type: ignore[import-untyped]
+        from reportlab.lib.enums import TA_JUSTIFY, TA_RIGHT  # type: ignore[import-untyped]
         from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
         from reportlab.lib.styles import ParagraphStyle  # type: ignore[import-untyped]
         from reportlab.lib.units import mm  # type: ignore[import-untyped]
         from reportlab.platypus import (  # type: ignore[import-untyped]
+            Image,
+            KeepTogether,
+            ListFlowable,
+            ListItem,
             PageBreak,
             Paragraph,
             SimpleDocTemplate,
             Spacer,
+            Table,
+            TableStyle,
         )
 
-        from app.services.invoice_pdf import _fonts
+        from app.services.document_templates import blocks
+        from app.services.invoice_pdf import ASSETS, _fonts
 
         _fonts()
-        title = ParagraphStyle("t", fontName="Poppins-Bold", fontSize=15, leading=20, spaceAfter=8)
-        body = ParagraphStyle("b", fontName="Poppins", fontSize=9.5, leading=14)
-        small = ParagraphStyle(
-            "s", fontName="Poppins", fontSize=8.5, leading=12, textColor="#475569"
+        ink = colors.HexColor("#111827")
+        muted = colors.HexColor("#6B7280")
+        line = colors.HexColor("#E5E7EB")
+        brand = colors.HexColor("#0876ED")
+        body = ParagraphStyle(
+            "b", fontName="Poppins", fontSize=9.6, leading=15.5, textColor=ink, alignment=TA_JUSTIFY
         )
+        plain = ParagraphStyle("p", parent=body, alignment=0)
+        title = ParagraphStyle(
+            "t", fontName="Poppins-Bold", fontSize=17, leading=22, textColor=ink, spaceAfter=2
+        )
+        meta = ParagraphStyle("m", fontName="Poppins", fontSize=8.5, leading=12, textColor=muted)
+        heading = ParagraphStyle(
+            "h", fontName="Poppins-SemiBold", fontSize=10.5, leading=14, textColor=ink
+        )
+        right = ParagraphStyle("r", parent=meta, alignment=TA_RIGHT)
+        right_name = ParagraphStyle(
+            "rn", fontName="Poppins-SemiBold", fontSize=10, leading=13, alignment=TA_RIGHT
+        )
+        label = ParagraphStyle(
+            "l", fontName="Poppins-SemiBold", fontSize=7.5, leading=10, textColor=muted
+        )
+        company = self.invoices.company_profile(packet.company_id)
         buffer = BytesIO()
+        width = A4[0] - 40 * mm
         doc = SimpleDocTemplate(
             buffer,
             pagesize=A4,
-            leftMargin=18 * mm,
-            rightMargin=18 * mm,
-            topMargin=18 * mm,
-            bottomMargin=18 * mm,
+            leftMargin=20 * mm,
+            rightMargin=20 * mm,
+            topMargin=16 * mm,
+            bottomMargin=20 * mm,
             title=f"Documents for {packet.recipient_name}",
+            author=company.name,
         )
+
+        def letterhead() -> list[Any]:
+            logo = Image(
+                str(ASSETS / "adverse-logo.png"), width=40 * mm, height=40 * mm * 419 / 1600
+            )
+            contact = [Paragraph(escape(company.name), right_name)] + [
+                Paragraph(escape(item), right)
+                for item in (company.email, company.phone, company.address, company.website)
+                if item
+            ]
+            head = Table([[logo, contact]], colWidths=[width * 0.5, width * 0.5])
+            head.setStyle(
+                TableStyle(
+                    [
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                        ("LINEBELOW", (0, 0), (-1, 0), 0.6, line),
+                        ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+                    ]
+                )
+            )
+            return [head, Spacer(1, 9 * mm)]
+
+        today = self._company_values(packet.company_id)["date"]
+        party = "Client" if packet.audience == "CLIENT" else "Employee"
         story: list[Any] = []
         documents = [item for item in self._documents(packet) if item.kind != "CLIENT_ONBOARDING"]
         for index, item in enumerate(documents):
             if index:
                 story.append(PageBreak())
+            story += letterhead()
             story.append(Paragraph(escape(item.title), title))
-            for block in item.body.split("\n\n"):
-                story.append(Paragraph(escape(block).replace("\n", "<br/>"), body))
-                story.append(Spacer(1, 4 * mm))
-            if item.signable:
-                if packet.signed_at:
+            story.append(
+                Paragraph(
+                    f"{escape(item.label)} · Prepared for {escape(packet.recipient_name)} · {today}",
+                    meta,
+                )
+            )
+            story.append(Spacer(1, 7 * mm))
+            for kind, parts in blocks(item.body):
+                if kind == "heading":
+                    story += [
+                        Spacer(1, 2 * mm),
+                        Paragraph(escape(parts[0]), heading),
+                        Spacer(1, 1.5 * mm),
+                    ]
+                elif kind == "list":
                     story.append(
-                        Paragraph(
-                            f"Accepted online by <b>{escape(packet.signed_name or '')}</b> on "
-                            f"{escape(self._local(packet.company_id, packet.signed_at))} "
-                            f"(IP {escape(packet.signed_ip or '-')}).",
-                            small,
+                        ListFlowable(
+                            [
+                                ListItem(Paragraph(escape(text), plain), leftIndent=14)
+                                for text in parts
+                            ],
+                            bulletType="1",
+                            bulletFontName="Poppins-SemiBold",
+                            bulletFontSize=9,
+                            leftIndent=14,
                         )
                     )
+                    story.append(Spacer(1, 3 * mm))
+                elif kind == "lines":
+                    story += [
+                        Paragraph("<br/>".join(escape(text) for text in parts), plain),
+                        Spacer(1, 3 * mm),
+                    ]
                 else:
-                    story.append(
-                        Paragraph("Not accepted yet. Accept it online from the link.", small)
+                    story += [Paragraph(escape(parts[0]), body), Spacer(1, 3 * mm)]
+            if item.signable:
+                accepted = (
+                    f"Accepted online by <b>{escape(packet.signed_name or '')}</b><br/>"
+                    f"{escape(self._local(packet.company_id, packet.signed_at))}"
+                    f"<br/>IP {escape(packet.signed_ip or '-')}"
+                    if packet.signed_at
+                    else "Not accepted yet.<br/>Accept it online from the private link."
+                )
+                sign = Table(
+                    [
+                        [
+                            Paragraph(f"FOR {escape(company.name.upper())}", label),
+                            Paragraph(f"{party.upper()}", label),
+                        ],
+                        [
+                            Paragraph(
+                                f"<b>{escape(company.name)}</b><br/>Authorised signatory", plain
+                            ),
+                            Paragraph(
+                                f"<b>{escape(packet.recipient_name)}</b><br/>{accepted}", plain
+                            ),
+                        ],
+                    ],
+                    colWidths=[width * 0.5, width * 0.5],
+                )
+                sign.setStyle(
+                    TableStyle(
+                        [
+                            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                            ("LINEABOVE", (0, 0), (-1, 0), 0.6, line),
+                            ("TOPPADDING", (0, 0), (-1, 0), 10),
+                            ("TOPPADDING", (0, 1), (-1, 1), 4),
+                        ]
                     )
+                )
+                story += [Spacer(1, 8 * mm), KeepTogether([sign])]
         if not story:
             story.append(Paragraph("No documents.", body))
-        doc.build(story)
+
+        def footer(canvas: Any, document: Any) -> None:
+            canvas.saveState()
+            canvas.setFont("Poppins", 7.5)
+            canvas.setFillColor(muted)
+            canvas.drawString(
+                20 * mm, 11 * mm, f"{company.name} · Prepared for {packet.recipient_name}"
+            )
+            canvas.drawRightString(A4[0] - 20 * mm, 11 * mm, f"Page {document.page}")
+            canvas.setFillColor(brand)
+            canvas.restoreState()
+
+        doc.build(story, onFirstPage=footer, onLaterPages=footer)
         return buffer.getvalue()
 
     # -- sending ------------------------------------------------------------------------------
@@ -569,6 +695,8 @@ class OnboardingService:
         intro = next((item for item in documents if item.kind == "CLIENT_ONBOARDING"), None)
         return PublicPacket(
             company_name=self._company_values(packet.company_id)["company_name"],
+            company_email=self._company_values(packet.company_id)["company_email"],
+            company_phone=self._company_values(packet.company_id)["company_phone"],
             audience=packet.audience,
             recipient_name=packet.recipient_name,
             status=status,
