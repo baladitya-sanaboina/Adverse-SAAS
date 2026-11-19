@@ -492,6 +492,17 @@ class InvitationRepository:
             row = cursor.fetchone()
             return str(row[0]) if row else None
 
+    def login_taken(self, email: str) -> bool:
+        """An account or a waiting invitation already uses this login."""
+        with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                'SELECT 1 FROM "users" WHERE LOWER(email)=LOWER(%s) UNION ALL '
+                "SELECT 1 FROM company_invitations WHERE LOWER(email)=LOWER(%s) "
+                "AND status='PENDING' LIMIT 1",
+                (email, email),
+            )
+            return cursor.fetchone() is not None
+
     def department_ok(self, company_id: UUID, department_id: UUID) -> bool:
         with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
             cursor.execute(

@@ -141,7 +141,8 @@ export function InvitationsPage() {
       : name.trim().length < 2
         ? "Enter at least 2 characters."
         : "";
-    const nextEmailError = loginError(email);
+    // Clients sign in with their Gmail; their Adverse ID is made from the name when empty.
+    const nextEmailError = roleCode === "COMPANY_CLIENT" && !email.trim() ? "" : loginError(email);
     const nextNotificationEmailError = gmailError(notificationEmail, email);
     const nextPhoneError = !phone.trim()
       ? "Mobile number is required."
@@ -162,7 +163,7 @@ export function InvitationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
-          email: withDomain(email),
+          ...(email.trim() ? { email: withDomain(email) } : {}),
           notification_email: notificationEmail.trim().toLowerCase(),
           phone_number: phone.trim(),
           role_code: roleCode,
@@ -406,7 +407,11 @@ export function InvitationsPage() {
             {emailError ? (
               <small>{emailError}</small>
             ) : (
-              <em className="invite-hint">They sign in with this. Work mail arrives in its Adverse mailbox.</em>
+              <em className="invite-hint">
+                {roleCode === "COMPANY_CLIENT"
+                  ? "Optional for clients: made from the name if empty. They can also sign in with their Gmail."
+                  : "They sign in with this. Work mail arrives in its Adverse mailbox."}
+              </em>
             )}
           </label>
           <label className="management-field">

@@ -514,7 +514,8 @@ export function ClientManagementPage({
     if (key === "code" && !/^[A-Za-z0-9-]{2,30}$/.test(value.trim())) return "Use 2–30 letters, numbers or hyphens.";
     if (key === "email" && mode === "create" && !value.trim()) return "Business email is required.";
     if (key === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid email address.";
-    if (key === "portal_login_email" && mode === "create" && !value.trim()) return "Internal login email is required.";
+    // Optional for clients (owner request 2026-11-19): they sign in with their Gmail (the
+    // email above); an Adverse ID for their mailbox is made from the name when left empty.
     if (key === "portal_login_email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
       return "Enter a valid email address.";
     if (key === "phone" && mode === "create" && !value.trim()) return "Mobile number is required.";
@@ -582,14 +583,14 @@ export function ClientManagementPage({
       let nextNotice = editing
         ? "Client updated successfully."
         : `Client created successfully. Client code: ${typeof data.code === "string" ? data.code : "set automatically"}.`;
-      if (!editing && form.portal_login_email.trim()) {
+      if (!editing && form.email.trim()) {
         try {
           const inviteResponse = await fetch("/api/company/invitations", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               name: form.name.trim(),
-              email: form.portal_login_email.trim(),
+              ...(form.portal_login_email.trim() ? { email: form.portal_login_email.trim() } : {}),
               notification_email: form.email.trim(),
               phone_number: form.phone.trim(),
               role_code: "COMPANY_CLIENT",
@@ -600,7 +601,8 @@ export function ClientManagementPage({
           if (!inviteResponse.ok) {
             throw new Error(messageFrom(inviteData, "Unable to send the client activation email."));
           }
-          nextNotice = `Client created successfully (code ${typeof data.code === "string" ? data.code : "set automatically"}). Activation email sent to ${form.email.trim()} for login ${form.portal_login_email.trim()}.`;
+          const adverseId = typeof inviteData.email === "string" ? inviteData.email : form.portal_login_email.trim();
+          nextNotice = `Client created successfully (code ${typeof data.code === "string" ? data.code : "set automatically"}). Activation email sent to ${form.email.trim()}; they sign in with that Gmail${adverseId ? ` or their Adverse ID ${adverseId}` : ""}.`;
         } catch (inviteReason) {
           nextNotice =
             inviteReason instanceof Error
@@ -913,7 +915,9 @@ export function ClientManagementPage({
     { key: "name", label: "Client name", icon: Building2 },
     ...(mode === "edit" ? ([{ key: "code", label: "Client code", icon: Hash }] as const) : []),
     { key: "email", label: "Business email", icon: Mail },
-    ...(mode === "create" ? ([{ key: "portal_login_email", label: "Internal login email", icon: Mail }] as const) : []),
+    ...(mode === "create"
+      ? ([{ key: "portal_login_email", label: "Adverse ID (optional, made from the name)", icon: Mail }] as const)
+      : []),
     { key: "phone", label: "Mobile number", icon: Phone },
     { key: "website", label: "Website", icon: Globe2 },
     { key: "address", label: "Address", icon: MapPin, wide: true },

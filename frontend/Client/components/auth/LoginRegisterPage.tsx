@@ -397,7 +397,7 @@ export default function LoginRegisterPage({ initialMode = "login" }: { initialMo
               Email
               <input
                 type="email"
-                placeholder="you@example.com"
+                placeholder="Your Gmail or Adverse ID"
                 value={form.email}
                 aria-invalid={Boolean(fieldErrors.email)}
                 onFocus={() => setFocused("email")}

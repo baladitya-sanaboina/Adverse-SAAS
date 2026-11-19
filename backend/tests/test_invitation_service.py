@@ -192,6 +192,7 @@ class InvitationServiceTests(unittest.TestCase):
             login_email=self.record.email,
             login_url=settings.login_url(self.record.role_code),
             password="StrongPassword@123",
+            gmail_login=None,
         )
         self.assertEqual(response.email, self.record.email)
         self.assertEqual(response.role_code, self.record.role_code)
@@ -275,6 +276,36 @@ class InvitationServiceTests(unittest.TestCase):
                 phone_number="+91 98765 43210",
                 role_code="COMPANY_CLIENT",
                 designation="Owner",
+            )
+
+    @patch("app.services.invitation_service.validate_user_action_access", return_value=True)
+    @patch("app.services.invitation_service.email_service.send_invitation")
+    def test_client_gets_an_adverse_id_from_the_name(
+        self, send_email: MagicMock, _: MagicMock
+    ) -> None:
+        """Owner request 2026-11-19: clients sign in with their Gmail; their internal address is
+        made from the name when the admin leaves it empty (staff still need one)."""
+        taken = {"kalpana.studio@adverseindia.com"}
+        self.repository.login_taken.side_effect = lambda login: login in taken
+        self.service.create(
+            self.context,
+            InvitationCreate(
+                notification_email="kalpana@gmail.com",
+                name="Kalpana Studio",
+                phone_number="+91 98765 43210",
+                role_code="COMPANY_CLIENT",
+            ),
+        )
+        self.assertEqual(
+            self.repository.create.call_args.args[2], "kalpana.studio-2@adverseindia.com"
+        )
+        self.assertEqual(self.repository.create.call_args.args[3], "kalpana@gmail.com")
+        with self.assertRaises(ValueError):
+            InvitationCreate(
+                notification_email="ravi@gmail.com",
+                name="Ravi",
+                phone_number="+91 98765 43210",
+                role_code="COMPANY_EMPLOYEE",
             )
 
     def test_accept_schema_rejects_weak_or_mismatched_password(self) -> None:

@@ -19,7 +19,9 @@ InvitationRoleCode = Literal["COMPANY_EMPLOYEE", "COMPANY_MANAGER", "COMPANY_CLI
 class InvitationCreate(BaseModel):
     # email: the internal login (name@adverseindia.com); notification_email: their own Gmail,
     # where the setup link, password resets and other outside mail go.
-    email: EmailStr
+    # Optional for clients only: they sign in with their Gmail, and an internal address is
+    # made from their name when left empty (owner request 2026-11-19).
+    email: EmailStr | None = None
     notification_email: EmailStr | None = None
     name: str | None = Field(default=None, min_length=2, max_length=100)
     phone_number: str = Field(pattern=r"^\+?[0-9 ()-]{7,24}$")
@@ -56,6 +58,8 @@ class InvitationCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_role_specific_fields(self) -> "InvitationCreate":
+        if self.email is None and self.role_code != "COMPANY_CLIENT":
+            raise ValueError("Internal login email is required.")
         if self.client_id is not None and self.role_code != "COMPANY_CLIENT":
             raise ValueError("Client link is supported only for client invitations.")
         if self.role_code == "COMPANY_CLIENT" and (

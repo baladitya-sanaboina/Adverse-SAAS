@@ -1,6 +1,8 @@
 import hashlib
 import logging
+import re
 import secrets
+import unicodedata
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -105,8 +107,23 @@ class InvitationService:
         ):
             raise AuthenticationError(404, "DEPARTMENT_NOT_FOUND", "Department was not found.")
 
+    def _client_login(self, request: InvitationCreate) -> str:
+        """A client signs in with their Gmail; their internal address (for the Adverse mailbox)
+        is made from their name: kalpana.studio@adverseindia.com, then -2, -3 when taken."""
+        source = request.name or (str(request.notification_email or "").split("@")[0])
+        words = re.findall(r"[a-z0-9]+", unicodedata.normalize("NFKD", source).lower())
+        base = ".".join(words[:3])[:40].strip(".") or "client"
+        domain = settings.internal_email_domain.strip().lstrip("@") or "adverseindia.com"
+        for number in range(1, 200):
+            login = f"{base}@{domain}" if number == 1 else f"{base}-{number}@{domain}"
+            if not self.repository.login_taken(login):
+                return login
+        return f"{base}-{secrets.token_hex(3)}@{domain}"
+
     def create(self, context: AuthContext, request: InvitationCreate) -> InvitationResponse:
         company_id = self._authorize(context, "CREATE")
+        if request.email is None:
+            request = request.model_copy(update={"email": self._client_login(request)})
         self._check_addresses(company_id, request)
         token, token_hash, expires_at = self._new_token()
         invited_name = request.name.strip() if request.name else None
@@ -241,6 +258,7 @@ class InvitationService:
                 login_email=login_email,
                 login_url=self._login_url(role_code),
                 password=request.password.get_secret_value(),
+                gmail_login=notification_email if role_code == "COMPANY_CLIENT" else None,
             )
         except Exception:
             logger.exception("Accepted invitation confirmation email failed for %s", login_email)

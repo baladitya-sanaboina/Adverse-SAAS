@@ -40,6 +40,8 @@ class AuthenticationRepository:
         )
 
     def find_user_by_email(self, email: str) -> AuthenticationUserRecord | None:
+        """By login email. A client may also sign in with their own Gmail (owner request
+        2026-11-19); that is used only when it belongs to exactly one client account."""
         with database_pool.connection(timeout=2) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -47,7 +49,16 @@ class AuthenticationRepository:
                     (email,),
                 )
                 record = cursor.fetchone()
-                return AuthenticationUserRecord(*record) if record else None
+                if record:
+                    return AuthenticationUserRecord(*record)
+                cursor.execute(
+                    self._user_query(
+                        "LOWER(u.recovery_email) = LOWER(%s) AND r.code = 'COMPANY_CLIENT' LIMIT 2"
+                    ),
+                    (email,),
+                )
+                found = cursor.fetchall()
+                return AuthenticationUserRecord(*found[0]) if len(found) == 1 else None
 
     def find_user_by_id(self, user_id: UUID) -> AuthenticationUserRecord | None:
         with database_pool.connection(timeout=2) as connection:

@@ -453,19 +453,21 @@ class EmailService:
         login_email: str,
         login_url: str,
         password: str | None = None,
+        gmail_login: str | None = None,
     ) -> None:
         """The welcome mail to their Gmail once the account is set up (owner request
         2026-11-19): the internal login the admin gave them and, when given, the password they
-        chose, so they can sign in straight away."""
+        chose, so they can sign in straight away. gmail_login: clients also sign in with their
+        Gmail, so it is shown as the login and the internal address as their Adverse ID."""
         message = EmailMessage()
         message["Subject"] = f"Welcome to {company_name}: your Adverse login"
         message["From"] = settings.smtp_from_email or settings.smtp_username
         message["To"] = email
-        lines = [
-            f"Welcome to {company_name}. Your Adverse account is ready.",
-            "",
-            f"Login: {login_email}",
-        ]
+        lines = [f"Welcome to {company_name}. Your Adverse account is ready.", ""]
+        if gmail_login:
+            lines += [f"Login: {gmail_login} (or your Adverse ID)", f"Adverse ID: {login_email}"]
+        else:
+            lines.append(f"Login: {login_email}")
         if password:
             lines.append(f"Password: {password}")
         lines += [
@@ -476,14 +478,25 @@ class EmailService:
             " if you forget it, use Forgot password and the code comes to this Gmail.",
         ]
         message.set_content("\n".join(lines))
-        details = [("Login", login_email)] + ([("Password", password)] if password else [])
+        details = (
+            [("Login", gmail_login), ("Adverse ID", login_email)]
+            if gmail_login
+            else [("Login", login_email)]
+        ) + ([("Password", password)] if password else [])
         message.add_alternative(
             branded_email_html(
                 eyebrow="Welcome",
                 title=f"Welcome to {company_name}",
                 description=(
-                    "Your Adverse account is ready. Sign in with these details. Keep this mail "
-                    "private; you can change your password anytime from your profile."
+                    (
+                        "Your Adverse account is ready. Sign in with your Gmail or your Adverse "
+                        "ID. Keep this mail private; you can change your password anytime."
+                    )
+                    if gmail_login
+                    else (
+                        "Your Adverse account is ready. Sign in with these details. Keep this "
+                        "mail private; you can change your password anytime from your profile."
+                    )
                 ),
                 action_label="Sign in to Adverse",
                 action_url=login_url,
