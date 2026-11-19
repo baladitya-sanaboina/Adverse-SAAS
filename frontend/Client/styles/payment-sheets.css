@@ -16,6 +16,31 @@
 }
 
 /* Sheet tabs, oldest first, as the app's filter chips. */
+/* Month filter (owner request 2026-11-19). */
+.sheet-month {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.sheet-month > span {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.sheet-month .loopless-select {
+  min-width: 190px;
+}
+
+.sheet-month small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
 .sheet-tabs {
   display: flex;
   align-items: center;

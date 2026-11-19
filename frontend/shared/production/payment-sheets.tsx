@@ -43,6 +43,26 @@ export type Sheet = {
 
 type Money = (value: string | number, currency?: string) => string;
 
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+function monthLabel(key: string): string {
+  const [year, month] = key.split("-");
+  return `${MONTH_NAMES[Number(month) - 1] ?? month} ${year}`;
+}
+
 function tone(sheet: Sheet): "over" | "low" | "ok" {
   const left = Number(sheet.left);
   const pot = Number(sheet.carried_in) + Number(sheet.paid);
@@ -69,17 +89,49 @@ export function PaymentSheets({
   /** Something to show on the sheet's summary bar, e.g. the Admin's invoice button. */
   sheetAction?: (sheet: Sheet) => ReactNode;
 }) {
-  const latest = sheets[sheets.length - 1]?.index ?? 0;
+  // Month filter (owner request 2026-11-19): sheets stay one per payment; a month shows the sheets
+  // that ran in it and only that month's lines.
+  const [month, setMonth] = useState("");
+  const months = useMemo(() => {
+    const found = new Set<string>();
+    for (const item of sheets) for (const line of item.lines) found.add(line.day.slice(0, 7));
+    return [...found].sort().reverse();
+  }, [sheets]);
+  const shown = month ? sheets.filter((item) => item.lines.some((line) => line.day.startsWith(month))) : sheets;
+  const latest = shown[shown.length - 1]?.index ?? 0;
   const [chosen, setChosen] = useState<number | null>(null);
-  const sheet = sheets.find((item) => item.index === (chosen ?? latest)) ?? sheets[sheets.length - 1];
+  const sheet = shown.find((item) => item.index === (chosen ?? latest)) ?? shown[shown.length - 1];
 
-  if (!sheet) return <p className="sheets-empty">{empty}</p>;
+  if (!sheets.length) return <p className="sheets-empty">{empty}</p>;
 
   return (
     <div className="sheet-book">
-      {sheets.length > 1 && (
+      {months.length > 1 && (
+        <div className="sheet-month">
+          <span>Month</span>
+          <LooplessSelect
+            value={month}
+            ariaLabel="Show sheets for a month"
+            onValueChange={(value) => {
+              setMonth(value);
+              setChosen(null);
+            }}
+            options={[
+              { value: "", label: "All months" },
+              ...months.map((key) => ({ value: key, label: monthLabel(key) })),
+            ]}
+          />
+          {month && (
+            <small>
+              {shown.length} {shown.length === 1 ? "sheet" : "sheets"} in {monthLabel(month)}
+            </small>
+          )}
+        </div>
+      )}
+      {!sheet && <p className="sheets-empty">Nothing in this month.</p>}
+      {sheet && shown.length > 1 && (
         <div className="sheet-tabs" role="tablist" aria-label="Payment sheets">
-          {sheets.map((item, position) => {
+          {shown.map((item, position) => {
             // Each tab shows how the money moves: what came in and what went on to the next sheet.
             const carried = Number(item.carried_in);
             const left = Number(item.left);
@@ -113,21 +165,25 @@ export function PaymentSheets({
           })}
         </div>
       )}
-      <SheetPage
-        key={sheet.index}
-        sheet={sheet}
-        currency={currency}
-        money={money}
-        date={date}
-        itemWord={itemWord}
-        action={sheetAction?.(sheet)}
-      />
+      {sheet && (
+        <SheetPage
+          key={`${sheet.index}-${month}`}
+          month={month}
+          sheet={sheet}
+          currency={currency}
+          money={money}
+          date={date}
+          itemWord={itemWord}
+          action={sheetAction?.(sheet)}
+        />
+      )}
     </div>
   );
 }
 
 function SheetPage({
   sheet,
+  month,
   currency,
   money,
   date,
@@ -135,6 +191,8 @@ function SheetPage({
   action,
 }: {
   sheet: Sheet;
+  /** "YYYY-MM": only that month's lines; "" for all. */
+  month: string;
   currency: string;
   money: Money;
   date: (value: string) => string;
@@ -147,8 +205,12 @@ function SheetPage({
   const [paidFilter, setPaidFilter] = useState("");
   const [usedFilter, setUsedFilter] = useState("");
   const [balanceFilter, setBalanceFilter] = useState("");
-  const days = useMemo(() => [...new Set(sheet.lines.map((line) => line.day))], [sheet.lines]);
-  const visible = sheet.lines.filter((line) => {
+  const lines = useMemo(
+    () => (month ? sheet.lines.filter((line) => line.day.startsWith(month)) : sheet.lines),
+    [sheet.lines, month],
+  );
+  const days = useMemo(() => [...new Set(lines.map((line) => line.day))], [lines]);
+  const visible = lines.filter((line) => {
     const amount = Number(line.amount);
     const balance = Number(line.balance);
     if (byDay && line.day !== byDay) return false;
@@ -161,7 +223,7 @@ function SheetPage({
     if (balanceFilter === "plus" && !(balance >= 0)) return false;
     return true;
   });
-  const filtered = visible.length !== sheet.lines.length;
+  const filtered = visible.length !== lines.length;
   const clear = () => {
     setByDay("");
     setText("");
@@ -335,11 +397,13 @@ function SheetPage({
               <th scope="row" colSpan={2}>
                 {filtered ? (
                   <span className="sheet-filtered">
-                    Showing {visible.length} of {sheet.lines.length}
+                    Showing {visible.length} of {lines.length}
                     <button type="button" onClick={clear}>
                       <X aria-hidden="true" /> Clear filters
                     </button>
                   </span>
+                ) : month ? (
+                  `Total in ${monthLabel(month)}`
                 ) : (
                   "Total"
                 )}
