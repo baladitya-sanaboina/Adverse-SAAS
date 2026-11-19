@@ -1,6 +1,6 @@
 import unittest
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 from unittest.mock import patch
@@ -398,3 +398,29 @@ class ToAssignTest(unittest.TestCase):
         self.assertEqual(admin.due_today, [])  # shown once, under To assign
         worker = service.focus_worker(context("COMPANY_MANAGER", MANAGER))
         self.assertEqual(worker.to_assign, [])
+
+
+class CalendarTicketTest(unittest.TestCase):
+    """A client's calendar item always becomes a task (owner report 2026-11-19)."""
+
+    def test_task_is_made_even_without_a_client_rate(self) -> None:
+        repo = FakeTaskRepository()
+        repo.rates.pop(("CLIENT", CLIENT))
+        repo.calendar_service_choices = lambda company_id, client_id: [SERVICE]  # type: ignore[attr-defined]
+        service = TaskService(repo, FakeFinanceRepository())  # type: ignore[arg-type]
+        task_id = service.create_calendar_ticket(
+            COMPANY, CLIENT, ADMIN, "Reel", "", date(2026, 11, 30)
+        )
+        self.assertIsNotNone(task_id)
+        self.assertEqual(repo.created["status"], "PENDING")
+        self.assertEqual(repo.created["client_price_final"], Decimal("0.00"))
+        self.assertIn("No client rate", repo.created["client_price_reason"])
+
+    def test_the_client_rate_is_used_when_there_is_one(self) -> None:
+        repo = FakeTaskRepository()
+        repo.calendar_service_choices = lambda company_id, client_id: [SERVICE]  # type: ignore[attr-defined]
+        repo.rates[("CLIENT", CLIENT)] = Decimal("700")
+        service = TaskService(repo, FakeFinanceRepository())  # type: ignore[arg-type]
+        service.create_calendar_ticket(COMPANY, CLIENT, ADMIN, "Reel", "", date(2026, 11, 30))
+        self.assertEqual(repo.created["client_price_final"], Decimal("700.00"))
+        self.assertEqual(repo.created["client_price_reason"], "")

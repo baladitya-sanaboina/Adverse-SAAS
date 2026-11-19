@@ -20,6 +20,7 @@ from app.repositories.finance_repository import FinanceRepository
 from app.repositories.package_repository import PackageRepository
 from app.repositories.task_repository import (
     PersonRow,
+    ServiceRef,
     TaskMutation,
     TaskNotFound,
     TaskRepository,
@@ -93,6 +94,9 @@ STATUS_LABELS = {
 
 def _not_found() -> AuthenticationError:
     return AuthenticationError(404, "TASK_NOT_FOUND", "Task was not found.")
+
+
+NO_RATE_REASON = "No client rate yet: set the price before approving."
 
 
 class TaskService:
@@ -834,43 +838,53 @@ class TaskService:
     ) -> UUID | None:
         """Turn a calendar entry into a Pending, unassigned task. The service is the one the
         client uses most that has a client rate; priority is the one chosen on the entry, or
-        comes from how soon the date is.
-        Returns None when no service has a rate for this client (the admin creates it by hand)."""
+        comes from how soon the date is. A client with no rate yet still gets the task (owner
+        report 2026-11-19: it must always reach the admin's To assign list), priced 0 with the
+        reason "No client rate yet" so the admin sets the price while assigning.
+        Returns None only when the client is inactive or the company has no active service."""
         client = self.repository.get_client(company_id, client_id)
         if client is None or client.status != "ACTIVE":
             return None
-        for service_id in self.repository.calendar_service_choices(company_id, client_id):
+        choices = self.repository.calendar_service_choices(company_id, client_id)
+        picked: tuple[ServiceRef, Decimal | None] | None = None
+        for service_id in choices:
             service = self.repository.get_service(company_id, service_id)
-            rate = self.repository.current_rate(company_id, "CLIENT", client_id, service_id)
-            if service is None or rate is None:
+            if service is None:
                 continue
-            task_id = self.repository.create_task(
-                company_id,
-                actor_id,
-                {
-                    "client_id": client_id,
-                    "service_id": service_id,
-                    "title": title[:200],
-                    "description": description[:5000],
-                    "priority": priority or calendar_priority(due_date, self._today(company_id)),
-                    "status": "PENDING",
-                    "assignee_user_id": None,
-                    "assignee_type": None,
-                    "monitor_user_id": None,
-                    "due_date": due_date,
-                    "client_pricing_model": service.client_pricing_model,
-                    "client_price_default": rate,
-                    "client_price_final": money(rate),
-                    "client_price_reason": "",
-                    "commission_default": None,
-                    "commission_final": None,
-                    "commission_reason": "",
-                    "assigned_at": None,
-                },
-                [],
-            )
-            return task_id
-        return None
+            rate = self.repository.current_rate(company_id, "CLIENT", client_id, service_id)
+            if rate is not None:
+                picked = (service, rate)
+                break
+            if picked is None:
+                picked = (service, None)  # the fallback when no service has a rate
+        if picked is None:
+            return None
+        service, rate = picked
+        return self.repository.create_task(
+            company_id,
+            actor_id,
+            {
+                "client_id": client_id,
+                "service_id": service.id,
+                "title": title[:200],
+                "description": description[:5000],
+                "priority": priority or calendar_priority(due_date, self._today(company_id)),
+                "status": "PENDING",
+                "assignee_user_id": None,
+                "assignee_type": None,
+                "monitor_user_id": None,
+                "due_date": due_date,
+                "client_pricing_model": service.client_pricing_model,
+                "client_price_default": rate,
+                "client_price_final": money(rate) if rate is not None else money(Decimal("0")),
+                "client_price_reason": "" if rate is not None else NO_RATE_REASON,
+                "commission_default": None,
+                "commission_final": None,
+                "commission_reason": "",
+                "assigned_at": None,
+            },
+            [],
+        )
 
     def sync_calendar_ticket(
         self, company_id: UUID, task_id: UUID, actor_id: UUID, title: str, due_date: date

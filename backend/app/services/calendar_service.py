@@ -237,6 +237,32 @@ class CalendarService:
         except Exception:  # noqa: BLE001
             logger.warning("Could not tell the admins about a calendar item", exc_info=True)
 
+    def open_missing_tickets(self, limit: int = 20) -> int:
+        """Catch-up (owner report 2026-11-19): an upcoming item a client added that has no task
+        yet gets one, so it always reaches the admin's To assign list. Only the client's own
+        entries (not rows the admin imported from a spreadsheet). Runs in the background loop."""
+        from app.database.connectivity import database_pool
+
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT e.company_id, e.id, e.created_by_id
+                FROM content_calendar_entries e JOIN clients c ON c.id = e.client_id
+                WHERE e.task_id IS NULL AND NOT e.no_post AND c.status::text = 'ACTIVE'
+                  AND e.created_by_id = c.user_id
+                  AND e.entry_date >= CURRENT_DATE - 1
+                  AND e.created_at < (NOW() AT TIME ZONE 'UTC') - INTERVAL '1 minute'
+                ORDER BY e.created_at LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cursor.fetchall()
+        opened = 0
+        for company_id, entry_id, actor_id in rows:
+            if self._open_ticket(company_id, entry_id, actor_id) is not None:
+                opened += 1
+        return opened
+
     def _follow(self, company_id: UUID, before: CalendarEntryRow, actor_id: UUID) -> None:
         """After an edit: keep the ticket in step, cancel it for a no-post day, or open one."""
         after = self._entry(company_id, before.id, None)

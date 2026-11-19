@@ -181,6 +181,14 @@ def _mail_loop(stop: threading.Event) -> None:
             agenda_service.run_alerts()
         except Exception:  # noqa: BLE001
             logger.warning("Calendar alert check failed", exc_info=True)
+        try:
+            # A client's calendar item that has no task yet gets one (one worker at a time).
+            if _first("calendar-catchup", MAIL_CHECK_SECONDS * 3):
+                from app.services.calendar_service import calendar_service
+
+                calendar_service.open_missing_tickets()
+        except Exception:  # noqa: BLE001
+            logger.warning("Calendar task catch-up failed", exc_info=True)
 
 
 _stop = threading.Event()
