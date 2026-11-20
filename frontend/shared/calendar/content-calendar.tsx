@@ -47,6 +47,7 @@ type TaskStatus =
 export type CalendarEntry = {
   id: string;
   client: { id: string; name: string; code: string };
+  service?: { id: string; name: string } | null;
   entry_date: string;
   title: string;
   reference_url: string;
@@ -129,6 +130,27 @@ function longDate(value: string): string {
 
 /* ------------------------------------------------------------------ requests */
 
+export type ServiceOption = { id: string; name: string; code: string };
+
+/** Services to pick for a video (owner request 2026-11-20), the client's most used first. */
+export function useCalendarServices(base: string, role: Role, clientId: string): ServiceOption[] {
+  const [services, setServices] = useState<{ key: string; items: ServiceOption[] }>({ key: "", items: [] });
+  const key = role === "ADMIN" ? clientId : "mine";
+  useEffect(() => {
+    if (!key) return;
+    let live = true;
+    const url = role === "ADMIN" ? `${base}/services?client_id=${encodeURIComponent(key)}` : `${base}/services`;
+    fetch(url, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((items: ServiceOption[]) => live && setServices({ key, items: Array.isArray(items) ? items : [] }))
+      .catch(() => live && setServices({ key, items: [] }));
+    return () => {
+      live = false;
+    };
+  }, [base, key, role]);
+  return services.key === key ? services.items : [];
+}
+
 async function send<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...init });
   if (response.status === 204) return undefined as T;
@@ -162,6 +184,7 @@ export function ContentCalendarPage({ role }: { role: Role }) {
   const [view, setView] = useState<"sheet" | "month">("sheet");
   const [selectedDay, setSelectedDay] = useState(today);
   const [clientFilter, setClientFilter] = useState("");
+  const sheetServices = useCalendarServices(base, role, clientFilter);
   // Filters (owner request 2026-11-15).
   const [search, setSearch] = useState("");
   const [progress, setProgress] = useState("");
@@ -343,9 +366,16 @@ export function ContentCalendarPage({ role }: { role: Role }) {
     }
   }
 
-  async function addRow(values: { entry_date: string; title: string; no_post: boolean }): Promise<boolean> {
+  async function addRow(values: {
+    entry_date: string;
+    title: string;
+    no_post: boolean;
+    service_id: string;
+  }): Promise<boolean> {
     try {
-      const body = role === "ADMIN" ? { ...values, client_id: clientFilter } : values;
+      const { service_id, ...rest } = values;
+      const fields = { ...rest, ...(service_id && !values.no_post ? { service_id } : {}) };
+      const body = role === "ADMIN" ? { ...fields, client_id: clientFilter } : fields;
       const created = await send<CalendarEntry>(base, json("POST", body));
       saved(
         created,
@@ -556,6 +586,7 @@ export function ContentCalendarPage({ role }: { role: Role }) {
               onToggle={(entry, key) => void toggle(entry, key)}
               onEdit={(entry, field, value) => void editField(entry, field, value)}
               onAdd={addRow}
+              services={sheetServices}
               onOpen={(entry) => setEditor({ entry, date: entry.entry_date })}
             />
           ) : (
@@ -877,7 +908,9 @@ function EntryDialog({
     notes: entry?.notes ?? "",
     no_post: entry?.no_post ?? false,
     priority: "",
+    service_id: "",
   });
+  const services = useCalendarServices(base, role, form.client_id);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -897,6 +930,7 @@ function EntryDialog({
     setMessage("");
     if (role === "ADMIN" && !entry && !form.client_id) return setMessage("Choose the client.");
     if (!form.no_post && !form.title.trim()) return setMessage("Give the video a title.");
+    if (!entry && !form.no_post && !form.service_id) return setMessage("Choose the service: Reel, Carousel…");
     setBusy(true);
     try {
       const payload = {
@@ -918,6 +952,7 @@ function EntryDialog({
               ...payload,
               ...(role === "ADMIN" ? { client_id: form.client_id } : {}),
               ...(form.priority && !form.no_post ? { priority: form.priority } : {}),
+              ...(form.service_id && !form.no_post ? { service_id: form.service_id } : {}),
             }),
           ),
         );
@@ -1019,6 +1054,28 @@ function EntryDialog({
                   onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
                 />
               </label>
+              {!entry && (
+                <div className="cal-field wide">
+                  <span>
+                    Service <em aria-hidden="true">*</em>
+                  </span>
+                  <LooplessSelect
+                    value={form.service_id}
+                    ariaLabel="Service"
+                    onValueChange={(value) => setForm((current) => ({ ...current, service_id: value }))}
+                    options={[
+                      { value: "", label: services.length ? "Choose the service" : "No services yet" },
+                      ...services.map((item) => ({ value: item.id, label: item.name })),
+                    ]}
+                  />
+                </div>
+              )}
+              {entry?.service && (
+                <div className="cal-field wide">
+                  <span>Service</span>
+                  <p className="cal-muted">{entry.service.name}</p>
+                </div>
+              )}
               {!entry && (
                 <div className="cal-field wide">
                   <span>Priority</span>

@@ -28,6 +28,7 @@ from app.schemas.calendar import (
     CalendarEntryUpdate,
     CalendarListResponse,
     CalendarScriptRef,
+    CalendarServiceOption,
     CalendarTaskRef,
     StaffCalendarResponse,
     StaffCalendarTask,
@@ -93,6 +94,11 @@ def entry_response(row: CalendarEntryRow) -> CalendarEntryResponse:
             if row.task_id is not None and row.task_number is not None and row.task_status
             else None
         ),
+        service=(
+            NamedRef(id=row.service_id, name=row.service_name or "", code="")
+            if row.service_id is not None
+            else None
+        ),
         created_by_name=row.created_by_name,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -127,6 +133,39 @@ class CalendarService:
                 403, f"TASKS_{action}_REQUIRED", f"Tasks {action.lower()} permission is required."
             )
         return context.company_id
+
+    def _check_service(self, company_id: UUID, service_id: UUID | None) -> None:
+        """The chosen service must be one of the company's active services."""
+        if service_id is None:
+            return
+        service = self.tasks.get_service(company_id, service_id)
+        if service is None or service.status != "ACTIVE":
+            raise AuthenticationError(
+                422, "SERVICE_NOT_AVAILABLE", "Choose one of the services in the list."
+            )
+
+    def _service_options(self, company_id: UUID, client_id: UUID) -> list[CalendarServiceOption]:
+        out = []
+        for service_id in self.tasks.calendar_service_choices(company_id, client_id):
+            service = self.tasks.get_service(company_id, service_id)
+            if service is not None and service.status == "ACTIVE":
+                out.append(
+                    CalendarServiceOption(id=service.id, name=service.name, code=service.code)
+                )
+        return out
+
+    def client_services(self, context: AuthContext) -> list[CalendarServiceOption]:
+        """Services a client can pick for a video, the ones they use most first."""
+        company_id, client = self._client(context)
+        return self._service_options(company_id, client.id)
+
+    def admin_services(
+        self, context: AuthContext, client_id: UUID | None
+    ) -> list[CalendarServiceOption]:
+        company_id = self._admin(context, "VIEW")
+        if client_id is not None:
+            return self._service_options(company_id, client_id)
+        return self._service_options(company_id, UUID(int=0))
 
     def _client(self, context: AuthContext) -> tuple[UUID, NamedRef]:
         if context.role != "COMPANY_CLIENT" or context.company_id is None:
@@ -185,6 +224,7 @@ class CalendarService:
                 description,
                 row.entry_date,
                 priority=priority,
+                service_id=row.service_id,
             )
         except Exception:  # noqa: BLE001 - the entry is saved even if the ticket fails
             logger.warning("Could not create the calendar ticket", exc_info=True)
@@ -306,6 +346,7 @@ class CalendarService:
         client = self.tasks.get_client(company_id, request.client_id)
         if client is None:
             raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
+        self._check_service(company_id, request.service_id)
         entry_id = self.repository.create(
             company_id, client.id, context.user_id, request.model_dump(exclude={"client_id"})
         )
@@ -375,6 +416,7 @@ class CalendarService:
             raise AuthenticationError(
                 403, "CLIENT_MISMATCH", "You can only add to your own calendar."
             )
+        self._check_service(company_id, request.service_id)
         entry_id = self.repository.create(
             company_id, client.id, context.user_id, request.model_dump(exclude={"client_id"})
         )

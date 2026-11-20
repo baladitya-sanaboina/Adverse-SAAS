@@ -740,6 +740,7 @@ model CompanyService {
   company             Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   pricingRecords      ServicePricing[]
   tasks               Task[]
+  calendarEntries     ContentCalendarEntry[]
 
   @@unique([companyId, name])
   @@unique([companyId, code])
@@ -1601,6 +1602,8 @@ model ContentCalendarEntry {
   company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   task              Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  serviceId         String?  @map("service_id") @db.Uuid
+  service           CompanyService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   createdBy         User     @relation("CalendarEntryCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([companyId, entryDate])

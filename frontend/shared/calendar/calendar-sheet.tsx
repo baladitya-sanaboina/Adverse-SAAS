@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { CalendarEntry } from "./content-calendar";
 import { LooplessDate } from "@/components/foundation/loopless-date";
+import { LooplessSelect } from "@/components/foundation/loopless-select";
 
 type Role = "ADMIN" | "CLIENT";
 type Tick = "recorded" | "script_ready" | "edited" | "posted_instagram" | "posted_youtube";
@@ -230,6 +231,7 @@ export function CalendarSheet({
   onEdit,
   onAdd,
   onOpen,
+  services = [],
 }: {
   role: Role;
   title: string;
@@ -238,8 +240,10 @@ export function CalendarSheet({
   canAdd: boolean;
   onToggle: (entry: CalendarEntry, key: Tick) => void;
   onEdit: (entry: CalendarEntry, field: TextField, value: string) => void;
-  onAdd: (values: { entry_date: string; title: string; no_post: boolean }) => Promise<boolean>;
+  onAdd: (values: { entry_date: string; title: string; no_post: boolean; service_id: string }) => Promise<boolean>;
   onOpen: (entry: CalendarEntry) => void;
+  /** Services to pick for a new row (owner request 2026-11-20: required). */
+  services?: { id: string; name: string }[];
 }) {
   const rows = useMemo(
     () =>
@@ -258,16 +262,19 @@ export function CalendarSheet({
     const next = lastDate ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1) : start;
     return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
   })();
-  const [draft, setDraft] = useState({ entry_date: "", title: "", no_post: false });
+  const [draft, setDraft] = useState({ entry_date: "", title: "", no_post: false, service_id: "" });
+  const [hint, setHint] = useState("");
   const [adding, setAdding] = useState(false);
   const columns = 12 + (showClient ? 1 : 0) + (role === "ADMIN" ? 1 : 0) + 1;
 
   async function add() {
     const values = { ...draft, entry_date: draft.entry_date || nextDate, title: draft.title.trim() };
     if (!values.no_post && !values.title) return;
+    if (!values.no_post && !values.service_id) return setHint("Choose the service first.");
+    setHint("");
     setAdding(true);
     if (await onAdd({ ...values, title: values.title || "No post" }))
-      setDraft({ entry_date: "", title: "", no_post: false });
+      setDraft((current) => ({ entry_date: "", title: "", no_post: false, service_id: current.service_id }));
     setAdding(false);
   }
 
@@ -416,18 +423,35 @@ export function CalendarSheet({
                 </label>
               </td>
               <td className="sheet-cell topic" colSpan={MERGED}>
-                <input
-                  aria-label="New video topic"
-                  placeholder={
-                    draft.no_post
-                      ? "No reel on this day: press Enter"
-                      : "Type a video topic and press Enter (add links with the … button)"
-                  }
-                  value={draft.title}
-                  disabled={adding}
-                  onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-                  onKeyDown={(event) => event.key === "Enter" && void add()}
-                />
+                <div className="sheet-new-topic">
+                  {!draft.no_post && (
+                    <LooplessSelect
+                      value={draft.service_id}
+                      ariaLabel="Service for the new row"
+                      onValueChange={(value) => {
+                        setDraft((current) => ({ ...current, service_id: value }));
+                        setHint("");
+                      }}
+                      options={[
+                        { value: "", label: "Service *" },
+                        ...services.map((item) => ({ value: item.id, label: item.name })),
+                      ]}
+                    />
+                  )}
+                  <input
+                    aria-label="New video topic"
+                    placeholder={
+                      draft.no_post
+                        ? "No reel on this day: press Enter"
+                        : "Type a video topic and press Enter (add links with the … button)"
+                    }
+                    value={draft.title}
+                    disabled={adding}
+                    onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                    onKeyDown={(event) => event.key === "Enter" && void add()}
+                  />
+                </div>
+                {hint && <small className="sheet-new-hint">{hint}</small>}
               </td>
               {role === "ADMIN" && <td className="sheet-cell" />}
               <td className="sheet-cell more">

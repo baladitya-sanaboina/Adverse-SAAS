@@ -125,7 +125,7 @@
 }
 .dark .company-settings-heading span,
 .dark .settings-section-title span {
-  color: #bda3d6;
+  color: #8cc8ff;
 }
 .company-settings-heading h2 {
   margin: 0;
@@ -608,7 +608,7 @@
 }
 .dark .branding-coming-soon > span {
   border-color: #3F3F41;
-  color: #c7b0de;
+  color: #8cc8ff;
   background: #18181A;
 }
 .branding-reset-row button {

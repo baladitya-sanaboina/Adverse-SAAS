@@ -1513,3 +1513,33 @@ a.cal-card-title {
     width: 100%;
   }
 }
+
+/* Service picker on the new sheet row (owner request 2026-11-20). */
+.sheet-new-topic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet-new-topic .loopless-select {
+  min-width: 150px;
+  flex: 0 0 auto;
+}
+
+.sheet-new-topic .loopless-select > button {
+  min-height: 32px !important;
+  font-size: 0.62rem !important;
+}
+
+.sheet-new-topic input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sheet-new-hint {
+  display: block;
+  margin-top: 4px;
+  color: #b74858;
+  font-size: 0.6rem;
+  font-weight: 600;
+}

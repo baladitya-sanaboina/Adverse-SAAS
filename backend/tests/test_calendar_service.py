@@ -8,7 +8,7 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 from app.repositories.calendar_repository import CalendarEntryRow
-from app.repositories.task_repository import ClientRef
+from app.repositories.task_repository import ClientRef, ServiceRef
 from app.schemas.authentication import AuthContext
 from app.schemas.calendar import CalendarEntryCreate, CalendarEntryUpdate
 from app.services.authentication_service import AuthenticationError
@@ -84,6 +84,7 @@ class FakeRepository:
             title=values["title"],
             entry_date=values["entry_date"],
             no_post=values.get("no_post", False),
+            service_id=values.get("service_id"),
         )
         self.rows[new.id] = new
         return new.id
@@ -112,12 +113,14 @@ class FakeTickets:
         self.synced: list[tuple[UUID, str, date]] = []
         self.cancelled: list[UUID] = []
         self.priorities: list[str | None] = []
+        self.services: list[UUID | None] = []
 
-    def create_calendar_ticket(self, company_id, client_id, actor_id, title, description, due, priority=None):  # type: ignore[no-untyped-def]
+    def create_calendar_ticket(self, company_id, client_id, actor_id, title, description, due, priority=None, service_id=None):  # type: ignore[no-untyped-def]
         task_id = uuid4()
         self.statuses[task_id] = "PENDING"
         self.created.append((title, due))
         self.priorities.append(priority)
+        self.services.append(service_id)
         return task_id
 
     def sync_calendar_ticket(self, company_id, task_id, actor_id, title, due):  # type: ignore[no-untyped-def]
@@ -129,12 +132,32 @@ class FakeTickets:
         self.cancelled.append(task_id)
 
 
+REEL = uuid4()
+
+
 class FakeTasks:
+    def get_service(self, company_id: UUID, service_id: UUID) -> ServiceRef | None:
+        return (
+            ServiceRef(REEL, "Reel", "REEL", "ACTIVE", "PER_VIDEO") if service_id == REEL else None
+        )
+
+    def calendar_service_choices(self, company_id: UUID, client_id: UUID) -> list[UUID]:
+        return [REEL]
+
     def get_client_for_user(self, company_id: UUID, user_id: UUID) -> ClientRef | None:
         return CLIENT_A if user_id == USER_A else None
 
     def get_client(self, company_id: UUID, client_id: UUID) -> ClientRef | None:
         return {CLIENT_A.id: CLIENT_A, CLIENT_B.id: CLIENT_B}.get(client_id)
+
+
+class ServiceChoiceTest(unittest.TestCase):
+    """Owner request 2026-11-20: the service of a video is chosen when it is added."""
+
+    def test_service_is_required_unless_no_post(self) -> None:
+        with self.assertRaises(ValueError):
+            CalendarEntryCreate(entry_date=date(2026, 11, 21), title="Reel")
+        CalendarEntryCreate(entry_date=date(2026, 11, 22), title="Rest day", no_post=True)
 
 
 @patch("app.services.calendar_service.validate_user_action_access", return_value=True)
@@ -212,37 +235,63 @@ class CalendarServiceTest(unittest.TestCase):
         service, repository = self.service()
         created = service.client_create(
             context("COMPANY_CLIENT", USER_A),
-            CalendarEntryCreate(entry_date=date(2026, 11, 21), title="Reel"),
+            CalendarEntryCreate(service_id=REEL, entry_date=date(2026, 11, 21), title="Reel"),
         )
         self.assertEqual(self.tickets.created, [("Reel", date(2026, 11, 21))])
         self.assertIsNotNone(repository.rows[created.id].task_id)
         self.assertTrue(notifications.notify.call_args.args[5].startswith("/tasks?task="))
 
+    def test_chosen_service_reaches_the_task(self, *_: Any) -> None:
+        service, _ = self.service()
+        service.client_create(
+            context("COMPANY_CLIENT", USER_A),
+            CalendarEntryCreate(service_id=REEL, entry_date=date(2026, 11, 21), title="Reel"),
+        )
+        self.assertEqual(self.tickets.services, [REEL])
+
+    def test_an_unknown_service_is_refused(self, *_: Any) -> None:
+        service, _ = self.service()
+        with self.assertRaises(AuthenticationError) as refused:
+            service.client_create(
+                context("COMPANY_CLIENT", USER_A),
+                CalendarEntryCreate(service_id=uuid4(), entry_date=date(2026, 11, 21), title="X"),
+            )
+        self.assertEqual(refused.exception.code, "SERVICE_NOT_AVAILABLE")
+
     def test_chosen_priority_reaches_the_task(self, *_: Any) -> None:
         service, _ = self.service()
         service.client_create(
             context("COMPANY_CLIENT", USER_A),
-            CalendarEntryCreate(entry_date=date(2026, 11, 21), title="Reel", priority="URGENT"),
+            CalendarEntryCreate(
+                service_id=REEL, entry_date=date(2026, 11, 21), title="Reel", priority="URGENT"
+            ),
         )
         service.client_create(
             context("COMPANY_CLIENT", USER_A),
-            CalendarEntryCreate(entry_date=date(2026, 11, 22), title="Reel 2"),
+            CalendarEntryCreate(service_id=REEL, entry_date=date(2026, 11, 22), title="Reel 2"),
         )
         self.assertEqual(self.tickets.priorities, ["URGENT", None])
 
     def test_links_without_https_are_fixed_and_words_refused(self, *_: Any) -> None:
         entry = CalendarEntryCreate(
-            entry_date=date(2026, 11, 21), title="Reel", script_url="docs.google.com/document/d/x"
+            service_id=REEL,
+            entry_date=date(2026, 11, 21),
+            title="Reel",
+            script_url="docs.google.com/document/d/x",
         )
         self.assertEqual(entry.script_url, "https://docs.google.com/document/d/x")
         with self.assertRaises(ValueError):
-            CalendarEntryCreate(entry_date=date(2026, 11, 21), title="Reel", reference_url="testi")
+            CalendarEntryCreate(
+                service_id=REEL, entry_date=date(2026, 11, 21), title="Reel", reference_url="testi"
+            )
 
     def test_no_post_day_is_not_a_ticket(self, *_: Any) -> None:
         service, _ = self.service()
         service.client_create(
             context("COMPANY_CLIENT", USER_A),
-            CalendarEntryCreate(entry_date=date(2026, 11, 22), title="No post", no_post=True),
+            CalendarEntryCreate(
+                service_id=REEL, entry_date=date(2026, 11, 22), title="No post", no_post=True
+            ),
         )
         self.assertEqual(self.tickets.created, [])
 
@@ -299,7 +348,7 @@ class CalendarServiceTest(unittest.TestCase):
         service, _ = self.service()
         created = service.client_create(
             context("COMPANY_CLIENT", USER_A),
-            CalendarEntryCreate(entry_date=date(2026, 11, 21), title="Reel"),
+            CalendarEntryCreate(service_id=REEL, entry_date=date(2026, 11, 21), title="Reel"),
         )
         self.assertEqual(created.client.id, CLIENT_A.id)
         self.assertEqual(notifications.notify.call_args.args[2], "calendar.entry")
@@ -309,7 +358,7 @@ class CalendarServiceTest(unittest.TestCase):
         with self.assertRaises(AuthenticationError) as error:
             service.admin_create(
                 context("COMPANY_ADMIN"),
-                CalendarEntryCreate(entry_date=date(2026, 11, 21), title="Reel"),
+                CalendarEntryCreate(service_id=REEL, entry_date=date(2026, 11, 21), title="Reel"),
             )
         self.assertEqual(error.exception.status_code, 422)
 
@@ -330,7 +379,10 @@ class CalendarServiceTest(unittest.TestCase):
     def test_reference_link_must_be_web_address(self, *_: Any) -> None:
         with self.assertRaises(ValueError):
             CalendarEntryCreate(
-                entry_date=date(2026, 11, 21), title="Reel", reference_url="javascript:alert(1)"
+                service_id=REEL,
+                entry_date=date(2026, 11, 21),
+                title="Reel",
+                reference_url="javascript:alert(1)",
             )
 
 

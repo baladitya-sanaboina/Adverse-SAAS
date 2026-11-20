@@ -58,9 +58,16 @@ class CalendarEntryResponse(BaseModel):
     edited_manual: bool
     script: CalendarScriptRef | None
     task: CalendarTaskRef | None
+    service: NamedRef | None = None  # Reel, Carousel, ... (owner request 2026-11-20)
     created_by_name: str
     created_at: datetime
     updated_at: datetime
+
+
+class CalendarServiceOption(BaseModel):
+    id: UUID
+    name: str
+    code: str
 
 
 class CalendarListResponse(BaseModel):
@@ -82,6 +89,8 @@ class CalendarEntryCreate(BaseModel):
     no_post: bool = False
     # The priority of the task this entry opens (owner request 2026-11-19); empty = from the date.
     priority: TaskPriority | None = None
+    # The service of the video (owner request 2026-11-20): required unless it is a no-post day.
+    service_id: UUID | None = None
 
     _strip_text = field_validator("title", "notes")(_strip)
     _url = field_validator("reference_url", "script_url", "pdf_url")(_check_url)
@@ -90,6 +99,8 @@ class CalendarEntryCreate(BaseModel):
     def check_title(self) -> Self:
         if not self.title:
             raise ValueError("Title cannot be blank.")
+        if not self.no_post and self.service_id is None:
+            raise ValueError("Choose the service: Reel, Carousel, Thumbnail...")
         return self
 
 

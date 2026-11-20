@@ -40,6 +40,8 @@ class CalendarEntryRow:
     updated_at: datetime
     script_url: str = ""
     pdf_url: str = ""
+    service_id: UUID | None = None
+    service_name: str | None = None
 
 
 _SELECT = """
@@ -48,15 +50,17 @@ SELECT e.id, e.client_id, c.name, c.code, e.entry_date, e.title, e.reference_url
   e.script_file_name, e.script_storage_path, e.script_mime_type, e.script_size_bytes,
   e.task_id, t.number, t.title, t.status::text,
   COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email, ''),
-  e.created_at, e.updated_at, e.script_url, e.pdf_url
+  e.created_at, e.updated_at, e.script_url, e.pdf_url, e.service_id, sv.name
 FROM content_calendar_entries e
 JOIN clients c ON c.id = e.client_id
+LEFT JOIN company_services sv ON sv.id = e.service_id
 LEFT JOIN tasks t ON t.id = e.task_id
 LEFT JOIN users u ON u.id = e.created_by_id
 """
 
 # Columns a caller may change through update(); anything else is ignored.
 EDITABLE = (
+    "service_id",
     "entry_date",
     "title",
     "reference_url",

@@ -864,6 +864,7 @@ class TaskService:
         description: str,
         due_date: date,
         priority: TaskPriority | None = None,
+        service_id: UUID | None = None,
     ) -> UUID | None:
         """Turn a calendar entry into a Pending, unassigned task. The service is the one the
         client uses most that has a client rate; priority is the one chosen on the entry, or
@@ -874,7 +875,13 @@ class TaskService:
         client = self.repository.get_client(company_id, client_id)
         if client is None or client.status != "ACTIVE":
             return None
-        choices = self.repository.calendar_service_choices(company_id, client_id)
+        # The service chosen on the entry (owner request 2026-11-20); old entries without one
+        # fall back to the client's most used service.
+        choices = (
+            [service_id]
+            if service_id is not None
+            else self.repository.calendar_service_choices(company_id, client_id)
+        )
         picked: tuple[ServiceRef, Decimal | None] | None = None
         for service_id in choices:
             service = self.repository.get_service(company_id, service_id)

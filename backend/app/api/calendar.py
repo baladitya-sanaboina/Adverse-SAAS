@@ -16,6 +16,7 @@ from app.schemas.calendar import (
     CalendarEntryResponse,
     CalendarEntryUpdate,
     CalendarListResponse,
+    CalendarServiceOption,
     CalendarTaskLink,
     StaffCalendarResponse,
 )
@@ -49,6 +50,18 @@ def admin_list(
     end: date | None = Query(None),
 ) -> CalendarListResponse:
     return calendar_service.admin_list(context, client_id, start, end)
+
+
+@router.get(
+    "/services",
+    response_model=list[CalendarServiceOption],
+    summary="Services to pick for a video (the client's most used first)",
+    responses=ERRORS,
+)
+def admin_services(
+    context: AuthenticatedContext, client_id: UUID | None = Query(None)
+) -> list[CalendarServiceOption]:
+    return calendar_service.admin_services(context, client_id)
 
 
 @router.post(
@@ -103,6 +116,16 @@ def client_list(
     end: date | None = Query(None),
 ) -> CalendarListResponse:
     return calendar_service.client_list(context, start, end)
+
+
+@client_router.get(
+    "/services",
+    response_model=list[CalendarServiceOption],
+    summary="Services I can pick for a video",
+    responses=ERRORS,
+)
+def client_services(context: AuthenticatedContext) -> list[CalendarServiceOption]:
+    return calendar_service.client_services(context)
 
 
 @client_router.post(
