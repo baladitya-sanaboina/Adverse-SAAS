@@ -196,6 +196,28 @@ def client_payment_sheets(client_id: UUID, context: AuthenticatedContext) -> lis
 
 
 @router.get(
+    "/people/{user_id}/payslips/{month}.pdf",
+    summary="An employee's payslip for one month, e.g. 2026-11 (Admin only)",
+    responses=ERRORS,
+    response_class=Response,
+)
+def employee_payslip(user_id: UUID, month: str, context: AuthenticatedContext) -> Response:
+    content, filename = finance_service.admin_payslip(context, user_id, _month(month))
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _month(value: str) -> date:
+    try:
+        return date.fromisoformat(f"{value[:7]}-01")
+    except ValueError as error:
+        raise AuthenticationError(422, "MONTH_INVALID", "Use a month like 2026-11.") from error
+
+
+@router.get(
     "/sheets/managers/{manager_id}/{index}/statement.pdf",
     summary="A manager's payment sheet as a statement PDF (Admin only)",
     responses=ERRORS,

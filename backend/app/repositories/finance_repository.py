@@ -208,6 +208,30 @@ class SalaryDateConflict(Exception):
 class FinanceRepository:
     # -- company settings ----------------------------------------------------------------
 
+    def payslip_person(self, company_id: UUID, user_id: UUID) -> dict[str, str] | None:
+        """The employee details printed on a payslip."""
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT u.name, COALESCE(NULLIF(u.recovery_email, ''), u.email), "
+                "COALESCE(e.employee_code, ''), COALESCE(e.designation, ''), "
+                "COALESCE(d.name, ''), e.joining_date "
+                "FROM users u LEFT JOIN employees e ON e.user_id = u.id "
+                "LEFT JOIN departments d ON d.id = e.department_id "
+                "WHERE u.id = %s AND u.company_id = %s",
+                (user_id, company_id),
+            )
+            row = cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            "name": str(row[0]),
+            "email": str(row[1] or ""),
+            "code": str(row[2]),
+            "designation": str(row[3]),
+            "department": str(row[4]),
+            "joining_date": f"{row[5]:%d %b %Y}" if row[5] else "",
+        }
+
     def company_timezone(self, company_id: UUID) -> str:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(

@@ -6,13 +6,16 @@ import {
   Banknote,
   CalendarDays,
   ClipboardList,
+  FileDown,
   FileText,
-  Hash,
   HandCoins,
+  Hash,
   History,
+  Pencil,
   PiggyBank,
   Plus,
   RefreshCw,
+  Tag,
   Wallet,
 } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
@@ -1530,6 +1533,7 @@ function ManagerFinance({
           </Panel>
         </div>
         <div>
+          <ManagerRates managerId={data.person.id} name={data.person.name} />
           <Panel icon={<History />} eyebrow="TOP-UPS" title="Sent to this manager">
             <div className="production-panel-body">
               <PaymentList
@@ -1591,7 +1595,12 @@ function EmployeeFinance({
       </div>
       <div className="production-detail">
         <div>
-          <Panel icon={<CalendarDays />} eyebrow="MONTHS" title="Salary by month" description="Newest first.">
+          <Panel
+            icon={<CalendarDays />}
+            eyebrow="MONTHS"
+            title="Salary by month"
+            description="Newest first. Download any month's payslip."
+          >
             <div className="production-panel-body">
               {months.length === 0 ? (
                 <p className="production-muted">Set a salary to start tracking months.</p>
@@ -1605,9 +1614,18 @@ function EmployeeFinance({
                           Due {money(line.due, currency)} · paid {money(line.paid, currency)}
                         </small>
                       </div>
-                      <b className={Number(line.pending) > 0 ? "production-overdue" : undefined}>
-                        {Number(line.pending) > 0 ? `${money(line.pending, currency)} pending` : "Paid"}
-                      </b>
+                      <span className="payslip-cell">
+                        <b className={Number(line.pending) > 0 ? "production-overdue" : undefined}>
+                          {Number(line.pending) > 0 ? `${money(line.pending, currency)} pending` : "Paid"}
+                        </b>
+                        <a
+                          className="management-secondary-action"
+                          href={`/api/company/finance/people/${data.person.id}/payslips/${line.month.slice(0, 7)}.pdf`}
+                          download
+                        >
+                          <FileDown aria-hidden="true" /> Payslip
+                        </a>
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -1661,5 +1679,141 @@ function EmployeeFinance({
         </div>
       </div>
     </>
+  );
+}
+
+type RateItem = {
+  service_id: string;
+  service_name: string;
+  service_status: string;
+  default_pricing_model: string;
+  current_rate: { amount: string; pricing_model: string; currency: string } | null;
+};
+
+/**
+ * A manager's fixed price per service (owner request 2026-11-19): Reel, Carousel, Thumbnail...
+ * Filled in when this manager is given a task; it can still be changed on any one task.
+ */
+function ManagerRates({ managerId, name }: { managerId: string; name: string }) {
+  const [items, setItems] = useState<RateItem[] | null>(null);
+  const [editing, setEditing] = useState("");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const data = await api<{ items: RateItem[] }>(`/api/company/pricing/managers/${managerId}`);
+      setItems(data.items.filter((item) => item.service_status === "ACTIVE"));
+    } catch (reason) {
+      setError(errorText(reason, "Unable to load the rates."));
+    }
+  }, [managerId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  async function save(item: RateItem) {
+    if (amount === "" || Number(amount) < 0) return setError("Enter the price.");
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/company/pricing/managers/${managerId}/services/${item.service_id}`, {
+        method: "PUT",
+        json: {
+          pricing_model: item.current_rate?.pricing_model ?? item.default_pricing_model,
+          amount: Number(amount).toFixed(2),
+          effective_from: new Date().toISOString(),
+          notes: null,
+        },
+      });
+      setEditing("");
+      setNotice(`${item.service_name}: ${money(amount)} for ${name} from today.`);
+      await load();
+    } catch (reason) {
+      setError(errorText(reason, "Unable to save the price."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel
+      icon={<Tag />}
+      eyebrow="RATES"
+      title="Fixed price per service"
+      description="Filled in when you give this manager a task. You can still change it on any task."
+    >
+      <div className="production-panel-body">
+        {error && <div className="management-form-message">{error}</div>}
+        {notice && <p className="production-muted">{notice}</p>}
+        {items === null ? (
+          <p className="production-muted">Loading rates…</p>
+        ) : items.length === 0 ? (
+          <p className="production-muted">Add services first in Settings → Services & Pricing.</p>
+        ) : (
+          <ul className="production-list">
+            {items.map((item) => (
+              <li key={item.service_id}>
+                <div>
+                  <strong>{item.service_name}</strong>
+                  <small>{item.current_rate ? "Fixed price per task" : "No price set yet"}</small>
+                </div>
+                {editing === item.service_id ? (
+                  <span className="rate-editor">
+                    <span className="management-input">
+                      <Wallet aria-hidden="true" />
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={amount}
+                        autoFocus
+                        aria-label={`${item.service_name} price`}
+                        onChange={(event) => setAmount(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") void save(item);
+                          if (event.key === "Escape") setEditing("");
+                        }}
+                      />
+                    </span>
+                    <button
+                      type="button"
+                      className="management-primary-action"
+                      disabled={busy}
+                      onClick={() => void save(item)}
+                    >
+                      {busy ? "Saving…" : "Save"}
+                    </button>
+                    <button type="button" className="management-secondary-action" onClick={() => setEditing("")}>
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <span className="rate-editor">
+                    <b>{item.current_rate ? money(item.current_rate.amount, item.current_rate.currency) : "—"}</b>
+                    <button
+                      type="button"
+                      className="management-secondary-action"
+                      onClick={() => {
+                        setEditing(item.service_id);
+                        setAmount(item.current_rate ? String(Number(item.current_rate.amount)) : "");
+                        setError("");
+                        setNotice("");
+                      }}
+                    >
+                      <Pencil aria-hidden="true" /> {item.current_rate ? "Change" : "Set"}
+                    </button>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Panel>
   );
 }

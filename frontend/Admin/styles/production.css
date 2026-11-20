@@ -1456,3 +1456,49 @@
     flex-direction: column;
   }
 }
+
+/* Payslip download next to each salary month (owner request 2026-11-19). */
+.payslip-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.payslip-cell .management-secondary-action {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 0.62rem;
+  text-decoration: none;
+}
+
+.payslip-cell .management-secondary-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Manager rates panel (owner request 2026-11-19). */
+.rate-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.rate-editor .management-input {
+  width: 130px;
+  min-height: 36px;
+}
+
+.rate-editor :is(.management-primary-action, .management-secondary-action) {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 0.64rem;
+}
+
+.rate-editor svg {
+  width: 14px;
+  height: 14px;
+}

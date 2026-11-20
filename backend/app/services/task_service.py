@@ -99,6 +99,28 @@ def _not_found() -> AuthenticationError:
 NO_RATE_REASON = "No client rate yet: set the price before approving."
 
 
+def _price_missing(row: TaskRow) -> bool:
+    """No client price yet (owner request 2026-11-19): the task was made without a client rate
+    and nobody has entered a price. A deliberate 0 (with its own reason) or a monthly package is
+    a real price."""
+    if row.package_id is not None:
+        return False
+    return Decimal(row.client_price_final or 0) <= 0 and row.client_price_reason in (
+        "",
+        NO_RATE_REASON,
+    )
+
+
+def _require_price(row: TaskRow) -> None:
+    if _price_missing(row):
+        raise AuthenticationError(
+            409,
+            "CLIENT_PRICE_REQUIRED",
+            "Set the client price for this task first: this client has no rate for the service. "
+            "Use Edit price on the task, or set the client's rate in Services & Pricing.",
+        )
+
+
 class TaskService:
     def __init__(
         self,
@@ -495,6 +517,10 @@ class TaskService:
 
     def create_task(self, context: AuthContext, request: TaskCreateRequest) -> TaskWriteResponse:
         company_id = self._admin(context, "CREATE")
+        if request.due_date is None:
+            raise AuthenticationError(
+                422, "DUE_DATE_REQUIRED", "Choose the due date for this task."
+            )
         client = self.repository.get_client(company_id, request.client_id)
         if client is None:
             raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
@@ -609,6 +635,7 @@ class TaskService:
                     "TASK_CLOSED",
                     "Approved, completed or cancelled tasks cannot be reassigned.",
                 )
+            _require_price(row)
             mutation = TaskMutation(
                 updates={
                     "assignee_user_id": person.id,
@@ -792,6 +819,8 @@ class TaskService:
         target = request.status
         if target == row.status:
             raise AuthenticationError(409, "STATUS_UNCHANGED", "The task already has this status.")
+        if target != "CANCELLED":
+            _require_price(row)
         has_assignee = row.assignee_user_id is not None
         if not can_transition(role, row.status, target, has_assignee):
             if role == "ADMIN" and not has_assignee:

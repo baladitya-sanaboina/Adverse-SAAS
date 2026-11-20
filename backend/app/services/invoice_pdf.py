@@ -617,3 +617,217 @@ def render_sheet_statement_pdf(
 
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
     return buffer.getvalue()
+
+
+def render_payslip_pdf(
+    *,
+    company: CompanyProfile,
+    employee: dict[str, str],
+    month: date,
+    due: Decimal,
+    payments: list[Any],
+    currency: str,
+) -> bytes:
+    """A month's payslip (owner request 2026-11-19): the salary for the month, every salary
+    payment made for it, and what is still pending. `employee` holds name, code, designation,
+    department, joining date and email (any may be empty)."""
+    _fonts()
+    s = _styles()
+    buffer = BytesIO()
+    width = A4[0] - 32 * mm
+    label = f"{month:%B %Y}"
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=16 * mm,
+        rightMargin=16 * mm,
+        topMargin=16 * mm,
+        bottomMargin=18 * mm,
+        title=f"Payslip {label} · {employee.get('name', '')}",
+        author=company.name,
+    )
+    paid = sum((Decimal(item.amount) for item in payments), Decimal("0"))
+    pending = max(Decimal(due) - paid, Decimal("0"))
+    status = "Paid" if pending == 0 and paid > 0 else "Partly paid" if paid > 0 else "Not paid yet"
+    story: list[Any] = []
+    logo = Image(str(ASSETS / "adverse-logo.png"), width=46 * mm, height=46 * mm * 419 / 1600)
+    colour = "#287150" if status == "Paid" else "#0876ED"
+    header = Table(
+        [
+            [
+                logo,
+                [
+                    Paragraph("PAYSLIP", s["title"]),
+                    Paragraph(
+                        f'{label} · <font color="{colour}">{status}</font>', s["right_muted"]
+                    ),
+                ],
+            ]
+        ],
+        colWidths=[width * 0.5, width * 0.5],
+    )
+    header.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    story += [header, Spacer(1, 8 * mm)]
+
+    def block(title: str, name: str, details: list[str | None]) -> list[Any]:
+        return [Paragraph(title, s["label"]), Paragraph(_escape(name), s["strong"])] + [
+            Paragraph(_escape(item), s["muted"]) for item in details if item
+        ]
+
+    joined = employee.get("joining_date", "")
+    parties = Table(
+        [
+            [
+                block("EMPLOYER", company.name, [company.email, company.phone, company.address]),
+                block(
+                    "EMPLOYEE",
+                    employee.get("name", ""),
+                    [
+                        employee.get("code") and f"Employee ID {employee['code']}",
+                        " · ".join(
+                            part
+                            for part in (employee.get("designation"), employee.get("department"))
+                            if part
+                        )
+                        or None,
+                        f"Joined {joined}" if joined else None,
+                        employee.get("email"),
+                    ],
+                ),
+            ]
+        ],
+        colWidths=[width * 0.5, width * 0.5],
+    )
+    parties.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+    story += [parties, Spacer(1, 6 * mm)]
+
+    facts = [
+        ("PAY MONTH", label),
+        ("MONTHLY SALARY", amount_text(Decimal(due), currency)),
+        ("PAID", amount_text(paid, currency)),
+        ("PENDING", amount_text(pending, currency)),
+    ]
+    strip = Table(
+        [[[Paragraph(name, s["label"]), Paragraph(value, s["strong"])] for name, value in facts]],
+        colWidths=[width * 0.25] * 4,
+    )
+    strip.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), TINT),
+                ("BOX", (0, 0), (-1, -1), 0.6, LINE),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    story += [strip, Spacer(1, 7 * mm)]
+
+    right = ParagraphStyle("r", parent=s["cell"], alignment=TA_RIGHT)
+    rows: list[list[Any]] = [
+        [
+            Paragraph("Paid on", s["head"]),
+            Paragraph("Method", s["head"]),
+            Paragraph("Reference", s["head"]),
+            Paragraph("Amount", s["head_right"]),
+        ]
+    ]
+    for item in payments:
+        rows.append(
+            [
+                Paragraph(_day(item.paid_on), s["cell"]),
+                Paragraph(METHODS.get(str(item.method), str(item.method)), s["cell"]),
+                Paragraph(_escape(item.reference or "—"), s["cell"]),
+                Paragraph(amount_text(Decimal(item.amount), currency), right),
+            ]
+        )
+    if not payments:
+        rows.append(["", Paragraph("No salary paid for this month yet.", s["muted"]), "", ""])
+    table = Table(
+        rows,
+        colWidths=[width * 0.22, width * 0.22, width * 0.34, width * 0.22],
+        repeatRows=1,
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), BLUE),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("LINEBELOW", (0, 1), (-1, -1), 0.4, LINE),
+            ]
+        )
+    )
+    story += [Paragraph("SALARY PAYMENTS", s["label"]), Spacer(1, 2 * mm), table, Spacer(1, 6 * mm)]
+
+    total_rows = [
+        [f"Salary for {label}", amount_text(Decimal(due), currency)],
+        ["Paid", amount_text(paid, currency)],
+    ]
+    last = ["Pending", amount_text(pending, currency)] if pending > 0 else ["Fully paid", ""]
+    totals = Table(
+        [[Paragraph(a, s["muted"]), Paragraph(b, s["right"])] for a, b in total_rows]
+        + [
+            [
+                Paragraph(last[0], s["strong"]),
+                Paragraph(
+                    f'<font name="Poppins-Bold" size="13" color="{"#B74858" if pending > 0 else "#287150"}">'
+                    f"{last[1] or amount_text(paid, currency)}</font>",
+                    s["right"],
+                ),
+            ]
+        ],
+        colWidths=[width * 0.36, width * 0.2],
+        hAlign="RIGHT",
+    )
+    totals.setStyle(
+        TableStyle(
+            [
+                ("LINEABOVE", (0, len(total_rows)), (-1, len(total_rows)), 0.8, INK),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, len(total_rows)), (-1, len(total_rows)), 8),
+            ]
+        )
+    )
+    story += [
+        KeepTogether([totals]),
+        Spacer(1, 10 * mm),
+        Paragraph(
+            "This payslip is generated by Adverse from the salary records of "
+            f"{_escape(company.name)}. It needs no signature.",
+            s["muted"],
+        ),
+    ]
+
+    def footer(canvas: Any, document: Any) -> None:
+        canvas.saveState()
+        canvas.setFont("Poppins", 7.5)
+        canvas.setFillColor(MUTED)
+        canvas.drawString(
+            16 * mm, 10 * mm, f"{company.name} · Payslip {label} · {employee.get('name', '')}"
+        )
+        canvas.drawRightString(A4[0] - 16 * mm, 10 * mm, f"Page {document.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    return buffer.getvalue()

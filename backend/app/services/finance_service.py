@@ -399,6 +399,41 @@ class FinanceService:
             )
         return self.manager_earnings(company_id, context.user_id)
 
+    def payslip_pdf(self, company_id: UUID, user_id: UUID, month: date) -> tuple[bytes, str]:
+        """One month's payslip (owner request 2026-11-19)."""
+        from app.repositories.invoice_repository import InvoiceRepository
+        from app.services.invoice_pdf import render_payslip_pdf
+
+        salary = self.employee_salary(company_id, user_id)
+        first = month.replace(day=1)
+        line = next((item for item in salary.months if item.month == first), None)
+        person = self.repository.payslip_person(company_id, user_id)
+        if line is None or person is None:
+            raise AuthenticationError(
+                404, "PAYSLIP_NOT_FOUND", f"There is no salary for {first:%B %Y}."
+            )
+        payments = [item for item in salary.payments if item.period_month.replace(day=1) == first]
+        pdf = render_payslip_pdf(
+            company=InvoiceRepository().company_profile(company_id),
+            employee=person,
+            month=first,
+            due=line.due,
+            payments=sorted(payments, key=lambda item: item.paid_on),
+            currency=salary.currency,
+        )
+        safe = "".join(ch for ch in person["name"] if ch.isalnum() or ch in " -").strip()
+        return pdf, f"Payslip {first:%Y-%m} {safe or 'employee'}.pdf"
+
+    def admin_payslip(self, context: AuthContext, user_id: UUID, month: date) -> tuple[bytes, str]:
+        company_id = self._admin(context, "FINANCE", "VIEW")
+        return self.payslip_pdf(company_id, user_id, month)
+
+    def my_payslip(self, context: AuthContext, month: date) -> tuple[bytes, str]:
+        company_id, role = self._worker(context)
+        if role != "EMPLOYEE":
+            raise AuthenticationError(403, "EMPLOYEE_REQUIRED", "Payslips are for employees.")
+        return self.payslip_pdf(company_id, context.user_id, month)
+
     def my_salary(self, context: AuthContext) -> EmployeeSalaryResponse:
         company_id, role = self._worker(context)
         if role != "EMPLOYEE":
@@ -797,8 +832,19 @@ class FinanceService:
             company_name=self._company_name(company_id),
             once_key=f"salary:{payment_id}",
             mailbox_user=request.user_id,
+            attachments=self._payslip_attachment(company_id, request.user_id, payment.period_month),
         )
         return payment
+
+    def _payslip_attachment(
+        self, company_id: UUID, user_id: UUID, month: date
+    ) -> list[tuple[bytes, str, str]]:
+        try:
+            pdf, name = self.payslip_pdf(company_id, user_id, month)
+            return [(pdf, name, "application/pdf")]
+        except Exception:  # noqa: BLE001 - the mail still goes without it
+            logger.warning("Payslip for the salary mail failed", exc_info=True)
+            return []
 
     def list_payouts(
         self, context: AuthContext, filters: PaymentListFilters

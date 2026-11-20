@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticatedBackend, setSession } from "@/lib/auth/server";
 // Copy of frontend/shared/production/backend-proxy.ts (the Client app cannot import shared/). Keep in sync.
 
-const SAFE_SEGMENT = /^[A-Za-z0-9_-]+$/;
+// Letters, digits, - and _, plus a dot for file names such as statement.pdf (never . or ..).
+const SAFE_SEGMENT = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
 const PASSED_HEADERS = ["content-type", "content-disposition", "content-length", "cache-control", "x-accel-buffering"];
 
 /**

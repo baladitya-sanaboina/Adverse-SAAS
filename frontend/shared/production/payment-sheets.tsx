@@ -153,7 +153,6 @@ export function PaymentSheets({
             // Each tab shows how the money moves: what came in and what went on to the next sheet.
             const carried = Number(item.carried_in);
             const left = Number(item.left);
-            const signed = (value: number) => `${value < 0 ? "−" : ""}${money(Math.abs(value), currency)}`;
             return (
               <Fragment key={item.index}>
                 {position > 0 && <ArrowRight className="sheet-tab-arrow" aria-hidden="true" />}

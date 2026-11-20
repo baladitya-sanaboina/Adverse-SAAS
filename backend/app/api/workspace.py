@@ -160,6 +160,29 @@ def my_commission(context: AuthenticatedContext) -> ManagerEarningsResponse:
 
 
 @router.get(
+    "/salary/payslips/{month}.pdf",
+    summary="My payslip for one month, e.g. 2026-11 (employees)",
+    responses=ERRORS,
+    response_class=Response,
+)
+def my_payslip(month: str, context: AuthenticatedContext) -> Response:
+    from datetime import date
+
+    from app.services.authentication_service import AuthenticationError
+
+    try:
+        first = date.fromisoformat(f"{month[:7]}-01")
+    except ValueError as error:
+        raise AuthenticationError(422, "MONTH_INVALID", "Use a month like 2026-11.") from error
+    content, filename = finance_service.my_payslip(context, first)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
     "/earnings/sheets/{index}/statement.pdf",
     summary="One of my payment sheets as a statement PDF (managers)",
     responses=ERRORS,

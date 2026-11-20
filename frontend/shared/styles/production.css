@@ -1427,3 +1427,24 @@
   width: 18px;
   height: 18px;
 }
+
+/* Payslip download next to each salary month (owner request 2026-11-19). */
+.payslip-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.payslip-cell .management-secondary-action {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 0.62rem;
+  text-decoration: none;
+}
+
+.payslip-cell .management-secondary-action svg {
+  width: 14px;
+  height: 14px;
+}

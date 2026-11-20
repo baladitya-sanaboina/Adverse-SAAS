@@ -709,6 +709,7 @@ function TaskForm({
       if (message) next[key] = message;
     }
     if (!editing && !values.client_price) next.client_price = "Enter the price for this task.";
+    if (!editing && !values.due_date) next.due_date = "Choose the due date.";
     if (!editing && isManager && !values.commission) next.commission = "Enter the commission for this manager.";
     setErrors(next);
     if (Object.values(next).some(Boolean)) return;
@@ -852,11 +853,12 @@ function TaskForm({
               options={PRIORITY_OPTIONS}
             />
           </Field>
-          <Field label="Due date">
+          <Field label="Due date" error={errors.due_date}>
             <LooplessDate
               value={values.due_date}
               onValueChange={(value) => update("due_date", value)}
               ariaLabel="Due date"
+              clearable={editing}
             />
           </Field>
           {!editing && (

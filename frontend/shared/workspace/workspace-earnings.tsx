@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarDays, ClipboardList, History } from "lucide-react";
+import { CalendarDays, ClipboardList, FileDown, History } from "lucide-react";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { Panel, TableSkeleton } from "../production/production-ui";
 import {
@@ -284,7 +284,16 @@ function EmployeeSalaryPageContent() {
                                   Due {money(line.due, currency)} · paid {money(line.paid, currency)}
                                 </small>
                               </div>
-                              <b>{Number(line.pending) > 0 ? `${money(line.pending, currency)} pending` : "Paid"}</b>
+                              <span className="payslip-cell">
+                                <b>{Number(line.pending) > 0 ? `${money(line.pending, currency)} pending` : "Paid"}</b>
+                                <a
+                                  className="management-secondary-action"
+                                  href={`/api/workspace/salary/payslips/${line.month.slice(0, 7)}.pdf`}
+                                  download
+                                >
+                                  <FileDown aria-hidden="true" /> Payslip
+                                </a>
+                              </span>
                             </li>
                           ))}
                         </ul>

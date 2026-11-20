@@ -191,6 +191,7 @@ class TaskServiceTest(unittest.TestCase):
         self.service = TaskService(self.repo, FakeFinanceRepository())  # type: ignore[arg-type]
 
     def create(self, **fields: Any) -> TaskCreateRequest:
+        fields.setdefault("due_date", date(2026, 12, 1))
         return TaskCreateRequest(client_id=CLIENT, service_id=SERVICE, title="Reel", **fields)
 
     # -- who may do what ----------------------------------------------------------------
@@ -398,6 +399,28 @@ class ToAssignTest(unittest.TestCase):
         self.assertEqual(admin.due_today, [])  # shown once, under To assign
         worker = service.focus_worker(context("COMPANY_MANAGER", MANAGER))
         self.assertEqual(worker.to_assign, [])
+
+
+class PriceAndDateRulesTest(unittest.TestCase):
+    """Owner rules 2026-11-19: no due date, no task; no price, no status change."""
+
+    @patch("app.services.task_service.validate_user_action_access", return_value=True)
+    def test_a_task_needs_a_due_date(self, _: Any) -> None:
+        service = TaskService(FakeTaskRepository(), FakeFinanceRepository())  # type: ignore[arg-type]
+        request = TaskCreateRequest(client_id=CLIENT, service_id=SERVICE, title="Reel")
+        with self.assertRaises(AuthenticationError) as refused:
+            service.create_task(context("COMPANY_ADMIN", ADMIN), request)
+        self.assertEqual(refused.exception.code, "DUE_DATE_REQUIRED")
+
+    def test_status_waits_for_a_price(self) -> None:
+        from app.services.task_service import NO_RATE_REASON, _require_price
+
+        no_price = task_row(client_price_final=Decimal("0"), client_price_reason=NO_RATE_REASON)
+        with self.assertRaises(AuthenticationError) as refused:
+            _require_price(no_price)
+        self.assertEqual(refused.exception.code, "CLIENT_PRICE_REQUIRED")
+        _require_price(task_row(client_price_final=Decimal("700")))  # a client rate
+        _require_price(task_row(client_price_final=Decimal("0"), client_price_reason="Free reel"))
 
 
 class CalendarTicketTest(unittest.TestCase):
