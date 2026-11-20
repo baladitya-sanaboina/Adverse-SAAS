@@ -45,6 +45,65 @@ class CompanySettingsRecord:
     danger_color: str = "#C2414F"
 
 
+DEFAULT_ROLES = ["COMPANY_ADMIN", "COMPANY_MANAGER", "COMPANY_EMPLOYEE", "COMPANY_CLIENT"]
+
+
+def ensure_tenant_defaults(cursor: Any, company_id: UUID | str) -> bool:
+    """Create the company's settings row when it is missing, with the same defaults company
+    setup uses (colours, theme, the company's timezone and language, role permissions). Returns
+    True when a row was added."""
+    cursor.execute(
+        "SELECT r.code, m.code, p.code FROM role_permissions rp "
+        "JOIN roles r ON r.id = rp.role_id JOIN modules m ON m.id = rp.module_id "
+        "JOIN permissions p ON p.id = rp.permission_id "
+        "WHERE r.code = ANY(%s) ORDER BY r.code, m.code, p.code",
+        (DEFAULT_ROLES,),
+    )
+    permissions: dict[str, list[str]] = {code: [] for code in DEFAULT_ROLES}
+    for role_code, module_code, permission_code in cursor.fetchall():
+        permissions[str(role_code)].append(f"{module_code}_{permission_code}")
+    cursor.execute(
+        "INSERT INTO company_tenant_defaults (company_id, primary_color, secondary_color, "
+        "accent_color, theme, timezone, language, default_roles, default_permissions, "
+        "notification_preferences, dashboard_configuration, created_at, updated_at) "
+        "SELECT c.id, '#0876ED', '#065EC1', '#0876ED', 'system', "
+        "COALESCE(NULLIF(c.timezone, ''), 'Asia/Kolkata'), COALESCE(NULLIF(c.language, ''), 'en'), "
+        "%s, %s, %s, %s, NOW(), NOW() FROM companies c WHERE c.id = %s "
+        "ON CONFLICT (company_id) DO NOTHING",
+        (
+            Jsonb(DEFAULT_ROLES),
+            Jsonb(permissions),
+            Jsonb({"email": True, "in_app": True}),
+            Jsonb({"layout": "default", "widgets": []}),
+            company_id,
+        ),
+    )
+    return bool(cursor.rowcount)
+
+
+def repair_missing_tenant_defaults() -> int:
+    """At startup: every company without a settings row gets one. Never raises."""
+    import logging
+
+    try:
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT c.id FROM companies c LEFT JOIN company_tenant_defaults d "
+                "ON d.company_id = c.id WHERE d.company_id IS NULL"
+            )
+            missing = [row[0] for row in cursor.fetchall()]
+            for company_id in missing:
+                ensure_tenant_defaults(cursor, company_id)
+            if missing:
+                logging.getLogger(__name__).warning(
+                    "Added missing company settings for %s companies.", len(missing)
+                )
+            return len(missing)
+    except Exception:  # noqa: BLE001 - startup must go on
+        logging.getLogger(__name__).warning("Company settings repair failed", exc_info=True)
+        return 0
+
+
 class CompanySettingsRepository:
     _select = """SELECT c.id::text,c.code,c.name,c.description,c.contact_email,c.phone,c.address,c.website,
       c.timezone,c.language,d.logo_url,d.favicon_url,d.primary_color,d.secondary_color,
@@ -97,6 +156,11 @@ class CompanySettingsRepository:
             with connection.cursor() as cursor:
                 cursor.execute(self._select, (company_id,))
                 row = cursor.fetchone()
+                if row is None and ensure_tenant_defaults(cursor, company_id):
+                    # A company made without its settings row gets one (owner report 2026-11-20:
+                    # "Company settings are not initialized" on the Settings page).
+                    cursor.execute(self._select, (company_id,))
+                    row = cursor.fetchone()
                 return self._record(row) if row else None
 
     def update(

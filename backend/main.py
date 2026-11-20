@@ -58,6 +58,7 @@ from app.database.connectivity import close_database_pool, open_database_pool
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.tenant import TenantContextMiddleware
+from app.repositories.company_settings_repository import repair_missing_tenant_defaults
 from app.services import default_admin_service, reminder_service
 from app.services.authentication_service import AuthenticationError
 from app.services.development_test_credentials_service import (
@@ -85,6 +86,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     open_database_pool()
     development_test_credentials_service.ensure()
     default_admin_service.ensure()
+    repair_missing_tenant_defaults()
     if settings.environment != "test":
         reminder_service.start()
     try:
