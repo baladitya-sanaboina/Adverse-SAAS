@@ -33,6 +33,9 @@ class ClientCreate(BaseModel):
     # Left out: made automatically, CLT-0001, CLT-0002, ... per company (owner request 2026-11-19).
     code: str | None = Field(default=None, min_length=2, max_length=30, pattern=r"^[A-Za-z0-9-]+$")
     email: EmailStr | None = None
+    # The Adverse ID (name@adverseindia.com) for the portal; checked before the client is
+    # saved (owner rule 2026-11-26). Left out: one is made from the name.
+    portal_login_email: EmailStr | None = None
     phone: str | None = Field(default=None, pattern=r"^\+?[0-9 ()-]{7,24}$")
     website: HttpUrl | None = None
     address: str = Field(default="", max_length=300)

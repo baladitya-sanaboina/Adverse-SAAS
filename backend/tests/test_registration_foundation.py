@@ -217,14 +217,14 @@ class RegistrationFoundationTests(unittest.TestCase):
     def test_company_admin_creates_employee_and_client(self):
         employee = self.service.create_employee(
             CreateEmployeeRequest(
-                **tenant_user_payload("employee@example.com"),
+                **tenant_user_payload("employee@adverseindia.com"),
             ),
             COMPANY_ADMIN_ID,
             COMPANY_ID,
         )
         client = self.service.create_client(
             CreateClientRequest(
-                **tenant_user_payload("client@example.com"),
+                **tenant_user_payload("client@adverseindia.com"),
             ),
             COMPANY_ADMIN_ID,
             COMPANY_ID,
@@ -236,6 +236,23 @@ class RegistrationFoundationTests(unittest.TestCase):
         self.assertEqual(
             [call[1] for call in self.enforcement.calls], ["MAX_EMPLOYEES", "MAX_CLIENTS"]
         )
+
+    def test_logins_outside_the_company_domain_are_refused(self):
+        """Owner rule 2026-11-26: nothing is created unless the login is @adverseindia.com."""
+        for create in (self.service.create_employee, self.service.create_client):
+            request_type = (
+                CreateEmployeeRequest
+                if create == self.service.create_employee
+                else CreateClientRequest
+            )
+            with self.assertRaises(RegistrationError) as refused:
+                create(
+                    request_type(**tenant_user_payload("someone@gmail.com")),
+                    COMPANY_ADMIN_ID,
+                    COMPANY_ID,
+                )
+            self.assertEqual(refused.exception.code, "LOGIN_NOT_INTERNAL")
+        self.assertNotIn("someone@gmail.com", self.repository.phone_numbers)
 
     def test_employee_creation_is_blocked_when_plan_limit_is_reached(self):
         self.enforcement.blocked_code = "MAX_EMPLOYEES"
@@ -251,7 +268,7 @@ class RegistrationFoundationTests(unittest.TestCase):
         with self.assertRaisesRegex(RegistrationError, "cannot create"):
             self.service.create_client(
                 CreateClientRequest(
-                    **tenant_user_payload("client@example.com"),
+                    **tenant_user_payload("client@adverseindia.com"),
                 ),
                 EMPLOYEE_ID,
                 COMPANY_ID,

@@ -196,6 +196,7 @@ class FakeClientRepository:
     def create(self, company_id: UUID, values: dict[str, object]) -> ClientRecord:
         if self.conflict:
             raise ClientConflict(self.conflict)
+        self.created = getattr(self, "created", 0) + 1
         return self.client
 
     def update(
@@ -367,8 +368,27 @@ class FakeClientRepository:
         return True
 
 
+class FakeLogins:
+    """The invitation repository's login lookups, without a database."""
+
+    def __init__(self) -> None:
+        self.taken: set[str] = set()
+
+    def login_taken(self, email: str) -> bool:
+        return email.lower() in self.taken
+
+    def gmail_in_use(self, gmail: str, login_email: str) -> str | None:
+        return None
+
+
 class ClientServiceTests(unittest.TestCase):
     def setUp(self) -> None:
+        from app.services.invitation_service import invitation_service
+
+        self.logins = FakeLogins()
+        patcher = patch.object(invitation_service, "repository", self.logins)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.repository = FakeClientRepository()
         self.pricing_service = FakePricingService()
         self.service = ClientService(self.repository, self.pricing_service)  # type: ignore[arg-type]
@@ -442,6 +462,33 @@ class ClientServiceTests(unittest.TestCase):
         with self.assertRaises(AuthenticationError) as linked_error:
             self.service.delete(self.context, self.repository.client_id)
         self.assertEqual(linked_error.exception.code, "CLIENT_IN_USE")
+
+    @patch("app.services.client_service.validate_user_action_access", return_value=True)
+    def test_client_is_not_created_without_an_internal_login(self, _: object) -> None:
+        """Owner rule 2026-11-26: a client is never saved when its Adverse ID is not
+        @adverseindia.com (before, the client was saved and only the invitation failed)."""
+        cases = [
+            ({"portal_login_email": "abc@gmail.com"}, "LOGIN_NOT_INTERNAL"),
+            ({"email": "abc@adverseindia.com"}, "GMAIL_IS_INTERNAL"),
+        ]
+        for fields, code in cases:
+            request = self.request.model_copy(update=fields)
+            with self.assertRaises(AuthenticationError) as refused:
+                self.service.create(self.context, request)
+            self.assertEqual(refused.exception.code, code)
+        self.logins.taken.add("abc@adverseindia.com")
+        with self.assertRaises(AuthenticationError) as taken:
+            self.service.create(
+                self.context,
+                self.request.model_copy(update={"portal_login_email": "abc@adverseindia.com"}),
+            )
+        self.assertEqual(taken.exception.code, "LOGIN_TAKEN")
+        self.assertEqual(getattr(self.repository, "created", 0), 0)
+        self.service.create(
+            self.context,
+            self.request.model_copy(update={"portal_login_email": "abc.pvt@adverseindia.com"}),
+        )
+        self.assertEqual(self.repository.created, 1)
 
     @patch("app.services.client_service.validate_user_action_access", return_value=True)
     def test_duplicate_client_code_returns_conflict(self, _: object) -> None:

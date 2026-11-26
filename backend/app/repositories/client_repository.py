@@ -296,7 +296,7 @@ class ClientRepository:
                 cursor.execute(
                     "SELECT clients.user_id,clients.name,clients.email,account_user.status::text "
                     "FROM clients LEFT JOIN users account_user ON account_user.id=clients.user_id "
-                    "WHERE clients.company_id=%s AND clients.id=%s FOR UPDATE",
+                    "WHERE clients.company_id=%s AND clients.id=%s FOR UPDATE OF clients",
                     (company_id, client_id),
                 )
                 row = cursor.fetchone()

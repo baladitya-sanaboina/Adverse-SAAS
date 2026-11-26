@@ -30,6 +30,9 @@ import { LooplessSelect } from "@/components/foundation/loopless-select";
 import type { CurrentUser } from "@/lib/auth/types";
 import "@loopless-shared/styles/client-management.css";
 
+// Internal logins (Adverse IDs) use this domain (INTERNAL_EMAIL_DOMAIN on the server).
+const INTERNAL_DOMAIN = "adverseindia.com";
+
 type ClientStatus = "ACTIVE" | "INACTIVE";
 type Client = {
   id: string;
@@ -518,6 +521,11 @@ export function ClientManagementPage({
     // email above); an Adverse ID for their mailbox is made from the name when left empty.
     if (key === "portal_login_email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
       return "Enter a valid email address.";
+    // Owner rule 2026-11-26: the Adverse ID is always @adverseindia.com; their own email is not.
+    if (key === "portal_login_email" && value && !value.trim().toLowerCase().endsWith(`@${INTERNAL_DOMAIN}`))
+      return `The Adverse ID must end with @${INTERNAL_DOMAIN}.`;
+    if (key === "email" && mode === "create" && value.trim().toLowerCase().endsWith(`@${INTERNAL_DOMAIN}`))
+      return `Use the client's own email (Gmail), not an @${INTERNAL_DOMAIN} address.`;
     if (key === "phone" && mode === "create" && !value.trim()) return "Mobile number is required.";
     if (key === "phone" && value && !/^\+?[0-9 ()-]{7,24}$/.test(value.trim())) {
       return "Enter a valid phone number using 7–24 characters.";
@@ -548,6 +556,7 @@ export function ClientManagementPage({
           name: form.name.trim(),
           ...(editing ? { code: form.code.trim() } : {}),
           email: form.email.trim() || null,
+          ...(!editing && form.portal_login_email.trim() ? { portal_login_email: form.portal_login_email.trim() } : {}),
           phone: form.phone.trim() || null,
           website: form.website.trim() || null,
           address: form.address.trim(),
@@ -571,6 +580,25 @@ export function ClientManagementPage({
         if (data && typeof data === "object" && "code" in data && data.code === "CLIENT_CODE_EXISTS") {
           setFieldErrors((current) => ({ ...current, code: "This client code is already in use." }));
           setTouched((current) => ({ ...current, code: true }));
+          return;
+        }
+        // The login checks run before the client is saved (owner rule 2026-11-26).
+        const loginField =
+          data && typeof data === "object" && "code" in data
+            ? (
+                {
+                  LOGIN_NOT_INTERNAL: "portal_login_email",
+                  LOGIN_TAKEN: "portal_login_email",
+                  GMAIL_IS_INTERNAL: "email",
+                  GMAIL_IN_USE: "email",
+                  GMAIL_REQUIRED: "email",
+                  GMAIL_SAME_AS_LOGIN: "portal_login_email",
+                } as Record<string, keyof Form>
+              )[String(data.code)]
+            : undefined;
+        if (loginField) {
+          setFieldErrors((current) => ({ ...current, [loginField]: messageFrom(data, "Check this address.") }));
+          setTouched((current) => ({ ...current, [loginField]: true }));
           return;
         }
         if (data && typeof data === "object" && "code" in data && data.code === "CLIENT_EMAIL_EXISTS") {
@@ -916,7 +944,7 @@ export function ClientManagementPage({
     ...(mode === "edit" ? ([{ key: "code", label: "Client code", icon: Hash }] as const) : []),
     { key: "email", label: "Business email", icon: Mail },
     ...(mode === "create"
-      ? ([{ key: "portal_login_email", label: "Adverse ID (optional, made from the name)", icon: Mail }] as const)
+      ? ([{ key: "portal_login_email", label: "Adverse ID (name@adverseindia.com, optional: made from the name)", icon: Mail }] as const)
       : []),
     { key: "phone", label: "Mobile number", icon: Phone },
     { key: "website", label: "Website", icon: Globe2 },

@@ -131,8 +131,17 @@ class ClientService:
 
     def create(self, context: AuthContext, request: ClientCreate) -> ClientResponse:
         company_id = self._authorize(context, "CREATE")
+        if request.email is not None or request.portal_login_email is not None:
+            from app.services.invitation_service import invitation_service
+
+            invitation_service.check_new_client(
+                str(request.portal_login_email) if request.portal_login_email else None,
+                str(request.email) if request.email else None,
+            )
         try:
-            record = self.repository.create(company_id, request.model_dump(mode="json"))
+            record = self.repository.create(
+                company_id, request.model_dump(mode="json", exclude={"portal_login_email"})
+            )
         except ClientConflict as error:
             raise self._client_conflict(error) from error
         # A new client gets their welcome, onboarding form and agreement straight away

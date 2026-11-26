@@ -73,10 +73,23 @@ class InvitationService:
     def _check_addresses(self, company_id: UUID, request: InvitationCreate) -> None:
         """Owner request 2026-11-19: the login is an internal address (name@adverseindia.com)
         that only works inside the app; their own Gmail gets the setup link and outside mail."""
-        login = str(request.email).lower()
-        gmail = str(request.notification_email).lower() if request.notification_email else ""
+        self.check_logins(
+            str(request.email),
+            str(request.notification_email) if request.notification_email else None,
+        )
+        if request.department_id and not self.repository.department_ok(
+            company_id, request.department_id
+        ):
+            raise AuthenticationError(404, "DEPARTMENT_NOT_FOUND", "Department was not found.")
+
+    def check_logins(self, login_address: str | None, gmail_address: str | None) -> None:
+        """The login and Gmail rules, also run before a client is created (owner rule
+        2026-11-26: nothing is created when the login is not @adverseindia.com). A missing
+        login is allowed here: one is made from the name."""
+        login = (login_address or "").strip().lower()
+        gmail = (gmail_address or "").strip().lower()
         domain = settings.internal_email_domain.strip().lstrip("@")
-        if domain and not settings.is_internal_email(login):
+        if login and domain and not settings.is_internal_email(login):
             raise AuthenticationError(
                 422,
                 "LOGIN_NOT_INTERNAL",
@@ -102,10 +115,14 @@ class InvitationService:
                 raise AuthenticationError(
                     409, "GMAIL_IN_USE", f"This Gmail is already used by the login {other}."
                 )
-        if request.department_id and not self.repository.department_ok(
-            company_id, request.department_id
-        ):
-            raise AuthenticationError(404, "DEPARTMENT_NOT_FOUND", "Department was not found.")
+
+    def check_new_client(self, login_address: str | None, gmail_address: str | None) -> None:
+        """Run before a client is created, so a client is never saved when its portal invitation
+        would be refused afterwards."""
+        self.check_logins(login_address, gmail_address)
+        login = (login_address or "").strip().lower()
+        if login and self.repository.login_taken(login):
+            raise AuthenticationError(409, "LOGIN_TAKEN", f"The login {login} is already in use.")
 
     def _client_login(self, request: InvitationCreate) -> str:
         """A client signs in with their Gmail; their internal address (for the Adverse mailbox)

@@ -72,6 +72,14 @@ const validate = (key: keyof Fields, value: string, values: Fields) => {
   if (["email", "notification_email"].includes(key) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
     return "Enter a valid email address.";
   }
+  // Owner rule 2026-11-26: the login is always @adverseindia.com; the notification email is
+  // their own outside address. The server refuses both too, before anything is created.
+  if (key === "email" && !value.trim().toLowerCase().endsWith("@adverseindia.com")) {
+    return "The login must end with @adverseindia.com.";
+  }
+  if (key === "notification_email" && value.trim().toLowerCase().endsWith("@adverseindia.com")) {
+    return "Use their own email (Gmail), not an @adverseindia.com address.";
+  }
   if (key === "phone_number" && !phonePattern.test(value.trim())) {
     return "Enter a valid mobile number using 7–24 characters.";
   }

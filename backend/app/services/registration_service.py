@@ -2,6 +2,7 @@ from typing import Protocol
 from uuid import UUID
 
 from app.core.constants import CompanyStatus, RoleCode, UserStatus
+from app.core.settings import settings
 from app.repositories.registration_repository import (
     ActorRecord,
     CompanyRecord,
@@ -220,6 +221,7 @@ class RegistrationService:
         company = self._require_active_company(company_id)
         self._require_subscription_capacity(company)
         self._enforce_limit(company.id, "MAX_EMPLOYEES", actor.id)
+        self._require_internal_login(str(request.email))
         return self._create_user(request, actor, RoleCode.COMPANY_EMPLOYEE, company.id)
 
     def create_client(
@@ -229,6 +231,7 @@ class RegistrationService:
         company = self._require_active_company(company_id)
         self._require_subscription_capacity(company)
         self._enforce_limit(company.id, "MAX_CLIENTS", actor.id)
+        self._require_internal_login(str(request.email))
         return self._create_user(request, actor, RoleCode.COMPANY_CLIENT, company.id)
 
     def is_ready(self) -> bool:
@@ -267,6 +270,18 @@ class RegistrationService:
                     409, "EMAIL_EXISTS", "Email address is already registered."
                 ) from error
             raise RegistrationError(409, "REGISTRATION_CONFLICT", "User already exists.") from error
+
+    @staticmethod
+    def _require_internal_login(email: str) -> None:
+        """Owner rule (2026-11-26): a client, employee or manager login must be an internal
+        address (name@adverseindia.com); anything else is refused before anything is created."""
+        domain = settings.internal_email_domain.strip().lower().lstrip("@")
+        if domain and not settings.is_internal_email(email):
+            raise RegistrationError(
+                422,
+                "LOGIN_NOT_INTERNAL",
+                f"The login must be an internal address ending in @{domain}.",
+            )
 
     def _require_actor(self, actor_id: UUID, required_role: RoleCode) -> ActorRecord:
         actor = self.repository.find_actor(actor_id)

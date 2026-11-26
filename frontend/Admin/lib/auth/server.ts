@@ -96,7 +96,16 @@ export async function authenticatedBackend(
 }
 
 export async function backendError(response: Response): Promise<NextResponse> {
-  const payload = (await response.json().catch(() => ({ detail: "Authentication request failed." }))) as ApiError;
+  // A server crash has no JSON body; say what happened instead of blaming the sign-in.
+  const fallback =
+    response.status === 401
+      ? "Your session has ended. Please sign in again."
+      : response.status === 403
+        ? "You do not have permission to do this."
+        : response.status >= 500
+          ? "Something went wrong on the server. Please try again."
+          : "The request could not be completed.";
+  const payload = (await response.json().catch(() => ({ detail: fallback }))) as ApiError;
   return NextResponse.json(payload, { status: response.status });
 }
 
