@@ -114,5 +114,31 @@ class EmailTemplateTests(unittest.TestCase):
         self.assertNotIn(">Password<", html)
 
 
+class MailDeliverySwitchTests(unittest.TestCase):
+    def _message(self):
+        from email.message import EmailMessage
+
+        message = EmailMessage()
+        message["Subject"] = "Hello"
+        message["To"] = "client@gmail.com"
+        message.set_content("Hi")
+        return message
+
+    @patch.object(settings, "mail_delivery_enabled", False)
+    def test_no_mail_leaves_when_delivery_is_off(self) -> None:
+        with patch("app.services.email_service.smtplib") as smtp:
+            EmailService()._send(self._message())
+        smtp.SMTP.assert_not_called()
+        smtp.SMTP_SSL.assert_not_called()
+
+    @patch.object(settings, "mail_delivery_enabled", True)
+    @patch.object(settings, "mail_repeat_window_minutes", 0)
+    @patch.object(settings, "smtp_username", "sender@gmail.com")
+    def test_mail_is_sent_when_delivery_is_on(self) -> None:
+        with patch("app.services.email_service.smtplib") as smtp:
+            EmailService()._send(self._message())
+        smtp.SMTP.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

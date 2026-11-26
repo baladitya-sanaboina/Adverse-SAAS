@@ -131,6 +131,9 @@ class EmailService:
             return True
 
     def _send(self, message: EmailMessage, *, once_key: str | None = None) -> None:
+        if not settings.mail_delivery_enabled:
+            logger.info("Mail '%s' not sent: delivery is off on this site.", message["Subject"])
+            return
         recipients = self._real_recipients(message)
         if not recipients:
             logger.info(

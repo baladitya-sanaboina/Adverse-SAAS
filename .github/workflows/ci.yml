@@ -181,12 +181,17 @@ jobs:
           curl --fail --show-error http://127.0.0.1:8000/health
           curl --fail --silent http://127.0.0.1:8000/openapi.json > /dev/null
 
+  # main -> production (admin.adverseindia.com ...); dev -> the dev site (dev-admin...), its own
+  # database and services on the same VPS. Test on dev, then merge dev into main by Pull Request.
   deploy:
-    name: Deploy to VPS
+    name: ${{ github.ref == 'refs/heads/main' && 'Deploy to VPS' || 'Deploy dev site' }}
     needs: [frontend, backend]
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
-    environment: production
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'dev' }}
+    concurrency:
+      group: adverse-deploy-${{ github.ref_name }}
+      cancel-in-progress: false
     steps:
       - name: Checkout tested commit
         uses: actions/checkout@v4
@@ -215,6 +220,8 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+          TARGET: ${{ github.ref == 'refs/heads/main' && 'production' || 'dev' }}
+          APP_ROOT: ${{ github.ref == 'refs/heads/main' && '/opt/adverse' || '/opt/adverse-dev' }}
         run: |
           test -n "$VPS_HOST" || { echo "VPS_HOST is not configured"; exit 1; }
           test -n "$VPS_USER" || { echo "VPS_USER is not configured"; exit 1; }
@@ -224,4 +231,4 @@ jobs:
           ssh -i "$HOME/.ssh/adverse_deploy" -p "$VPS_PORT" \
             -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             "$VPS_USER@$VPS_HOST" \
-            "mkdir -p /opt/adverse/incoming/$GITHUB_SHA && tar -xzf /tmp/adverse-$GITHUB_SHA.tar.gz -C /opt/adverse/incoming/$GITHUB_SHA && rm -f /tmp/adverse-$GITHUB_SHA.tar.gz && bash /opt/adverse/incoming/$GITHUB_SHA/scripts/production/deploy_native.sh $GITHUB_SHA"
+            "mkdir -p $APP_ROOT/incoming/$GITHUB_SHA && tar -xzf /tmp/adverse-$GITHUB_SHA.tar.gz -C $APP_ROOT/incoming/$GITHUB_SHA && rm -f /tmp/adverse-$GITHUB_SHA.tar.gz && bash $APP_ROOT/incoming/$GITHUB_SHA/scripts/production/deploy_native.sh $GITHUB_SHA $TARGET"
