@@ -969,9 +969,18 @@ function EntryDialog({
   const listed = useCalendarServices(base, role, form.client_id);
   const services =
     entry?.service && !listed.some((item) => item.id === entry.service?.id) ? [entry.service, ...listed] : listed;
-  // The service sets the manager's fixed rate when the task is assigned, so after that it is
-  // fixed (the admin can still change the task's prices).
-  const serviceLocked = entry?.task != null && !["PENDING", "CANCELLED"].includes(entry.task.status);
+  // Owner decision 2026-11-26: changing the service of an assigned video cancels its ticket and
+  // opens a new one in To assign. Never after approval; the client only until work starts.
+  const taskStatus = entry?.task?.status;
+  const serviceLocked =
+    taskStatus === "APPROVED" ||
+    taskStatus === "COMPLETED" ||
+    (role === "CLIENT" && (taskStatus === "IN_PROGRESS" || taskStatus === "SUBMITTED" || taskStatus === "REVIEW"));
+  const replacesTicket =
+    entry?.task != null &&
+    !["PENDING", "CANCELLED"].includes(entry.task.status) &&
+    !serviceLocked &&
+    form.service_id !== (entry.service?.id ?? "");
   const needsService = !form.no_post && !form.service_id && (!entry || entry.no_post);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -1145,6 +1154,12 @@ function EntryDialog({
                       ...services.map((item) => ({ value: item.id, label: item.name })),
                     ]}
                   />
+                  {replacesTicket && (
+                    <p className="cal-form-hint">
+                      This video is already assigned. Saving cancels its ticket and opens a new one with the new service
+                      and its prices, to be assigned again.
+                    </p>
+                  )}
                 </div>
               )}
               {serviceLocked && entry?.service && (
@@ -1152,7 +1167,9 @@ function EntryDialog({
                   <span>Service</span>
                   <p className="cal-muted">
                     {entry.service.name}
-                    {role === "ADMIN" ? " · fixed once assigned; change the prices on the task if needed" : ""}
+                    {taskStatus === "APPROVED" || taskStatus === "COMPLETED"
+                      ? " · fixed: this video is approved"
+                      : " · fixed while your agency works on it"}
                   </p>
                 </div>
               )}

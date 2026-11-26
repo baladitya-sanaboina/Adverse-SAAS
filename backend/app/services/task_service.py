@@ -1015,18 +1015,29 @@ class TaskService:
 
         self._mutate(company_id, task_id, actor_id, plan)
 
-    def cancel_calendar_ticket(self, company_id: UUID, task_id: UUID, actor_id: UUID) -> None:
-        """Cancel the ticket of a removed entry. Only while nobody has it yet."""
+    def cancel_calendar_ticket(
+        self,
+        company_id: UUID,
+        task_id: UUID,
+        actor_id: UUID,
+        note: str = "Removed from the client's calendar.",
+        assigned_ok: bool = False,
+    ) -> UUID | None:
+        """Cancel the ticket of a removed entry, only while nobody has it yet. `assigned_ok`:
+        also an assigned or started ticket (the video's service changed; owner decision
+        2026-11-26), never approved or completed work. Returns who had it, if anyone."""
+        had: dict[str, UUID | None] = {"assignee": None}
 
         def plan(row: TaskRow) -> TaskMutation:
             if row.status == "CANCELLED":
                 return TaskMutation()
-            if row.status != "PENDING":
+            if row.status in BILLABLE_STATUSES or (row.status != "PENDING" and not assigned_ok):
                 raise AuthenticationError(
                     409,
                     "ENTRY_IN_PRODUCTION",
                     "Your agency has started this video, so it cannot be removed.",
                 )
+            had["assignee"] = row.assignee_user_id
             updates: dict[str, object] = {"status": "CANCELLED"}
             updates.update(
                 status_timestamp_updates(
@@ -1037,12 +1048,10 @@ class TaskService:
                     approved_at=row.approved_at,
                 )
             )
-            return TaskMutation(
-                updates=updates,
-                status_change=(row.status, "CANCELLED", "Removed from the client's calendar."),
-            )
+            return TaskMutation(updates=updates, status_change=(row.status, "CANCELLED", note))
 
         self._mutate(company_id, task_id, actor_id, plan)
+        return had["assignee"]
 
     # -- worker workspace ------------------------------------------------------------------
 

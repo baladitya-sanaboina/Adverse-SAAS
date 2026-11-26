@@ -120,6 +120,7 @@ class FakeTickets:
         self.priorities: list[str | None] = []
         self.services: list[UUID | None] = []
         self.service_changes: list[tuple[UUID, UUID]] = []
+        self.assignee: UUID | None = uuid4()
 
     def create_calendar_ticket(self, company_id, client_id, actor_id, title, description, due, priority=None, service_id=None, assignee_id=None):  # type: ignore[no-untyped-def]
         task_id = uuid4()
@@ -135,10 +136,12 @@ class FakeTickets:
     def change_calendar_ticket_service(self, company_id, task_id, actor_id, service_id):  # type: ignore[no-untyped-def]
         self.service_changes.append((task_id, service_id))
 
-    def cancel_calendar_ticket(self, company_id, task_id, actor_id):  # type: ignore[no-untyped-def]
-        if self.statuses.get(task_id) != "PENDING":
+    def cancel_calendar_ticket(self, company_id, task_id, actor_id, note="", assigned_ok=False):  # type: ignore[no-untyped-def]
+        status = self.statuses.get(task_id)
+        if status in ("APPROVED", "COMPLETED") or (status != "PENDING" and not assigned_ok):
             raise AuthenticationError(409, "ENTRY_IN_PRODUCTION", "Started.")
         self.cancelled.append(task_id)
+        return self.assignee
 
 
 REEL = uuid4()
@@ -352,24 +355,56 @@ class CalendarServiceTest(unittest.TestCase):
             )
         self.assertEqual(unknown.exception.status_code, 422)
 
-    def test_service_is_locked_once_assigned(self, *_: Any) -> None:
-        entry = row(
-            CLIENT_A, service_id=REEL, task_id=uuid4(), task_number=5, task_status="ASSIGNED"
-        )
-        service, repository = self.service(entry)
-        for update in (service.client_update, service.admin_update):
-            who = (
-                context("COMPANY_CLIENT", USER_A)
-                if update == service.client_update
-                else context("COMPANY_ADMIN")
+    def test_assigned_video_gets_a_new_ticket_when_its_service_changes(
+        self, notifications: Any, *_: Any
+    ) -> None:
+        """Owner decision 2026-11-26: the assigned ticket is cancelled and a new one (new
+        service, new prices) goes to the admin's To assign list; whoever had it is told."""
+        for who, role in (("client", "COMPANY_CLIENT"), ("admin", "COMPANY_ADMIN")):
+            old_task = uuid4()
+            entry = row(
+                CLIENT_A, service_id=REEL, task_id=old_task, task_number=5, task_status="ASSIGNED"
             )
+            tickets = FakeTickets({old_task: "ASSIGNED"})
+            service, repository = self.service(entry, tickets=tickets)
+            update = service.client_update if who == "client" else service.admin_update
+            update(
+                context(role, USER_A if who == "client" else None),
+                entry.id,
+                CalendarEntryUpdate(service_id=CAROUSEL),
+            )
+            self.assertEqual(tickets.cancelled, [old_task], who)
+            self.assertEqual(tickets.services, [CAROUSEL], who)  # the new, unassigned ticket
+            self.assertNotEqual(repository.rows[entry.id].task_id, old_task)
+            told = [call.args[1] for call in notifications.notify.call_args_list]
+            self.assertIn([tickets.assignee], told)
+
+    def test_service_is_fixed_once_approved_or_while_the_agency_works(self, *_: Any) -> None:
+        approved = row(
+            CLIENT_A, service_id=REEL, task_id=uuid4(), task_number=6, task_status="APPROVED"
+        )
+        started = row(
+            CLIENT_A, service_id=REEL, task_id=uuid4(), task_number=7, task_status="IN_PROGRESS"
+        )
+        service, repository = self.service(approved, started)
+        for update, who in (
+            (service.client_update, context("COMPANY_CLIENT", USER_A)),
+            (service.admin_update, context("COMPANY_ADMIN")),
+        ):
             with self.assertRaises(AuthenticationError) as locked:
-                update(who, entry.id, CalendarEntryUpdate(service_id=CAROUSEL))
+                update(who, approved.id, CalendarEntryUpdate(service_id=CAROUSEL))
             self.assertEqual(locked.exception.code, "SERVICE_LOCKED")
-        self.assertEqual(repository.rows[entry.id].service_id, REEL)
+        with self.assertRaises(AuthenticationError) as working:
+            service.client_update(
+                context("COMPANY_CLIENT", USER_A),
+                started.id,
+                CalendarEntryUpdate(service_id=CAROUSEL),
+            )
+        self.assertEqual(working.exception.code, "ENTRY_IN_PRODUCTION")
+        self.assertEqual(repository.rows[approved.id].service_id, REEL)
         # Saving the same service again (the edit form sends it) is fine.
         service.client_update(
-            context("COMPANY_CLIENT", USER_A), entry.id, CalendarEntryUpdate(service_id=REEL)
+            context("COMPANY_CLIENT", USER_A), approved.id, CalendarEntryUpdate(service_id=REEL)
         )
 
     def test_no_post_day_becoming_a_video_needs_a_service(self, *_: Any) -> None:

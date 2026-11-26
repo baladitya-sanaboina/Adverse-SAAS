@@ -150,20 +150,30 @@ class CalendarService:
             )
 
     def _check_service_change(
-        self, company_id: UUID, before: CalendarEntryRow, changes: dict[str, object]
+        self,
+        company_id: UUID,
+        before: CalendarEntryRow,
+        changes: dict[str, object],
+        client: bool = False,
     ) -> None:
-        """A new service must be active and may change only until the task is assigned (the
-        manager's commission is set from the service then). A no-post day that becomes a video
-        needs a service, like a new entry."""
+        """A new service must be active. Waiting tickets follow it; an assigned ticket is
+        cancelled and a new one goes to To assign (owner decision 2026-11-26). Never after the
+        video is approved (it is billed), and the client only until work starts. A no-post day
+        that becomes a video needs a service, like a new entry."""
         service_id = changes.get("service_id")
         if isinstance(service_id, UUID) and service_id != before.service_id:
             self._check_service(company_id, service_id)
-            if before.task_status not in (None, "PENDING", "CANCELLED"):
+            if before.task_status in BILLABLE_STATUSES:
                 raise AuthenticationError(
                     409,
                     "SERVICE_LOCKED",
-                    "This video is already assigned, so its service is fixed. The admin can "
-                    "still change its prices on the task.",
+                    "This video is already approved, so its service cannot change.",
+                )
+            if client and before.task_status in ("IN_PROGRESS", "SUBMITTED", "REVIEW"):
+                raise AuthenticationError(
+                    409,
+                    "ENTRY_IN_PRODUCTION",
+                    "Your agency is working on this video, so its service cannot change now.",
                 )
         if before.no_post and changes.get("no_post") is False:
             if (service_id or before.service_id) is None:
@@ -360,7 +370,7 @@ class CalendarService:
                 body,
                 link=link,
                 kind="TASK",
-                once_key=f"calendar-task:{row.id}",
+                once_key=f"calendar-task:{row.id}:{task_id}",
                 notify=True,
             )
         except Exception:  # noqa: BLE001
@@ -408,8 +418,43 @@ class CalendarService:
                 company_id, after.task_id, actor_id, after.title, after.entry_date
             )
         if after.service_id is not None and after.service_id != before.service_id:
-            self.tickets.change_calendar_ticket_service(
-                company_id, after.task_id, actor_id, after.service_id
+            if after.task_status == "PENDING":
+                self.tickets.change_calendar_ticket_service(
+                    company_id, after.task_id, actor_id, after.service_id
+                )
+            elif after.task_status in ("ASSIGNED", "IN_PROGRESS", "SUBMITTED", "REVIEW"):
+                self._reopen_for_new_service(company_id, after, actor_id)
+
+    def _reopen_for_new_service(
+        self, company_id: UUID, entry: CalendarEntryRow, actor_id: UUID
+    ) -> None:
+        """The service of an assigned video changed (owner decision 2026-11-26): its ticket is
+        cancelled (history kept) and a new one, with the new service's prices, goes to the
+        admin's To assign list. Whoever had the old ticket is told."""
+        old_task = entry.task_id
+        if old_task is None:
+            return
+        service = entry.service_name or "another service"
+        assignee = self.tickets.cancel_calendar_ticket(
+            company_id,
+            old_task,
+            actor_id,
+            note=f"Service changed to {service}; a new ticket was opened.",
+            assigned_ok=True,
+        )
+        self.repository.set_task(company_id, entry.id, None)
+        self._open_ticket(company_id, entry.id, actor_id)
+        if assignee is not None:
+            notification_service.notify(
+                company_id,
+                [assignee],
+                "task.cancelled",
+                f"TSK-{entry.task_number or 0:04d} was cancelled",
+                f'The service of "{entry.title}" changed to {service}, so this ticket was '
+                "cancelled. The admin will assign the new one.",
+                "/tasks",
+                {"task_id": str(old_task)},
+                exclude=actor_id,
             )
 
     # -- admin -------------------------------------------------------------------------------
@@ -563,7 +608,7 @@ class CalendarService:
                 "ENTRY_IN_PRODUCTION",
                 "Your agency is working on this video, so only the ticks can change.",
             )
-        self._check_service_change(company_id, before, changes)
+        self._check_service_change(company_id, before, changes, client=True)
         self.repository.update(company_id, entry_id, changes)
         self._follow(company_id, before, context.user_id)
         return entry_response(self._entry(company_id, entry_id, client.id))
