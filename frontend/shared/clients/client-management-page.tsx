@@ -944,7 +944,13 @@ export function ClientManagementPage({
     ...(mode === "edit" ? ([{ key: "code", label: "Client code", icon: Hash }] as const) : []),
     { key: "email", label: "Business email", icon: Mail },
     ...(mode === "create"
-      ? ([{ key: "portal_login_email", label: "Adverse ID (name@adverseindia.com, optional: made from the name)", icon: Mail }] as const)
+      ? ([
+          {
+            key: "portal_login_email",
+            label: "Adverse ID (name@adverseindia.com, optional: made from the name)",
+            icon: Mail,
+          },
+        ] as const)
       : []),
     { key: "phone", label: "Mobile number", icon: Phone },
     { key: "website", label: "Website", icon: Globe2 },
