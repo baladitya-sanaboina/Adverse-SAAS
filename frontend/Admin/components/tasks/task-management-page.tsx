@@ -405,13 +405,15 @@ function TaskTable({ items, onOpen }: { items: AdminTask[]; onOpen: (id: string)
             </small>
             <strong>{task.title}</strong>
           </div>
-          <span>{task.client.name}</span>
-          <span>{task.assignee ? task.assignee.name : "Not assigned"}</span>
-          <span className={task.is_overdue ? "production-overdue" : undefined}>
+          <span data-label="Client">{task.client.name}</span>
+          <span data-label="Assigned to">{task.assignee ? task.assignee.name : "Not assigned"}</span>
+          <span className={task.is_overdue ? "production-overdue" : undefined} data-label="Due">
             {task.due_date ? formatDate(task.due_date) : "—"}
           </span>
           <em className={statusTone(task.status)}>{STATUS_LABELS[task.status]}</em>
-          <span className="production-money">{money(task.client_price, task.currency)}</span>
+          <span className="production-money" data-label="Client price">
+            {money(task.client_price, task.currency)}
+          </span>
           <CrudActionButtons view={{ label: `View ${task.code}`, onClick: () => onOpen(task.id) }} />
         </article>
       ))}

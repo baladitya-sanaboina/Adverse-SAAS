@@ -24,7 +24,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 18px 4px;
+  padding: 12px 18px 4px;
 }
 
 .today-focus-tabs button {

@@ -450,3 +450,17 @@
     width: min(260px, calc(100vw - 24px));
   }
 }
+
+/* Tablets (owner report 2026-11-26): the status shows as a dot, like on phones, so the top bar fits. */
+@media (min-width: 721px) and (max-width: 1180px) {
+  .topbar-status-button {
+    width: 36px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .topbar-status-button span,
+  .topbar-status-button svg {
+    display: none;
+  }
+}

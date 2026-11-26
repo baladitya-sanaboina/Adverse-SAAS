@@ -121,7 +121,7 @@
 }
 
 @media (max-width: 820px) {
-  .organization-table.client-access-table article {
+  .organization-table.client-access-table :is(.organization-table-head, article) {
     grid-template-columns: 1fr;
     gap: 10px;
   }

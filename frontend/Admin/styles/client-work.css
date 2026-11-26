@@ -688,3 +688,15 @@ a.client-work-row:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* Tablets with the sidebar open (owner report 2026-11-26): the table scrolls in its own frame
+   instead of being cut off. */
+@media (min-width: 761px) and (max-width: 1180px) {
+  .client-work-table {
+    overflow-x: auto;
+  }
+
+  .client-work-row {
+    min-width: min-content;
+  }
+}

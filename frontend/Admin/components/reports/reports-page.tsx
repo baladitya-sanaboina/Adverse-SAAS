@@ -229,14 +229,25 @@ function ClientTable({ report }: { report: Report<ClientReportRow> }) {
             </small>
             <strong>{row.client.name}</strong>
           </div>
-          <span className="production-money">{row.total_tasks}</span>
-          <span className="production-money">{row.completed_tasks}</span>
-          <span className="production-money">{money(row.billed, currency)}</span>
-          <span className="production-money">{money(row.received, currency)}</span>
-          <span className={`production-money${Number(row.pending) > 0 ? " production-overdue" : ""}`}>
+          <span className="production-money" data-label="Tasks">
+            {row.total_tasks}
+          </span>
+          <span className="production-money" data-label="Done">
+            {row.completed_tasks}
+          </span>
+          <span className="production-money" data-label="Billed">
+            {money(row.billed, currency)}
+          </span>
+          <span className="production-money" data-label="Received">
+            {money(row.received, currency)}
+          </span>
+          <span
+            className={`production-money${Number(row.pending) > 0 ? " production-overdue" : ""}`}
+            data-label="Unpaid"
+          >
             {money(row.pending, currency)}
           </span>
-          <span className="production-money">
+          <span className="production-money" data-label="Budget left">
             {Number(row.budget_total) > 0 ? money(row.budget_remaining, currency) : "No budget"}
           </span>
         </article>
@@ -268,12 +279,23 @@ function TeamTable({ report }: { report: Report<TeamReportRow> }) {
             </small>
             <strong>{row.person.name}</strong>
           </div>
-          <span>{row.person.role === "MANAGER" ? "Commission" : "Salary"}</span>
-          <span className="production-money">{row.total_tasks}</span>
-          <span className="production-money">{row.completed_tasks}</span>
-          <span className="production-money">{money(row.earnings, currency)}</span>
-          <span className="production-money">{money(row.paid, currency)}</span>
-          <span className={`production-money${Number(row.pending) > 0 ? " production-overdue" : ""}`}>
+          <span data-label="Pay">{row.person.role === "MANAGER" ? "Commission" : "Salary"}</span>
+          <span className="production-money" data-label="Tasks">
+            {row.total_tasks}
+          </span>
+          <span className="production-money" data-label="Done">
+            {row.completed_tasks}
+          </span>
+          <span className="production-money" data-label="Earned">
+            {money(row.earnings, currency)}
+          </span>
+          <span className="production-money" data-label="Paid">
+            {money(row.paid, currency)}
+          </span>
+          <span
+            className={`production-money${Number(row.pending) > 0 ? " production-overdue" : ""}`}
+            data-label="Pending"
+          >
             {money(row.pending, currency)}
           </span>
         </article>
@@ -302,10 +324,19 @@ function ServiceTable({ report }: { report: ServiceReport }) {
             <div className="production-cell">
               <strong>{row.service.name}</strong>
             </div>
-            <span className="production-money">{row.items}</span>
-            <span className="production-money">{money(row.revenue, currency)}</span>
-            <span className="production-money">{money(row.commission_cost, currency)}</span>
-            <span className={`production-money${Number(row.margin) < 0 ? " production-overdue" : ""}`}>
+            <span className="production-money" data-label="Items">
+              {row.items}
+            </span>
+            <span className="production-money" data-label="Revenue">
+              {money(row.revenue, currency)}
+            </span>
+            <span className="production-money" data-label="Commission">
+              {money(row.commission_cost, currency)}
+            </span>
+            <span
+              className={`production-money${Number(row.margin) < 0 ? " production-overdue" : ""}`}
+              data-label="Margin"
+            >
               {money(row.margin, currency)}
             </span>
           </article>

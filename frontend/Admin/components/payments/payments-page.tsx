@@ -580,9 +580,11 @@ function PaymentTable({
               item.note && <small>{item.note}</small>
             )}
           </div>
-          <span>{methodLabel(item.method)}</span>
-          <span>{item.reference || "—"}</span>
-          <span className="production-money">{money(item.amount, item.currency)}</span>
+          <span data-label="Method">{methodLabel(item.method)}</span>
+          <span data-label="Reference">{item.reference || "—"}</span>
+          <span className="production-money" data-label="Amount">
+            {money(item.amount, item.currency)}
+          </span>
           <CrudActionButtons
             edit={{ label: `Edit ${paymentSubject(item)} payment`, onClick: () => onEdit(item) }}
             remove={{ label: `Delete ${paymentSubject(item)} payment`, onClick: () => onDelete(item) }}
@@ -843,14 +845,18 @@ function BudgetsTab({ onNotice }: { onNotice: (message: string) => void }) {
                   <small>{row.client.code}</small>
                   <strong>{row.client.name}</strong>
                 </div>
-                <span className="production-money">
+                <span className="production-money" data-label="Budget">
                   {Number(row.budget_total) > 0 ? money(row.budget_total, currency) : "Not set"}
                 </span>
-                <span className="production-money">{Number(row.budget_total) > 0 ? money(billed, currency) : "—"}</span>
-                <span className={`production-money${over ? " production-overdue" : ""}`}>
+                <span className="production-money" data-label="Used">
+                  {Number(row.budget_total) > 0 ? money(billed, currency) : "—"}
+                </span>
+                <span className={`production-money${over ? " production-overdue" : ""}`} data-label="Remaining">
                   {Number(row.budget_total) > 0 ? (over ? "Over budget" : money(row.budget_remaining, currency)) : "—"}
                 </span>
-                <span className="production-money">{money(row.pending, currency)}</span>
+                <span className="production-money" data-label="Unpaid">
+                  {money(row.pending, currency)}
+                </span>
                 <CrudActionButtons
                   view={{ label: `Open budget for ${row.client.name}`, onClick: () => setOpen(row.client) }}
                 />
@@ -1182,12 +1188,21 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
                   <small>{isManager ? "Manager" : "Employee"}</small>
                   <strong>{row.person.name}</strong>
                 </div>
-                <span className="production-money">{money(row.earnings, currency)}</span>
-                <span className="production-money">{money(row.paid, currency)}</span>
-                <span className={`production-money${Number(row.pending) > 0 ? " production-overdue" : ""}`}>
+                <span className="production-money" data-label={isManager ? "Earned" : "Salary due"}>
+                  {money(row.earnings, currency)}
+                </span>
+                <span className="production-money" data-label="Paid">
+                  {money(row.paid, currency)}
+                </span>
+                <span
+                  className={`production-money${Number(row.pending) > 0 ? " production-overdue" : ""}`}
+                  data-label="Pending"
+                >
                   {money(row.pending, currency)}
                 </span>
-                <span className="production-money">{row.open_tasks}</span>
+                <span className="production-money" data-label="Open tasks">
+                  {row.open_tasks}
+                </span>
                 <CrudActionButtons
                   view={{
                     label: `Open ${row.person.name}`,

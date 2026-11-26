@@ -766,3 +766,17 @@
     font-size: 0.5rem;
   }
 }
+
+/* Phones (owner report 2026-11-26): columns sit side by side and the board took the height of the
+   longest one, leaving a long empty page under a short column. Each column scrolls inside instead. */
+@media (max-width: 720px) {
+  .production-tasks-page .production-board {
+    align-items: start;
+  }
+
+  .production-tasks-page .production-board-column {
+    max-height: 70vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}

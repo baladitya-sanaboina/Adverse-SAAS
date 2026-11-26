@@ -271,3 +271,47 @@
   font-size: 1rem;
   cursor: pointer;
 }
+
+/* Phones (owner report 2026-11-26): the 6-column table hid money left, used and status off to the
+   right. Each person is a card instead: name and status, sheet and money left, then the used bar. */
+@media (max-width: 640px) {
+  .organization-table.sheets-owner-table {
+    overflow-x: visible;
+  }
+
+  .organization-table.sheets-owner-table .organization-table-head {
+    display: none;
+  }
+
+  .organization-table.sheets-owner-table :is(.organization-table-head, button) {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 12px;
+    padding: 14px 16px;
+  }
+
+  .sheets-owner-table button > :nth-child(1) {
+    grid-area: 1 / 1;
+  }
+
+  .sheets-owner-table button > :nth-child(5) {
+    grid-area: 1 / 2;
+    justify-self: end;
+  }
+
+  .sheets-owner-table button > :nth-child(2) {
+    grid-area: 2 / 1;
+  }
+
+  .sheets-owner-table button > :nth-child(3) {
+    grid-area: 2 / 2;
+  }
+
+  .sheets-owner-table button > :nth-child(4) {
+    grid-area: 3 / 1 / 4 / 3;
+  }
+
+  .sheets-owner-table button > .sheets-row-open {
+    display: none;
+  }
+}

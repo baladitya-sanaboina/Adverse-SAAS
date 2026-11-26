@@ -363,13 +363,13 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
                   </small>
                   <strong>{task.title}</strong>
                 </div>
-                <span>{task.client_name}</span>
-                <span>{ROLE_SHORT[task.my_role]}</span>
-                <span className={task.is_overdue ? "production-overdue" : undefined}>
+                <span data-label="Client">{task.client_name}</span>
+                <span data-label="Role">{ROLE_SHORT[task.my_role]}</span>
+                <span className={task.is_overdue ? "production-overdue" : undefined} data-label="Due">
                   {task.due_date ? formatDate(task.due_date) : "—"}
                 </span>
                 <em className={statusTone(task.status)}>{STATUS_LABELS[task.status]}</em>
-                <span className="production-money">
+                <span className="production-money" data-label="Commission">
                   {task.my_commission ? money(task.my_commission, task.currency) : "—"}
                 </span>
                 <CrudActionButtons view={{ label: `View ${task.code}`, onClick: () => open(task.id) }} />

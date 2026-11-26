@@ -1542,3 +1542,46 @@
     padding: 14px 16px;
   }
 }
+
+/* Tablets (owner report 2026-11-26): next to the open sidebar the full top bar did not fit and
+   the page scrolled sideways. Same compact top bar as phones, keeping the sidebar. */
+@media (min-width: 721px) and (max-width: 1180px) {
+  .dash-topbar,
+  .is-collapsed .dash-topbar {
+    gap: 12px;
+    padding: 0 18px;
+  }
+  .dash-topbar-nav,
+  .dash-breadcrumb {
+    min-width: 0;
+  }
+  .dash-breadcrumb {
+    gap: 8px;
+  }
+  .dash-breadcrumb a,
+  .dash-breadcrumb > span {
+    display: none;
+  }
+  .dash-breadcrumb strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dash-theme-switch {
+    width: 58px;
+    height: 30px;
+  }
+  .dash-theme-knob {
+    width: 22px;
+    height: 22px;
+  }
+  .dash-theme-switch.dark .dash-theme-knob {
+    transform: translateX(28px);
+  }
+}
+
+/* The page column is as wide as the screen, never as wide as its widest content (owner report
+   2026-11-26: on tablets Reports pushed the page sideways). Wide tables scroll in their own frame. */
+.dash-content {
+  grid-template-columns: minmax(0, 1fr);
+}

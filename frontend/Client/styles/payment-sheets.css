@@ -438,3 +438,156 @@
     border-left: 0;
   }
 }
+
+/* Phones (owner report 2026-11-26): the 5-column statement scrolled sideways, hiding Paid in,
+   Used and Balance and cutting the details. Each line becomes a small card instead. */
+@media (max-width: 620px) {
+  .sheet-table-wrap {
+    overflow-x: visible;
+  }
+
+  .sheet-table {
+    min-width: 0;
+  }
+
+  .sheet-table,
+  .sheet-table thead,
+  .sheet-table tbody,
+  .sheet-table tfoot,
+  .sheet-table tr {
+    display: block;
+  }
+
+  .sheet-table thead tr:first-child {
+    display: none;
+  }
+
+  .sheet-table thead tr.sheet-filters {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-muted);
+  }
+
+  .sheet-table thead tr.sheet-filters th {
+    display: block;
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+
+  .sheet-table thead tr.sheet-filters th:nth-child(-n + 2) {
+    grid-column: span 3;
+  }
+
+  .sheet-table thead tr.sheet-filters .loopless-select {
+    min-width: 0;
+  }
+
+  .sheet-table tbody tr,
+  .sheet-table tfoot tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sheet-table td,
+  .sheet-table tfoot th {
+    display: block;
+    width: auto;
+    height: auto;
+    padding: 0;
+    border: 0;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .sheet-table tbody td:first-child,
+  .sheet-table tbody td.details,
+  .sheet-table td.sheet-no-rows,
+  .sheet-table tfoot th {
+    grid-column: 1 / -1;
+  }
+
+  .sheet-table tbody td:first-child {
+    font-size: 0.58rem;
+  }
+
+  .sheet-table tbody td.details {
+    max-width: none;
+    margin-bottom: 4px;
+  }
+
+  .sheet-table tbody td:empty {
+    visibility: hidden;
+  }
+
+  .sheet-table tbody td:nth-child(n + 3)::before,
+  .sheet-table tfoot td::before {
+    display: block;
+    color: var(--muted);
+    font-size: 0.52rem;
+    font-weight: 700;
+  }
+
+  .sheet-table tbody td:nth-child(3)::before,
+  .sheet-table tfoot td:nth-child(2)::before {
+    content: "Paid in";
+  }
+
+  .sheet-table tbody td:nth-child(4)::before,
+  .sheet-table tfoot td:nth-child(3)::before {
+    content: "Used";
+  }
+
+  .sheet-table tbody td:nth-child(5)::before,
+  .sheet-table tfoot td:nth-child(4)::before {
+    content: "Balance";
+  }
+
+  .sheet-table thead tr.sheet-filters th:nth-child(n) {
+    padding: 0;
+  }
+
+  .sheet-table thead tr.sheet-filters th:nth-child(n + 3)::before {
+    display: block;
+    margin-bottom: 3px;
+    color: var(--muted);
+    font-size: 0.52rem;
+    font-weight: 700;
+    text-align: left;
+  }
+
+  .sheet-table thead tr.sheet-filters th:nth-child(3)::before {
+    content: "Paid in";
+  }
+
+  .sheet-table thead tr.sheet-filters th:nth-child(4)::before {
+    content: "Used";
+  }
+
+  .sheet-table thead tr.sheet-filters th:nth-child(5)::before {
+    content: "Balance";
+  }
+
+  .sheet-table tbody td:first-child {
+    width: auto;
+    white-space: nowrap;
+  }
+
+  .sheet-table tfoot tr {
+    background: var(--surface-muted);
+  }
+
+  .sheet-table tfoot th,
+  .sheet-table tfoot td:nth-child(n) {
+    height: auto;
+    background: none;
+    text-align: left;
+  }
+}
