@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import UploadFile
 
+from app.repositories.client_access_repository import ClientAccessRepository
 from app.repositories.finance_repository import FinanceRepository
 from app.repositories.package_repository import PackageRepository
 from app.repositories.task_repository import (
@@ -64,6 +65,7 @@ from app.services.production_rules import (
     BILLABLE_STATUSES,
     CLOSED_STATUSES,
     TaskActorRole,
+    access_allows,
     allowed_transitions,
     budget_position,
     calendar_priority,
@@ -129,10 +131,12 @@ class TaskService:
         storage: TaskFileStorage | None = None,
         events: TaskEvents | None = None,
         packages: PackageRepository | None = None,
+        access: ClientAccessRepository | None = None,
     ):
         self.repository = repository or TaskRepository()
         self.finance = finance_repository or FinanceRepository()
         self.packages = packages or PackageRepository()
+        self.access = access or ClientAccessRepository()
         self.storage = storage or TaskFileStorage()
         # Notifications are sent only by the app's own instance (see the bottom of this file).
         self.events = events or NoTaskEvents()
@@ -178,18 +182,30 @@ class TaskService:
         return row
 
     @staticmethod
-    def _worker_role(row: TaskRow, user_id: UUID) -> TaskActorRole | None:
+    def _worker_role(
+        row: TaskRow, user_id: UUID, levels: dict[UUID, str] | None = None
+    ) -> TaskActorRole | None:
+        """The person's part in a task: their own work, monitoring, or access to its client
+        (owner request 2026-11-26: Write moves status like a monitor, Read only looks)."""
         if row.assignee_user_id == user_id:
             return "ASSIGNEE"
         if row.monitor_user_id == user_id:
             return "MONITOR"
+        level = (levels or {}).get(row.client_id)
+        if access_allows(level, "WRITE"):
+            return "CLIENT_WRITE"
+        if level is not None:
+            return "CLIENT_READ"
         return None
+
+    def _levels(self, company_id: UUID, user_id: UUID) -> dict[UUID, str]:
+        return self.access.levels_for_user(company_id, user_id)
 
     def _load_for_worker(
         self, company_id: UUID, user_id: UUID, task_id: UUID
     ) -> tuple[TaskRow, TaskActorRole]:
         row = self.repository.get_task(company_id, task_id)
-        role = self._worker_role(row, user_id) if row else None
+        role = self._worker_role(row, user_id, self._levels(company_id, user_id)) if row else None
         if row is None or role is None:
             # Same answer for "missing" and "not yours", so task ids cannot be probed.
             raise _not_found()
@@ -326,11 +342,14 @@ class TaskService:
             files=files,
         )
 
-    def _worker_task(self, row: TaskRow, user_id: UUID, today: date) -> WorkerTaskResponse:
-        role = self._worker_role(row, user_id)
+    def _worker_task(
+        self, row: TaskRow, user_id: UUID, today: date, levels: dict[UUID, str] | None = None
+    ) -> WorkerTaskResponse:
+        role = self._worker_role(row, user_id, levels)
         if role is None:
             raise _not_found()
         own_manager_task = role == "ASSIGNEE" and row.assignee_type == "MANAGER"
+        works_on_it = role in ("ASSIGNEE", "CLIENT_WRITE")
         return WorkerTaskResponse(
             id=row.id,
             code=row.code,
@@ -341,13 +360,14 @@ class TaskService:
             client_name=row.client_name,
             service_name=row.service_name,
             my_role=role,
-            assignee_name=row.assignee_name if role == "MONITOR" else None,
+            assignee_name=row.assignee_name if role != "ASSIGNEE" else None,
             due_date=row.due_date,
             is_overdue=is_overdue(row.status, row.due_date, today),
             my_commission=row.commission_final if own_manager_task else None,
             currency=row.currency,
             allowed_statuses=allowed_transitions(role, row.status, True),
-            can_upload_deliverables=role == "ASSIGNEE" and row.status in _WORKING_STATUSES,
+            can_upload_deliverables=works_on_it and row.status in _WORKING_STATUSES,
+            can_comment=role != "CLIENT_READ",
             files_count=row.files_count,
             comments_count=row.comments_count,
             created_at=row.created_at,
@@ -362,8 +382,9 @@ class TaskService:
     ) -> WorkerTaskDetailResponse:
         row, _ = self._load_for_worker(company_id, user_id, task_id)
         history, comments, files = self._shared_detail(task_id)
+        levels = self._levels(company_id, user_id)
         return WorkerTaskDetailResponse(
-            **self._worker_task(row, user_id, self._today(company_id)).model_dump(),
+            **self._worker_task(row, user_id, self._today(company_id), levels).model_dump(),
             status_history=history,
             comments=comments,
             files=files,
@@ -865,6 +886,7 @@ class TaskService:
         due_date: date,
         priority: TaskPriority | None = None,
         service_id: UUID | None = None,
+        assignee_id: UUID | None = None,
     ) -> UUID | None:
         """Turn a calendar entry into a Pending, unassigned task. The service is the one chosen
         on the entry (older entries: the one the client uses most with a client rate); priority is the one chosen on the entry, or
@@ -896,6 +918,16 @@ class TaskService:
         if picked is None:
             return None
         service, rate = picked
+        # A manager or employee who adds the video works on it (owner request 2026-11-26). Prices
+        # are never theirs to set: the client rate and the manager's fixed rate fill in, and a
+        # missing manager rate is left for the admin.
+        person = self.repository.get_person(company_id, assignee_id) if assignee_id else None
+        commission: tuple[Decimal | None, Decimal | None] = (None, None)
+        if person is not None and person.role == "MANAGER":
+            try:
+                commission = self._commission_for(company_id, person, service.id, None)
+            except AuthenticationError:
+                commission = (None, None)
         return self.repository.create_task(
             company_id,
             actor_id,
@@ -905,19 +937,19 @@ class TaskService:
                 "title": title[:200],
                 "description": description[:5000],
                 "priority": priority or calendar_priority(due_date, self._today(company_id)),
-                "status": "PENDING",
-                "assignee_user_id": None,
-                "assignee_type": None,
+                "status": "ASSIGNED" if person else "PENDING",
+                "assignee_user_id": person.id if person else None,
+                "assignee_type": person.role if person else None,
                 "monitor_user_id": None,
                 "due_date": due_date,
                 "client_pricing_model": service.client_pricing_model,
                 "client_price_default": rate,
                 "client_price_final": money(rate) if rate is not None else money(Decimal("0")),
                 "client_price_reason": "" if rate is not None else NO_RATE_REASON,
-                "commission_default": None,
-                "commission_final": None,
+                "commission_default": commission[0],
+                "commission_final": commission[1],
                 "commission_reason": "",
-                "assigned_at": None,
+                "assigned_at": datetime.now(timezone.utc) if person else None,
             },
             [],
         )
@@ -1019,9 +1051,12 @@ class TaskService:
     ) -> WorkerTaskListResponse:
         company_id, _ = self._worker(context)
         today = self._today(company_id)
-        rows, total = self.repository.list_worker_tasks(company_id, context.user_id, filters)
+        levels = self._levels(company_id, context.user_id)
+        rows, total = self.repository.list_worker_tasks(
+            company_id, context.user_id, filters, client_ids=list(levels)
+        )
         return WorkerTaskListResponse(
-            items=[self._worker_task(row, context.user_id, today) for row in rows],
+            items=[self._worker_task(row, context.user_id, today, levels) for row in rows],
             page=filters.page,
             page_size=filters.page_size,
             total=total,
@@ -1098,9 +1133,10 @@ class TaskService:
             )
 
         previous: dict[str, str] = {}
+        levels = self._levels(company_id, context.user_id)
 
         def plan(row: TaskRow) -> TaskMutation:
-            role = self._worker_role(row, context.user_id)
+            role = self._worker_role(row, context.user_id, levels)
             if role is None:
                 raise _not_found()
             previous["status"] = row.status
@@ -1130,7 +1166,11 @@ class TaskService:
             self._load(company_id, task_id)
             return company_id
         company_id, _ = self._worker(context)
-        self._load_for_worker(company_id, context.user_id, task_id)
+        _, role = self._load_for_worker(company_id, context.user_id, task_id)
+        if role == "CLIENT_READ":
+            raise AuthenticationError(
+                403, "READ_ONLY_ACCESS", "You can view this client's tasks but not comment on them."
+            )
         return company_id
 
     def upload_file(
@@ -1142,11 +1182,12 @@ class TaskService:
         else:
             company_id, _ = self._worker(context)
             row, role = self._load_for_worker(company_id, context.user_id, task_id)
-            if role != "ASSIGNEE" or kind != "DELIVERABLE":
+            if role not in ("ASSIGNEE", "CLIENT_WRITE") or kind != "DELIVERABLE":
                 raise AuthenticationError(
                     403,
                     "UPLOAD_NOT_ALLOWED",
-                    "Only the assigned person can upload, and only finished work (deliverables).",
+                    "Only the assigned person or someone with write access to this client can "
+                    "upload, and only finished work (deliverables).",
                 )
             if row.status not in _WORKING_STATUSES:
                 raise AuthenticationError(
@@ -1195,7 +1236,7 @@ class TaskService:
             row, role = self._load_for_worker(company_id, context.user_id, task_id)
             record = self.repository.get_file(company_id, task_id, file_id)
             if record is not None and (
-                role != "ASSIGNEE"
+                role not in ("ASSIGNEE", "CLIENT_WRITE")
                 or record.uploaded_by_id != context.user_id
                 or row.status not in _WORKING_STATUSES
             ):

@@ -1,0 +1,134 @@
+/* Client access page (owner request 2026-11-26). Reuses organization/production table styles. */
+
+.organization-tools.client-access-tools {
+  grid-template-columns: minmax(240px, 1fr) minmax(220px, 1fr);
+}
+
+.client-access-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 4px 0 12px;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 500;
+}
+
+.client-access-legend li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.client-access-level {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.client-access-level.read {
+  color: #475569;
+  background: color-mix(in srgb, #64748b 14%, transparent);
+}
+
+.client-access-level.write {
+  color: #0757b5;
+  background: color-mix(in srgb, #0876ed 13%, transparent);
+}
+
+.client-access-level.create {
+  color: #127a49;
+  background: color-mix(in srgb, #16a34a 14%, transparent);
+}
+
+.dark .client-access-level.read {
+  color: #c4cbd6;
+}
+
+.dark .client-access-level.write {
+  color: #8cc4ff;
+}
+
+.dark .client-access-level.create {
+  color: #8fe0b5;
+}
+
+.client-access-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 500;
+}
+
+.client-access-summary svg {
+  width: 15px;
+  height: 15px;
+  color: #0876ed;
+}
+
+.client-access-summary strong {
+  color: var(--foreground);
+}
+
+/* The access dropdowns open below their row, so the table must not clip them. */
+.organization-table.client-access-table {
+  overflow: visible;
+  margin-bottom: 16px;
+}
+
+.organization-table.client-access-table :is(.organization-table-head, article) {
+  grid-template-columns: minmax(170px, 1fr) 170px minmax(200px, 1.4fr);
+  gap: 18px;
+}
+
+.organization-table.client-access-table .organization-table-head > span {
+  text-align: left;
+}
+
+.organization-table.client-access-table article {
+  min-height: 62px;
+  padding-block: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.organization-table.client-access-table article:last-child {
+  border-bottom: 0;
+}
+
+.organization-table.client-access-table article.has-access {
+  box-shadow: inset 3px 0 0 #0876ed;
+}
+
+.client-access-select .loopless-select > button {
+  min-height: 38px;
+}
+
+.client-access-detail {
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 820px) {
+  .organization-table.client-access-table article {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 620px) {
+  .organization-tools.client-access-tools {
+    grid-template-columns: 1fr;
+  }
+}

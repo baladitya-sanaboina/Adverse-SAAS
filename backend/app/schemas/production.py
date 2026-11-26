@@ -19,7 +19,11 @@ AssigneeType = Literal["MANAGER", "EMPLOYEE"]
 TaskFileKind = Literal["REFERENCE", "DELIVERABLE"]
 BudgetEntryType = Literal["INITIAL", "TOP_UP", "ADJUSTMENT"]
 PaymentMethod = Literal["CASH", "BANK_TRANSFER", "UPI", "CHEQUE", "CARD", "OTHER"]
-WorkerTaskRole = Literal["ASSIGNEE", "MONITOR"]
+WorkerTaskRole = Literal["ASSIGNEE", "MONITOR", "CLIENT_WRITE", "CLIENT_READ"]
+# Which tasks a worker lists: their own, the ones they monitor, or those of clients they have
+# access to (owner request 2026-11-26).
+WorkerTaskScope = Literal["ASSIGNEE", "MONITOR", "CLIENT"]
+ClientAccessLevel = Literal["READ", "WRITE", "CREATE"]
 
 Money = Decimal
 
@@ -324,6 +328,7 @@ class WorkerTaskResponse(BaseModel):
     currency: str
     allowed_statuses: list[TaskStatus]
     can_upload_deliverables: bool
+    can_comment: bool = True
     files_count: int = 0
     comments_count: int = 0
     created_at: datetime
@@ -331,6 +336,44 @@ class WorkerTaskResponse(BaseModel):
     submitted_at: datetime | None
     approved_at: datetime | None
     completed_at: datetime | None
+
+
+class ClientAccessPerson(BaseModel):
+    id: UUID
+    name: str
+    role: Literal["MANAGER", "EMPLOYEE"]
+    code: str = ""
+
+
+class ClientAccessGrant(BaseModel):
+    user_id: UUID
+    client_id: UUID
+    level: ClientAccessLevel
+
+
+class ClientAccessOverview(BaseModel):
+    """Admin: every manager/employee, every active client, and who has which access."""
+
+    people: list[ClientAccessPerson]
+    clients: list[NamedRef]
+    grants: list[ClientAccessGrant]
+
+
+class ClientAccessUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: UUID
+    client_id: UUID
+    level: ClientAccessLevel | None = None  # None removes the access
+
+
+class MyClientAccess(BaseModel):
+    client: NamedRef
+    level: ClientAccessLevel
+
+
+class MyClientAccessResponse(BaseModel):
+    items: list[MyClientAccess]
 
 
 class WorkerTaskDetailResponse(WorkerTaskResponse):
@@ -348,7 +391,8 @@ class WorkerTaskListResponse(BaseModel):
 
 
 class WorkerTaskFilters(BaseModel):
-    role: WorkerTaskRole | None = None
+    role: WorkerTaskScope | None = None
+    client_id: UUID | None = None
     status: TaskStatus | None = None
     search: str = Field(default="", max_length=100)
     page: int = Field(default=1, ge=1)

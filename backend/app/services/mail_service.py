@@ -748,8 +748,10 @@ class MailService:
         *,
         card: dict[str, Any] | None = None,
         sender_id: UUID | None = None,
+        starred: bool = False,
     ) -> None:
         """A mail from the app. Never raises: a failed mail must not undo the work.
+        `starred`: a priority mail, starred for the recipients.
         notify=False when the caller already sends its own bell notification.
         `sender_id`: the person whose action caused it (owner request 2026-11-19: a submitted task
         mails the admin from the employee, not from "Adverse"); they are never mailed themselves.
@@ -775,6 +777,7 @@ class MailService:
                 kind=kind[:40],
                 link=link[:300],
                 card=card or card_from_text(subject, body, kind, link),
+                starred=starred,
             )
             sender = self.people_repository.person(company_id, sender_id) if sender_id else None
             title = f"Mail from {sender.name}" if sender else "New mail from Adverse"

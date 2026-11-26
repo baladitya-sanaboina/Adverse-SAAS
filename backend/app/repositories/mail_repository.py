@@ -215,9 +215,11 @@ class MailRepository:
         status: str = "SENT",
         scheduled_at: datetime | None = None,
         card: dict[str, Any] | None = None,
+        starred: bool = False,
     ) -> UUID:
         """recipients: user ids (all To) or (user id, TO|CC|BCC) pairs. `card` is the mail's
-        structured layout (title, rows, table, button) for app mails."""
+        structured layout (title, rows, table, button) for app mails. `starred`: already
+        starred for the recipients (a priority mail)."""
         pairs = [item if isinstance(item, tuple) else (item, "TO") for item in recipients]
         message_id = uuid4()
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
@@ -242,6 +244,12 @@ class MailRepository:
             )
             _insert_recipients(cursor, message_id, pairs)
             _insert_files(cursor, message_id, files or [])
+            if starred:
+                cursor.execute(
+                    "UPDATE mail_recipients SET starred_at = NOW() AT TIME ZONE 'UTC' "
+                    "WHERE message_id = %s",
+                    (message_id,),
+                )
         return message_id
 
     def update_draft(

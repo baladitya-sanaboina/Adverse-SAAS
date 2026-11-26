@@ -20,6 +20,7 @@ from uuid import UUID
 from fastapi import UploadFile
 
 from app.repositories.calendar_repository import CalendarEntryRow, CalendarRepository
+from app.repositories.client_access_repository import ClientAccessRepository
 from app.repositories.task_repository import TaskRepository
 from app.schemas.authentication import AuthContext
 from app.schemas.calendar import (
@@ -37,7 +38,7 @@ from app.schemas.production import NamedRef, TaskPriority
 from app.services.authentication_service import AuthenticationError
 from app.services.notification_service import notification_service
 from app.services.permission_service import validate_user_action_access
-from app.services.production_rules import BILLABLE_STATUSES
+from app.services.production_rules import BILLABLE_STATUSES, access_allows
 from app.services.task_file_storage import TaskFileStorage
 from app.services.task_service import TaskService, task_service
 
@@ -100,6 +101,7 @@ def entry_response(row: CalendarEntryRow) -> CalendarEntryResponse:
             if row.service_id is not None
             else None
         ),
+        added_by_team=row.added_by_team,
         created_by_name=row.created_by_name,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -113,8 +115,10 @@ class CalendarService:
         tasks: TaskRepository | None = None,
         storage: TaskFileStorage | None = None,
         tickets: TaskService | None = None,
+        access: ClientAccessRepository | None = None,
     ) -> None:
         self.repository = repository or CalendarRepository()
+        self.access = access or ClientAccessRepository()
         self.tickets = tickets or task_service
         self.tasks = tasks or TaskRepository()
         self.storage = storage or TaskFileStorage(
@@ -222,8 +226,10 @@ class CalendarService:
         entry_id: UUID,
         actor_id: UUID,
         priority: TaskPriority | None = None,
+        assignee_id: UUID | None = None,
     ) -> UUID | None:
-        """Make the ticket for an entry (never blocks saving the entry itself)."""
+        """Make the ticket for an entry (never blocks saving the entry itself). `assignee_id`:
+        the manager or employee who added it works on it."""
         row = self.repository.get(company_id, entry_id)
         if row is None or row.no_post or row.task_id is not None:
             return None
@@ -248,14 +254,74 @@ class CalendarService:
                 row.entry_date,
                 priority=priority,
                 service_id=row.service_id,
+                assignee_id=assignee_id,
             )
         except Exception:  # noqa: BLE001 - the entry is saved even if the ticket fails
             logger.warning("Could not create the calendar ticket", exc_info=True)
             return None
         if task_id is not None:
             self.repository.set_task(company_id, entry_id, task_id)
-        self._tell_admins(company_id, row, task_id, actor_id)
+        if assignee_id is not None and task_id is not None:
+            self._tell_admins_of_team_ticket(company_id, row, task_id, actor_id)
+        else:
+            self._tell_admins(company_id, row, task_id, actor_id)
         return task_id
+
+    def _tell_admins_of_team_ticket(
+        self, company_id: UUID, row: CalendarEntryRow, task_id: UUID, actor_id: UUID
+    ) -> None:
+        """A manager or employee added a video and took the ticket (owner request 2026-11-26).
+        No approval is needed, but every admin gets a starred mail from that person (so it is in
+        Primary) and a bell. Never raises."""
+        try:
+            from app.repositories.chat_repository import ChatRepository
+            from app.services.mail_service import mail_card, mail_service
+
+            admins = [user for user in ChatRepository().admin_ids(company_id) if user != actor_id]
+            task = self.tasks.get_task(company_id, task_id)
+            if not admins or task is None:
+                return
+            who = task.assignee_name or "A team member"
+            when = row.entry_date.strftime("%a %d %b %Y")
+            notes = []
+            if task.client_price_reason:
+                notes.append(f"{row.client_name} has no rate for {task.service_name} yet: set it.")
+            if task.assignee_type == "MANAGER" and task.commission_final is None:
+                notes.append(
+                    f"{who} has no fixed rate for {task.service_name}: set the commission."
+                )
+            subject = f"Priority: {who} created a ticket for {row.client_name}: {row.title}"
+            body = (
+                f'{who} added "{row.title}" ({task.service_name}) to {row.client_name}\'s content '
+                f"calendar for {when} and is working on it ({task.code}). No approval is needed."
+            )
+            mail_service.system(
+                company_id,
+                admins,
+                subject,
+                body + ("\n\n" + "\n".join(notes) if notes else ""),
+                link=f"/tasks?task={task_id}",
+                kind="TASK",
+                notify=True,
+                sender_id=actor_id,
+                starred=True,
+                card=mail_card(
+                    "New ticket from the team",
+                    lines=[body, *notes],
+                    rows=[
+                        ("Client", row.client_name),
+                        ("Video", row.title),
+                        ("Service", task.service_name),
+                        ("Due", when),
+                        ("Working on it", who),
+                        ("Ticket", task.code),
+                    ],
+                    action="Open the ticket",
+                    status="Priority",
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("Could not tell the admins about a team ticket", exc_info=True)
 
     @staticmethod
     def _tell_admins(
@@ -563,6 +629,91 @@ class CalendarService:
             logger.warning("Could not remove an old calendar script", exc_info=True)
 
     # -- staff calendar ---------------------------------------------------------------------
+
+    # -- managers and employees with client access (owner request 2026-11-26) ------------------
+
+    def _staff_levels(self, context: AuthContext) -> tuple[UUID, dict[UUID, str]]:
+        if (
+            context.role not in ("COMPANY_MANAGER", "COMPANY_EMPLOYEE")
+            or context.company_id is None
+        ):
+            raise AuthenticationError(
+                403, "STAFF_ONLY", "This calendar is for managers and employees."
+            )
+        return context.company_id, self.access.levels_for_user(context.company_id, context.user_id)
+
+    @staticmethod
+    def _require_level(levels: dict[UUID, str], client_id: UUID, needed: str) -> None:
+        if client_id not in levels:
+            # Same answer for "no such client" and "not yours".
+            raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
+        if not access_allows(levels[client_id], needed):
+            raise AuthenticationError(
+                403,
+                "CREATE_ACCESS_REQUIRED",
+                "You can view this client's calendar but not add to it.",
+            )
+
+    def staff_list(
+        self,
+        context: AuthContext,
+        client_id: UUID | None,
+        start: date | None,
+        end: date | None,
+    ) -> CalendarListResponse:
+        """The content calendars of the clients this person has access to."""
+        company_id, levels = self._staff_levels(context)
+        self._check_range(start, end)
+        if client_id is not None:
+            self._require_level(levels, client_id, "READ")
+        return CalendarListResponse(
+            items=[
+                entry_response(row)
+                for row in self.repository.list(
+                    company_id, client_id, start, end, client_ids=list(levels)
+                )
+            ]
+        )
+
+    def staff_services(self, context: AuthContext, client_id: UUID) -> list[CalendarServiceOption]:
+        company_id, levels = self._staff_levels(context)
+        self._require_level(levels, client_id, "READ")
+        return self._service_options(company_id, client_id)
+
+    def staff_create(
+        self, context: AuthContext, request: CalendarEntryCreate
+    ) -> CalendarEntryResponse:
+        """Create access: the video goes into the client's own calendar (shown in the team colour)
+        and its ticket is assigned to the person who added it."""
+        company_id, levels = self._staff_levels(context)
+        if request.client_id is None:
+            raise AuthenticationError(422, "CLIENT_REQUIRED", "Choose the client for this video.")
+        self._require_level(levels, request.client_id, "CREATE")
+        if request.no_post:
+            raise AuthenticationError(
+                422, "VIDEO_ONLY", "Add a video; no-post days are set by the client or admin."
+            )
+        self._check_service(company_id, request.service_id)
+        entry_id = self.repository.create(
+            company_id,
+            request.client_id,
+            context.user_id,
+            request.model_dump(exclude={"client_id"}),
+        )
+        self._open_ticket(
+            company_id, entry_id, context.user_id, request.priority, assignee_id=context.user_id
+        )
+        notification_service.notify(
+            company_id,
+            [notification_service.client_user(company_id, request.client_id)],
+            "calendar.entry",
+            "New calendar entry",
+            f"{request.title} on {request.entry_date:%d %b %Y} was added to your calendar.",
+            "/calendar",
+            {"entry_id": str(entry_id)},
+            exclude=context.user_id,
+        )
+        return entry_response(self._entry(company_id, entry_id, None))
 
     def staff_calendar(self, context: AuthContext, start: date, end: date) -> StaffCalendarResponse:
         """Managers and employees: their own tasks by due date and the content entries those

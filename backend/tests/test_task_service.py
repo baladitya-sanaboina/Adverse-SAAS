@@ -158,7 +158,11 @@ class FakeTaskRepository:
         self.task = replace(self.task, **self.applied.updates)
 
     def list_worker_tasks(
-        self, company_id: UUID, user_id: UUID, filters: WorkerTaskFilters
+        self,
+        company_id: UUID,
+        user_id: UUID,
+        filters: WorkerTaskFilters,
+        client_ids: list[UUID] | None = None,
     ) -> tuple[list[TaskRow], int]:
         return [self.task], 1
 
@@ -175,6 +179,16 @@ class FakeTaskRepository:
         return []
 
 
+class FakeAccess:
+    """Per-client access (owner request 2026-11-26): user id -> {client id: level}."""
+
+    def __init__(self) -> None:
+        self.levels: dict[UUID, dict[UUID, str]] = {}
+
+    def levels_for_user(self, company_id: UUID, user_id: UUID) -> dict[UUID, str]:
+        return self.levels.get(user_id, {})
+
+
 class FakeFinanceRepository:
     def company_timezone(self, company_id: UUID) -> str:
         return "Asia/Kolkata"
@@ -188,7 +202,10 @@ def allow_all(*_: Any) -> bool:
 class TaskServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.repo = FakeTaskRepository()
-        self.service = TaskService(self.repo, FakeFinanceRepository())  # type: ignore[arg-type]
+        self.access = FakeAccess()
+        self.service = TaskService(
+            self.repo, FakeFinanceRepository(), access=self.access  # type: ignore[arg-type]
+        )
 
     def create(self, **fields: Any) -> TaskCreateRequest:
         fields.setdefault("due_date", date(2026, 12, 1))
@@ -211,6 +228,43 @@ class TaskServiceTest(unittest.TestCase):
                     self.repo.task.id,
                     TaskAssignRequest(assignee_user_id=MANAGER),
                 )
+
+    def test_read_access_sees_the_clients_tasks_but_changes_nothing(self) -> None:
+        reader = uuid4()
+        self.access.levels[reader] = {CLIENT: "READ"}
+        task = self.service.get_worker_task(context("COMPANY_EMPLOYEE", reader), self.repo.task.id)
+        self.assertEqual(task.my_role, "CLIENT_READ")
+        self.assertEqual(task.allowed_statuses, [])
+        self.assertFalse(task.can_comment)
+        self.assertFalse(task.can_upload_deliverables)
+        self.assertIsNone(task.my_commission)  # never money through client access
+        self.assertNotIn("client_price", task.model_dump())
+        with self.assertRaises(AuthenticationError) as refused:
+            self.service._comment_access(context("COMPANY_EMPLOYEE", reader), self.repo.task.id)
+        self.assertEqual(refused.exception.status_code, 403)
+
+    def test_write_access_moves_status_like_a_monitor_but_cannot_approve(self) -> None:
+        writer = uuid4()
+        self.access.levels[writer] = {CLIENT: "CREATE"}  # Create includes Write
+        self.repo.task = replace(self.repo.task, status="SUBMITTED")
+        task = self.service.get_worker_task(context("COMPANY_EMPLOYEE", writer), self.repo.task.id)
+        self.assertEqual(task.my_role, "CLIENT_WRITE")
+        self.assertTrue(task.can_comment)
+        self.assertEqual(task.assignee_name, "Manager X")
+        self.assertNotIn("APPROVED", task.allowed_statuses)
+        self.service.change_status_worker(
+            context("COMPANY_EMPLOYEE", writer),
+            self.repo.task.id,
+            TaskStatusChangeRequest(status="REVIEW"),
+        )
+        self.assertEqual(self.repo.task.status, "REVIEW")
+
+    def test_access_to_another_client_shows_nothing(self) -> None:
+        stranger = uuid4()
+        self.access.levels[stranger] = {uuid4(): "CREATE"}
+        with self.assertRaises(AuthenticationError) as error:
+            self.service.get_worker_task(context("COMPANY_MANAGER", stranger), self.repo.task.id)
+        self.assertEqual(error.exception.status_code, 404)
 
     def test_worker_cannot_see_a_task_that_is_not_theirs(self) -> None:
         outsider = uuid4()
@@ -447,6 +501,32 @@ class CalendarTicketTest(unittest.TestCase):
         service.create_calendar_ticket(COMPANY, CLIENT, ADMIN, "Reel", "", date(2026, 11, 30))
         self.assertEqual(repo.created["client_price_final"], Decimal("700.00"))
         self.assertEqual(repo.created["client_price_reason"], "")
+
+    def test_a_team_members_video_is_assigned_to_them_with_automatic_prices(self) -> None:
+        repo = FakeTaskRepository()
+        repo.calendar_service_choices = lambda company_id, client_id: [SERVICE]  # type: ignore[attr-defined]
+        service = TaskService(repo, FakeFinanceRepository())  # type: ignore[arg-type]
+        service.create_calendar_ticket(
+            COMPANY, CLIENT, MANAGER, "Reel", "", date(2026, 11, 30), assignee_id=MANAGER
+        )
+        assert repo.created is not None
+        self.assertEqual(repo.created["status"], "ASSIGNED")
+        self.assertEqual(repo.created["assignee_user_id"], MANAGER)
+        self.assertEqual(repo.created["client_price_final"], Decimal("400.00"))  # client rate
+        self.assertEqual(repo.created["commission_final"], Decimal("300.00"))  # fixed rate
+
+        service.create_calendar_ticket(
+            COMPANY, CLIENT, EMPLOYEE, "Reel", "", date(2026, 11, 30), assignee_id=EMPLOYEE
+        )
+        self.assertEqual(repo.created["assignee_type"], "EMPLOYEE")
+        self.assertIsNone(repo.created["commission_final"])  # salaried
+
+        repo.rates.pop(("MANAGER", MANAGER))  # no fixed rate yet: the admin sets it later
+        service.create_calendar_ticket(
+            COMPANY, CLIENT, MANAGER, "Reel", "", date(2026, 11, 30), assignee_id=MANAGER
+        )
+        self.assertEqual(repo.created["status"], "ASSIGNED")
+        self.assertIsNone(repo.created["commission_final"])
 
     def test_a_waiting_task_follows_a_new_service(self) -> None:
         carousel = uuid4()

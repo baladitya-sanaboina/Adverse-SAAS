@@ -1,6 +1,7 @@
 import { ErrorState, FoundationPage } from "@/components/foundation/ui-foundation";
 import { AgendaPage } from "@loopless-shared/agenda/agenda-page";
 import { WorkCalendarPage } from "@loopless-shared/calendar/work-calendar";
+import { ContentCalendarPage } from "@loopless-shared/calendar/content-calendar";
 import { ChatPage } from "@loopless-shared/chat/chat-page";
 import { AnimatedErrorPage } from "@/components/status/AnimatedErrorPage";
 import { navigationItems } from "@/lib/navigation";
@@ -24,6 +25,7 @@ export default async function SectionPage({ params }: { params: Promise<{ sectio
   if (section === "chat") return <ChatPage role="MANAGER" />;
   if (section === "agenda") return <AgendaPage role="MANAGER" />;
   if (section === "calendar") return <WorkCalendarPage />;
+  if (section === "content-calendar") return <ContentCalendarPage role="STAFF" />;
   if (errors[section]) return <ErrorState code={section} title={errors[section]} />;
   if (section === "profile") return <ProfilePage />;
   if (section === "settings") return <ProfilePage initialTab="settings" />;

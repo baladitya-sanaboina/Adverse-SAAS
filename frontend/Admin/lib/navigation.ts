@@ -7,6 +7,7 @@ import {
   Contact,
   FileSignature,
   Gauge,
+  KeyRound,
   Mail,
   MessagesSquare,
   NotebookTabs,
@@ -29,6 +30,8 @@ export const navigationItems = [
   { href: "/clients", label: "Clients", icon: Contact, module: "CLIENTS", feature: "CLIENT_MANAGEMENT" },
   { href: "/tasks", label: "Tasks", icon: ClipboardList, module: "TASKS", feature: "TASKS" },
   { href: "/calendar", label: "Content Calendar", icon: CalendarDays, module: "TASKS", feature: "TASKS" },
+  // Which clients each manager or employee may see or work on (owner request 2026-11-26).
+  { href: "/client-access", label: "Client Access", icon: KeyRound, module: "TASKS", feature: "TASKS" },
   { href: "/chat", label: "Chat", icon: MessagesSquare },
   // Mail opens in its own tab (owner request 2026-11-15).
   { href: "/mail", label: "Mail", icon: Mail, newTab: true },

@@ -21,7 +21,10 @@ TaskStatus = Literal[
     "COMPLETED",
     "CANCELLED",
 ]
-TaskActorRole = Literal["ADMIN", "ASSIGNEE", "MONITOR"]
+# CLIENT_WRITE / CLIENT_READ: a manager or employee given access to the task's client (owner
+# request 2026-11-26). Write moves status like a monitor; Read only looks.
+TaskActorRole = Literal["ADMIN", "ASSIGNEE", "MONITOR", "CLIENT_WRITE", "CLIENT_READ"]
+ACCESS_RANK = {"READ": 1, "WRITE": 2, "CREATE": 3}
 ReportPeriod = Literal["all", "today", "this_week", "this_month", "previous_month", "custom"]
 
 ALL_STATUSES: tuple[TaskStatus, ...] = (
@@ -84,8 +87,15 @@ def allowed_transitions(role: TaskActorRole, current: str, has_assignee: bool) -
                 continue
             options.append(status)
         return options
+    if role == "CLIENT_READ":
+        return []
     table = _ASSIGNEE_TRANSITIONS if role == "ASSIGNEE" else _MONITOR_TRANSITIONS
     return sorted(table.get(current, frozenset()), key=ALL_STATUSES.index)
+
+
+def access_allows(level: str | None, needed: str) -> bool:
+    """Each client access level includes the ones below it: READ < WRITE < CREATE."""
+    return level is not None and ACCESS_RANK.get(level, 0) >= ACCESS_RANK[needed]
 
 
 def can_transition(role: TaskActorRole, current: str, target: str, has_assignee: bool) -> bool:

@@ -59,6 +59,8 @@ class CalendarEntryResponse(BaseModel):
     script: CalendarScriptRef | None
     task: CalendarTaskRef | None
     service: NamedRef | None = None  # Reel, Carousel, ... (owner request 2026-11-20)
+    # Added by a manager or employee, shown in another colour (owner request 2026-11-26).
+    added_by_team: bool = False
     created_by_name: str
     created_at: datetime
     updated_at: datetime

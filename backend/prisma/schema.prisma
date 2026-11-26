@@ -118,6 +118,7 @@ model Company {
   documentTemplates   DocumentTemplate[]
   onboardingPackets   OnboardingPacket[]
   calendarEntries     ContentCalendarEntry[]
+  clientAccess        ClientAccess[]
   chatConversations   ChatConversation[]
   chatMessages        ChatMessage[]
   taskFiles           TaskFile[]
@@ -210,6 +211,34 @@ enum TaskPriority {
   MEDIUM
   HIGH
   URGENT
+}
+
+/// What a manager or employee may do with one client's work (owner request 2026-11-26). Each
+/// level includes the ones before it: READ sees the client's tickets and content calendar, WRITE
+/// also changes status (up to Review), comments and uploads files, CREATE also adds videos to the
+/// client's calendar (the ticket is assigned to the person who adds it).
+enum ClientAccessLevel {
+  READ
+  WRITE
+  CREATE
+}
+
+model ClientAccess {
+  companyId   String            @map("company_id") @db.Uuid
+  userId      String            @map("user_id") @db.Uuid
+  clientId    String            @map("client_id") @db.Uuid
+  level       ClientAccessLevel
+  grantedById String?           @map("granted_by_id") @db.Uuid
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User              @relation("ClientAccessUser", fields: [userId], references: [id], onDelete: Cascade)
+  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  grantedBy   User?             @relation("ClientAccessGranter", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@id([userId, clientId])
+  @@index([companyId, clientId])
+  @@map("client_access")
 }
 
 enum TaskAssigneeType {
@@ -534,6 +563,8 @@ model User {
   onboardingPackets       OnboardingPacket[]       @relation("PacketRecipient")
   onboardingSent          OnboardingPacket[]       @relation("PacketSender")
   calendarEntriesCreated  ContentCalendarEntry[]   @relation("CalendarEntryCreator")
+  clientAccess            ClientAccess[]           @relation("ClientAccessUser")
+  clientAccessGranted     ClientAccess[]           @relation("ClientAccessGranter")
   chatConversationsMade   ChatConversation[]       @relation("ChatConversationCreator")
   chatMemberships         ChatMember[]
   chatMessagesSent        ChatMessage[]            @relation("ChatMessageSender")
@@ -644,6 +675,7 @@ model Client {
   onboardingPackets     OnboardingPacket[]
   calendarEntries       ContentCalendarEntry[]
   chatRooms             ChatConversation[]
+  staffAccess           ClientAccess[]
   leads                 Lead[]
   opportunities         Opportunity[]
 
@@ -1632,6 +1664,9 @@ model ChatConversation {
   lastMessageAt DateTime?            @map("last_message_at")
   /// Code in the chat's meet link (/call/<code>), made the first time someone asks for the link.
   meetCode      String?              @unique @map("meet_code") @db.VarChar(16)
+  /// The automatic group of a client (owner request 2026-11-26): the client, the admins and the
+  /// staff with access to that client. One per client (partial unique index in the migration).
+  isClientGroup Boolean              @default(false) @map("is_client_group")
   createdAt     DateTime             @default(now()) @map("created_at")
   updatedAt     DateTime             @updatedAt @map("updated_at")
   company       Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)

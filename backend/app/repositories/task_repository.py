@@ -415,16 +415,31 @@ class TaskRepository:
         return self._page(clauses, params, filters.page, filters.page_size)
 
     def list_worker_tasks(
-        self, company_id: UUID, user_id: UUID, filters: WorkerTaskFilters
+        self,
+        company_id: UUID,
+        user_id: UUID,
+        filters: WorkerTaskFilters,
+        client_ids: list[UUID] | None = None,
     ) -> tuple[list[TaskRow], int]:
+        """`client_ids`: the clients this person has access to (scope CLIENT lists all their
+        tasks)."""
         clauses = ["t.company_id = %(company)s"]
-        params: dict[str, Any] = {"company": company_id, "user": user_id}
+        params: dict[str, Any] = {
+            "company": company_id,
+            "user": user_id,
+            "clients": client_ids or [],
+        }
         if filters.role == "ASSIGNEE":
             clauses.append("t.assignee_user_id = %(user)s")
         elif filters.role == "MONITOR":
             clauses.append("t.monitor_user_id = %(user)s")
+        elif filters.role == "CLIENT":
+            clauses.append("t.client_id = ANY(%(clients)s)")
         else:
             clauses.append("(t.assignee_user_id = %(user)s OR t.monitor_user_id = %(user)s)")
+        if filters.client_id is not None:
+            clauses.append("t.client_id = %(client)s")
+            params["client"] = filters.client_id
         if filters.status:
             clauses.append('t.status = %(status)s::"TaskStatus"')
             params["status"] = filters.status

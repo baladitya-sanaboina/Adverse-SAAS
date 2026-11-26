@@ -18,7 +18,9 @@ export type WorkerTask = {
   status: TaskStatus;
   client_name: string;
   service_name: string;
-  my_role: "ASSIGNEE" | "MONITOR";
+  // CLIENT_WRITE / CLIENT_READ: seen through access to the task's client (owner request 2026-11-26).
+  my_role: "ASSIGNEE" | "MONITOR" | "CLIENT_WRITE" | "CLIENT_READ";
+  can_comment: boolean;
   assignee_name: string | null;
   due_date: string | null;
   is_overdue: boolean;

@@ -14,6 +14,7 @@ import { TaskManagementPage } from "@/components/tasks/task-management-page";
 import { PaymentsPage } from "@/components/payments/payments-page";
 import { PaymentSheetsPage } from "@/components/sheets/payment-sheets-page";
 import { ContentCalendarPage } from "@loopless-shared/calendar/content-calendar";
+import { ClientAccessPage } from "@/components/client-access/client-access-page";
 import { ReportsPage } from "@/components/reports/reports-page";
 import { DocumentsPage } from "@/components/documents/documents-page";
 
@@ -36,6 +37,7 @@ export default async function SectionPage({ params }: { params: Promise<{ sectio
   if (section === "crm") return <CrmPipelinePage />;
   if (section === "tasks") return <TaskManagementPage />;
   if (section === "calendar") return <ContentCalendarPage role="ADMIN" />;
+  if (section === "client-access") return <ClientAccessPage />;
   if (section === "payments") return <PaymentsPage />;
   if (section === "sheets") return <PaymentSheetsPage />;
   if (section === "invoices") return <InvoicesPage />;

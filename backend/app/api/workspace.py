@@ -23,7 +23,7 @@ from app.schemas.production import (
     WorkerTaskDetailResponse,
     WorkerTaskFilters,
     WorkerTaskListResponse,
-    WorkerTaskRole,
+    WorkerTaskScope,
     WorkspaceDashboardResponse,
 )
 from app.schemas.registration import ErrorResponse
@@ -55,12 +55,13 @@ def dashboard(context: AuthenticatedContext) -> WorkspaceDashboardResponse:
 @router.get(
     "/tasks",
     response_model=WorkerTaskListResponse,
-    summary="Tasks assigned to me or monitored by me",
+    summary="Tasks assigned to me or monitored by me, or (role=CLIENT) of clients I can access",
     responses=ERRORS,
 )
 def list_my_tasks(
     context: AuthenticatedContext,
-    role: WorkerTaskRole | None = Query(None),
+    role: WorkerTaskScope | None = Query(None),
+    client_id: UUID | None = Query(None),
     task_status: TaskStatus | None = Query(None, alias="status"),
     search: str = Query("", max_length=100),
     page: int = Query(1, ge=1),
@@ -69,7 +70,12 @@ def list_my_tasks(
     return task_service.list_worker_tasks(
         context,
         WorkerTaskFilters(
-            role=role, status=task_status, search=search.strip(), page=page, page_size=page_size
+            role=role,
+            client_id=client_id,
+            status=task_status,
+            search=search.strip(),
+            page=page,
+            page_size=page_size,
         ),
     )
 

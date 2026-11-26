@@ -371,6 +371,44 @@ class ChatService:
             exclude=actor_id,
         )
 
+    def sync_client_group(
+        self, company_id: UUID, client_id: UUID, staff_ids: list[UUID], actor_id: UUID
+    ) -> None:
+        """The client's automatic group (owner request 2026-11-26): the client's login, every
+        admin and the staff with access to the client. Made the first time; afterwards people
+        who lost access leave it and new ones join."""
+        client = self.repository.client_user(company_id, client_id)
+        if client is None:
+            return
+        name, login = client
+        title = f"{name} team"[:120]
+        members = list(
+            dict.fromkeys(
+                [*self.repository.admin_ids(company_id), *staff_ids, *([login] if login else [])]
+            )
+        )
+        conversation_id = self.repository.client_group_id(company_id, client_id)
+        if conversation_id is None:
+            conversation_id = self.repository.create_client_group(
+                company_id, client_id, title, members, actor_id
+            )
+            before: set[UUID] = set()
+        else:
+            before = {member.user_id for member in self.repository.members([conversation_id])}
+            self.repository.update_group(conversation_id, None, members)
+        self._added(
+            company_id,
+            [user_id for user_id in members if user_id not in before],
+            actor_id,
+            conversation_id,
+            title,
+        )
+        realtime.publish(
+            list({*before, *members}),
+            "chat.conversation",
+            {"conversation_id": str(conversation_id)},
+        )
+
     def react(self, context: AuthContext, message_id: UUID, emoji: str) -> ChatMessageResponse:
         company_id, _, _, row = self._own_message(context, message_id)
         self.repository.toggle_reaction(message_id, context.user_id, emoji)

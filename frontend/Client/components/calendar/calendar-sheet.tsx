@@ -26,7 +26,8 @@ import type { CalendarEntry } from "./content-calendar";
 import { LooplessDate } from "@/components/foundation/loopless-date";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 
-type Role = "ADMIN" | "CLIENT";
+// STAFF: a manager or employee with access to the client (owner request 2026-11-26), view only.
+type Role = "ADMIN" | "CLIENT" | "STAFF";
 type Tick = "recorded" | "script_ready" | "edited" | "posted_instagram" | "posted_youtube";
 type TextField = "title" | "reference_url" | "script_url" | "pdf_url" | "notes" | "entry_date";
 
@@ -55,6 +56,7 @@ function EditCell({
   type = "text",
   placeholder,
   disabled,
+  disabledTitle = "Your agency is working on this video",
   className,
   onSave,
 }: {
@@ -63,6 +65,7 @@ function EditCell({
   type?: "text" | "date" | "url";
   placeholder?: string;
   disabled?: boolean;
+  disabledTitle?: string;
   className?: string;
   onSave: (value: string) => void;
 }) {
@@ -116,7 +119,7 @@ function EditCell({
         type="button"
         className="sheet-cell-button"
         disabled={disabled}
-        title={disabled ? "Your agency is working on this video" : "Click to edit"}
+        title={disabled ? disabledTitle : "Click to edit"}
         onClick={() => {
           setDraft(value);
           setEditing(true);
@@ -176,7 +179,20 @@ export function LinkChip({ url, label }: { url: string; label?: string }) {
   );
 }
 
-function LinkCell({ value, label, onSave }: { value: string; label: string; onSave: (value: string) => void }) {
+function LinkCell({
+  value,
+  label,
+  readOnly = false,
+  onSave,
+}: {
+  value: string;
+  label: string;
+  readOnly?: boolean;
+  onSave: (value: string) => void;
+}) {
+  if (readOnly) {
+    return <td className="sheet-cell link">{value ? <LinkChip url={value} label={label} /> : null}</td>;
+  }
   return (
     <EditCell
       value={value}
@@ -266,7 +282,9 @@ export function CalendarSheet({
   const [draft, setDraft] = useState({ entry_date: "", title: "", no_post: false, service_id: "" });
   const [hint, setHint] = useState("");
   const [adding, setAdding] = useState(false);
-  const columns = 12 + (showClient ? 1 : 0) + (role === "ADMIN" ? 1 : 0) + 1;
+  const readOnly = role === "STAFF";
+  const showTicket = role !== "CLIENT";
+  const columns = 12 + (showClient ? 1 : 0) + (showTicket ? 1 : 0) + 1;
 
   async function add() {
     const values = { ...draft, entry_date: draft.entry_date || nextDate, title: draft.title.trim() };
@@ -302,7 +320,7 @@ export function CalendarSheet({
             <th>Youtube-Post</th>
             <th>Script</th>
             <th>PDF&apos;s LINKS</th>
-            {role === "ADMIN" && <th>Ticket</th>}
+            {showTicket && <th>Ticket</th>}
             <th aria-label="Open" />
           </tr>
         </thead>
@@ -312,14 +330,22 @@ export function CalendarSheet({
               Math.floor((weekStart(entry.entry_date) - (firstWeek.get(entry.client.id) ?? 0)) / (7 * DAY_MS)) + 1;
             const day = parse(entry.entry_date).toLocaleDateString("en-IN", { weekday: "long" });
             const started = entry.task != null && !["PENDING", "ASSIGNED", "CANCELLED"].includes(entry.task.status);
-            const locked = role === "CLIENT" && started;
+            const locked = (role === "CLIENT" && started) || readOnly;
+            const lockedTitle = readOnly ? "View only" : undefined;
+            // Videos the agency's team added show in their own colour (owner request 2026-11-26).
+            const rowClass = [entry.no_post ? "no-reel" : "", entry.added_by_team ? "team" : ""].join(" ").trim();
             return (
-              <tr key={entry.id} className={entry.no_post ? "no-reel" : undefined}>
+              <tr
+                key={entry.id}
+                className={rowClass || undefined}
+                title={entry.added_by_team ? `Added by ${entry.created_by_name} (team)` : undefined}
+              >
                 <EditCell
                   value={entry.entry_date}
                   display={sheetDate(entry.entry_date)}
                   type="date"
                   disabled={locked}
+                  disabledTitle={lockedTitle}
                   className="date"
                   onSave={(value) => value && onEdit(entry, "entry_date", value)}
                 />
@@ -335,54 +361,62 @@ export function CalendarSheet({
                     <EditCell
                       value={entry.title}
                       disabled={locked}
+                      disabledTitle={lockedTitle}
                       className="topic"
                       onSave={(value) => value && onEdit(entry, "title", value)}
                     />
                     <LinkCell
                       value={entry.reference_url}
                       label={`Reference video: ${entry.title}`}
+                      readOnly={readOnly}
                       onSave={(value) => onEdit(entry, "reference_url", value)}
                     />
                     <TickCell
                       on={entry.recorded}
                       label={`Recorded: ${entry.title}`}
+                      disabled={readOnly}
                       onToggle={() => onToggle(entry, "recorded")}
                     />
                     <TickCell
                       on={entry.script_ready}
                       label={`Script ready: ${entry.title}`}
+                      disabled={readOnly}
                       onToggle={() => onToggle(entry, "script_ready")}
                     />
                     <TickCell
                       on={entry.edited}
                       label={`Edited: ${entry.title}`}
-                      title={role === "CLIENT" ? "Ticks itself when your video is approved" : "Edited"}
-                      disabled={role === "CLIENT"}
+                      title={role === "ADMIN" ? "Edited" : "Ticks itself when the video is approved"}
+                      disabled={role !== "ADMIN"}
                       onToggle={() => onToggle(entry, "edited")}
                     />
                     <TickCell
                       on={entry.posted_instagram}
                       label={`Posted on Instagram: ${entry.title}`}
+                      disabled={readOnly}
                       onToggle={() => onToggle(entry, "posted_instagram")}
                     />
                     <TickCell
                       on={entry.posted_youtube}
                       label={`Posted on YouTube: ${entry.title}`}
+                      disabled={readOnly}
                       onToggle={() => onToggle(entry, "posted_youtube")}
                     />
                     <LinkCell
                       value={entry.script_url}
                       label={`Script: ${entry.title}`}
+                      readOnly={readOnly}
                       onSave={(value) => onEdit(entry, "script_url", value)}
                     />
                     <LinkCell
                       value={entry.pdf_url}
                       label={`PDF: ${entry.title}`}
+                      readOnly={readOnly}
                       onSave={(value) => onEdit(entry, "pdf_url", value)}
                     />
                   </>
                 )}
-                {role === "ADMIN" && (
+                {showTicket && (
                   <td className="sheet-cell ticket">
                     {entry.task ? (
                       <Link
@@ -397,9 +431,11 @@ export function CalendarSheet({
                   </td>
                 )}
                 <td className="sheet-cell more">
-                  <button type="button" aria-label={`Open ${entry.title}`} onClick={() => onOpen(entry)}>
-                    <MoreHorizontal />
-                  </button>
+                  {!readOnly && (
+                    <button type="button" aria-label={`Open ${entry.title}`} onClick={() => onOpen(entry)}>
+                      <MoreHorizontal />
+                    </button>
+                  )}
                 </td>
               </tr>
             );
@@ -414,14 +450,16 @@ export function CalendarSheet({
                 />
               </td>
               <td className="sheet-cell muted" colSpan={2 + (showClient ? 1 : 0)}>
-                <label className="sheet-no-reel-toggle">
-                  <input
-                    type="checkbox"
-                    checked={draft.no_post}
-                    onChange={(event) => setDraft((current) => ({ ...current, no_post: event.target.checked }))}
-                  />
-                  No Reel
-                </label>
+                {!readOnly && (
+                  <label className="sheet-no-reel-toggle">
+                    <input
+                      type="checkbox"
+                      checked={draft.no_post}
+                      onChange={(event) => setDraft((current) => ({ ...current, no_post: event.target.checked }))}
+                    />
+                    No Reel
+                  </label>
+                )}
               </td>
               <td className="sheet-cell topic" colSpan={MERGED}>
                 <div className="sheet-new-topic">
@@ -454,7 +492,7 @@ export function CalendarSheet({
                 </div>
                 {hint && <small className="sheet-new-hint">{hint}</small>}
               </td>
-              {role === "ADMIN" && <td className="sheet-cell" />}
+              {showTicket && <td className="sheet-cell" />}
               <td className="sheet-cell more">
                 <button type="button" aria-label="Add row" disabled={adding} onClick={() => void add()}>
                   +

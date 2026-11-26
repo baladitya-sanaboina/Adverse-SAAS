@@ -17,7 +17,10 @@ from app.api.authentication import router as authentication_router
 from app.api.calendar import client_router as client_calendar_router
 from app.api.calendar import router as calendar_router
 from app.api.calendar import staff_router as staff_calendar_router
+from app.api.calendar import team_router as team_calendar_router
 from app.api.chat import router as chat_router
+from app.api.client_access import router as client_access_router
+from app.api.client_access import staff_router as staff_client_access_router
 from app.api.clients import router as clients_router
 from app.api.company_dashboard import router as company_dashboard_router
 from app.api.company_integrations import router as company_integrations_router
@@ -334,6 +337,9 @@ app.include_router(finance_router, prefix=settings.api_prefix)
 app.include_router(calendar_router, prefix=settings.api_prefix)
 app.include_router(client_calendar_router, prefix=settings.api_prefix)
 app.include_router(staff_calendar_router, prefix=settings.api_prefix)
+app.include_router(team_calendar_router, prefix=settings.api_prefix)
+app.include_router(client_access_router, prefix=settings.api_prefix)
+app.include_router(staff_client_access_router, prefix=settings.api_prefix)
 app.include_router(chat_router, prefix=settings.api_prefix)
 app.include_router(mail_router, prefix=settings.api_prefix)
 app.include_router(agenda_router, prefix=settings.api_prefix)

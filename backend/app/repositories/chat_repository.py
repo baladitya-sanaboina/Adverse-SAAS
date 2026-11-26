@@ -312,6 +312,44 @@ class ChatRepository:
             connection.commit()
         return conversation_id
 
+    def client_group_id(self, company_id: UUID, client_id: UUID) -> UUID | None:
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM chat_conversations "
+                "WHERE company_id = %s AND client_id = %s AND is_client_group",
+                (company_id, client_id),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+    def create_client_group(
+        self, company_id: UUID, client_id: UUID, title: str, user_ids: list[UUID], actor_id: UUID
+    ) -> UUID:
+        """The client's automatic group (one per client; a second call returns the first)."""
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO chat_conversations (id, company_id, type, title, client_id, "
+                "created_by_id, is_client_group, updated_at) "
+                "VALUES (%s, %s, 'CLIENT', %s, %s, %s, TRUE, NOW()) "
+                "ON CONFLICT (company_id, client_id) WHERE is_client_group DO NOTHING "
+                "RETURNING id",
+                (uuid4(), company_id, title, client_id, actor_id),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                cursor.execute(
+                    "SELECT id FROM chat_conversations "
+                    "WHERE company_id = %s AND client_id = %s AND is_client_group",
+                    (company_id, client_id),
+                )
+                row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("The client's chat group could not be made.")
+            conversation_id: UUID = row[0]
+            self._join(cursor, conversation_id, user_ids)
+            connection.commit()
+        return conversation_id
+
     def update_group(
         self, conversation_id: UUID, title: str | None, user_ids: list[UUID] | None
     ) -> None:

@@ -74,8 +74,13 @@ class FakeRepository:
     def get(self, company_id: UUID, entry_id: UUID) -> CalendarEntryRow | None:
         return self.rows.get(entry_id)
 
-    def list(self, company_id, client_id, start, end):  # type: ignore[no-untyped-def]
-        return [item for item in self.rows.values() if client_id in (None, item.client_id)]
+    def list(self, company_id, client_id, start, end, client_ids=None):  # type: ignore[no-untyped-def]
+        return [
+            item
+            for item in self.rows.values()
+            if client_id in (None, item.client_id)
+            and (client_ids is None or item.client_id in client_ids)
+        ]
 
     def create(self, company_id, client_id, actor_id, values):  # type: ignore[no-untyped-def]
         client = CLIENT_A if client_id == CLIENT_A.id else CLIENT_B
@@ -116,7 +121,7 @@ class FakeTickets:
         self.services: list[UUID | None] = []
         self.service_changes: list[tuple[UUID, UUID]] = []
 
-    def create_calendar_ticket(self, company_id, client_id, actor_id, title, description, due, priority=None, service_id=None):  # type: ignore[no-untyped-def]
+    def create_calendar_ticket(self, company_id, client_id, actor_id, title, description, due, priority=None, service_id=None, assignee_id=None):  # type: ignore[no-untyped-def]
         task_id = uuid4()
         self.statuses[task_id] = "PENDING"
         self.created.append((title, due))
@@ -381,6 +386,44 @@ class CalendarServiceTest(unittest.TestCase):
             CalendarEntryUpdate(no_post=False, service_id=CAROUSEL),
         )
         self.assertEqual(self.tickets.services, [CAROUSEL])
+
+    def staff_service(self, levels: dict[UUID, str]) -> tuple[CalendarService, FakeRepository]:
+        service, repository = self.service(row(CLIENT_A), row(CLIENT_B))
+        service.access = type(  # type: ignore[assignment]
+            "Access", (), {"levels_for_user": lambda self, company, user: levels}
+        )()
+        return service, repository
+
+    def test_team_member_with_create_access_adds_a_video_assigned_to_them(self, *_: Any) -> None:
+        member = uuid4()
+        service, repository = self.staff_service({CLIENT_A.id: "CREATE"})
+        tickets: list[Any] = []
+        service._open_ticket = lambda *args, **kwargs: tickets.append(kwargs)  # type: ignore[method-assign]
+        created = service.staff_create(
+            context("COMPANY_EMPLOYEE", member),
+            CalendarEntryCreate(
+                client_id=CLIENT_A.id, service_id=REEL, entry_date=date(2026, 12, 2), title="Reel"
+            ),
+        )
+        self.assertEqual(created.client.id, CLIENT_A.id)  # in the client's own calendar
+        self.assertEqual(tickets, [{"assignee_id": member}])
+
+    def test_team_member_needs_create_access_and_sees_only_their_clients(self, *_: Any) -> None:
+        member = context("COMPANY_MANAGER")
+        service, _ = self.staff_service({CLIENT_A.id: "WRITE"})
+        request = CalendarEntryCreate(
+            client_id=CLIENT_A.id, service_id=REEL, entry_date=date(2026, 12, 2), title="Reel"
+        )
+        with self.assertRaises(AuthenticationError) as refused:
+            service.staff_create(member, request)
+        self.assertEqual(refused.exception.status_code, 403)
+        with self.assertRaises(AuthenticationError) as hidden:
+            service.staff_create(member, request.model_copy(update={"client_id": CLIENT_B.id}))
+        self.assertEqual(hidden.exception.status_code, 404)
+        with self.assertRaises(AuthenticationError):
+            service.staff_list(member, CLIENT_B.id, None, None)
+        with self.assertRaises(AuthenticationError):
+            service.staff_list(context("COMPANY_CLIENT", USER_A), None, None, None)
 
     def test_staff_other_than_admin_have_no_access(self, *_: Any) -> None:
         service, _ = self.service(row(CLIENT_A))

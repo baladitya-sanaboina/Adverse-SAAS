@@ -33,7 +33,9 @@ import "../styles/content-calendar.css";
 import { OrbitLoader } from "../branding/orbit-loader";
 import { LooplessDate } from "@/components/foundation/loopless-date";
 
-type Role = "ADMIN" | "CLIENT";
+// STAFF: a manager or employee with access to some clients (owner request 2026-11-26). They see
+// those clients' calendars and, with Create access, add videos whose tickets are theirs.
+type Role = "ADMIN" | "CLIENT" | "STAFF";
 type TaskStatus =
   | "PENDING"
   | "ASSIGNED"
@@ -63,6 +65,8 @@ export type CalendarEntry = {
   edited_manual: boolean;
   script: { file_name: string; size_bytes: number } | null;
   task: { id: string; code: string; title: string; status: TaskStatus } | null;
+  // Added by a manager or employee: shown in the team colour (owner request 2026-11-26).
+  added_by_team?: boolean;
   created_by_name: string;
   created_at: string;
   updated_at: string;
@@ -135,11 +139,11 @@ export type ServiceOption = { id: string; name: string; code: string };
 /** Services to pick for a video (owner request 2026-11-20), the client's most used first. */
 export function useCalendarServices(base: string, role: Role, clientId: string): ServiceOption[] {
   const [services, setServices] = useState<{ key: string; items: ServiceOption[] }>({ key: "", items: [] });
-  const key = role === "ADMIN" ? clientId : "mine";
+  const key = role === "CLIENT" ? "mine" : clientId;
   useEffect(() => {
     if (!key) return;
     let live = true;
-    const url = role === "ADMIN" ? `${base}/services?client_id=${encodeURIComponent(key)}` : `${base}/services`;
+    const url = role === "CLIENT" ? `${base}/services` : `${base}/services?client_id=${encodeURIComponent(key)}`;
     fetch(url, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : []))
       .then((items: ServiceOption[]) => live && setServices({ key, items: Array.isArray(items) ? items : [] }))
@@ -175,7 +179,13 @@ function json(method: string, body: unknown): RequestInit {
 /* ------------------------------------------------------------------ page */
 
 export function ContentCalendarPage({ role }: { role: Role }) {
-  const base = role === "ADMIN" ? "/api/company/calendar" : "/api/client-portal/calendar";
+  const base =
+    role === "ADMIN"
+      ? "/api/company/calendar"
+      : role === "STAFF"
+        ? "/api/workspace/content-calendar"
+        : "/api/client-portal/calendar";
+  const staff = role === "STAFF";
   const today = iso(new Date());
   const [month, setMonth] = useState(() => {
     const now = new Date();
@@ -192,6 +202,9 @@ export function ContentCalendarPage({ role }: { role: Role }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  // STAFF: the clients they may add videos for (Create access).
+  const [createClients, setCreateClients] = useState<Set<string>>(() => new Set());
+  const [noAccess, setNoAccess] = useState(false);
   const [entries, setEntries] = useState<CalendarEntry[] | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -220,7 +233,7 @@ export function ContentCalendarPage({ role }: { role: Role }) {
     try {
       // The sheet shows every row like the owner's Google Sheet; the month view only its weeks.
       const params = new URLSearchParams(view === "month" ? { start, end } : {});
-      if (role === "ADMIN" && clientFilter) params.set("client_id", clientFilter);
+      if (role !== "CLIENT" && clientFilter) params.set("client_id", clientFilter);
       const result = await send<{ items: CalendarEntry[] }>(`${base}?${params}`);
       setEntries(result.items);
     } catch (reason) {
@@ -236,6 +249,18 @@ export function ContentCalendarPage({ role }: { role: Role }) {
   useLiveRefresh(["calendar.", "task."], () => void load());
 
   useEffect(() => {
+    if (role === "STAFF") {
+      void send<{ items: { client: { id: string; name: string }; level: string }[] }>("/api/workspace/client-access")
+        .then((result) => {
+          setClients(result.items.map((item) => item.client));
+          setCreateClients(
+            new Set(result.items.filter((item) => item.level === "CREATE").map((item) => item.client.id)),
+          );
+          setNoAccess(result.items.length === 0);
+        })
+        .catch(() => setClients([]));
+      return;
+    }
     if (role !== "ADMIN") return;
     void send<{ items: { id: string; name: string; status: string }[] }>("/api/company/clients?page_size=100")
       .then((result) => setClients(result.items.map((item) => ({ id: item.id, name: item.name }))))
@@ -349,9 +374,13 @@ export function ContentCalendarPage({ role }: { role: Role }) {
 
   const dayEntries = byDay.get(selectedDay) ?? [];
   const clientName =
-    role === "ADMIN"
+    role !== "CLIENT"
       ? (clients.find((item) => item.id === clientFilter)?.name ?? "All clients")
       : (entries?.[0]?.client.name ?? "My");
+  const canCreate = !staff || createClients.size > 0;
+  const openEntry = (entry: CalendarEntry) => {
+    if (!staff) setEditor({ entry, date: entry.entry_date });
+  };
 
   async function editField(
     entry: CalendarEntry,
@@ -375,11 +404,13 @@ export function ContentCalendarPage({ role }: { role: Role }) {
     try {
       const { service_id, ...rest } = values;
       const fields = { ...rest, ...(service_id && !values.no_post ? { service_id } : {}) };
-      const body = role === "ADMIN" ? { ...fields, client_id: clientFilter } : fields;
+      const body = role !== "CLIENT" ? { ...fields, client_id: clientFilter } : fields;
       const created = await send<CalendarEntry>(base, json("POST", body));
       saved(
         created,
-        created.task ? `Row added. Ticket ${role === "ADMIN" ? created.task.code + " " : ""}created.` : "Row added.",
+        created.task
+          ? `Row added. Ticket ${role !== "CLIENT" ? created.task.code + " " : ""}created${staff ? " and assigned to you" : ""}.`
+          : "Row added.",
       );
       return true;
     } catch (reason) {
@@ -398,7 +429,9 @@ export function ContentCalendarPage({ role }: { role: Role }) {
         description={
           role === "ADMIN"
             ? "Every client's plan by date. Turn an idea into a task in one step; Edited ticks itself when you approve the video."
-            : "Plan what to shoot and post on which day. Tick each step as it happens; Edited ticks itself when your video is approved."
+            : staff
+              ? "The plans of the clients you work on. With Create access, add a video: it goes into the client's calendar and the ticket is yours."
+              : "Plan what to shoot and post on which day. Tick each step as it happens; Edited ticks itself when your video is approved."
         }
         compact
       />
@@ -442,7 +475,7 @@ export function ContentCalendarPage({ role }: { role: Role }) {
               </div>
             )}
             <div className="cal-toolbar-actions">
-              {role === "ADMIN" && (
+              {role !== "CLIENT" && (
                 <div className="cal-client-filter">
                   <LooplessSelect
                     value={clientFilter}
@@ -473,15 +506,17 @@ export function ContentCalendarPage({ role }: { role: Role }) {
                   <CalendarDays /> Month
                 </button>
               </div>
-              <button
-                type="button"
-                className="cal-btn primary"
-                onClick={() =>
-                  setEditor({ entry: null, date: selectedDay.startsWith(monthKey) ? selectedDay : iso(month) })
-                }
-              >
-                <Plus /> Add entry
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  className="cal-btn primary"
+                  onClick={() =>
+                    setEditor({ entry: null, date: selectedDay.startsWith(monthKey) ? selectedDay : iso(month) })
+                  }
+                >
+                  <Plus /> {staff ? "Add video" : "Add entry"}
+                </button>
+              )}
             </div>
           </div>
 
@@ -491,7 +526,7 @@ export function ContentCalendarPage({ role }: { role: Role }) {
               <input
                 type="search"
                 value={search}
-                placeholder={role === "ADMIN" ? "Search title, notes or client" : "Search title or notes"}
+                placeholder={role !== "CLIENT" ? "Search title, notes or client" : "Search title or notes"}
                 aria-label="Search the calendar"
                 onChange={(event) => setSearch(event.target.value)}
               />
@@ -555,6 +590,11 @@ export function ContentCalendarPage({ role }: { role: Role }) {
               <dd>{totals.posted}</dd>
             </div>
           </dl>
+          {shown.some((entry) => entry.added_by_team) && (
+            <p className="cal-team-legend">
+              <i aria-hidden="true" /> Added by the {role === "CLIENT" ? "agency" : "team"} (a manager or employee)
+            </p>
+          )}
 
           {notice && (
             <div className="cal-notice" role="status">
@@ -565,7 +605,12 @@ export function ContentCalendarPage({ role }: { role: Role }) {
             </div>
           )}
 
-          {error ? (
+          {noAccess ? (
+            <div className="cal-state">
+              <strong>No client calendars yet</strong>
+              <span>The admin has not given you access to any client. Ask them in Chat.</span>
+            </div>
+          ) : error ? (
             <div className="cal-state" role="alert">
               <strong>{error}</strong>
               <button type="button" className="cal-btn" onClick={() => void load()}>
@@ -581,13 +626,13 @@ export function ContentCalendarPage({ role }: { role: Role }) {
               role={role}
               title={`${clientName} Content Calendar`}
               entries={shown}
-              showClient={role === "ADMIN" && !clientFilter}
-              canAdd={role === "CLIENT" || Boolean(clientFilter)}
+              showClient={role !== "CLIENT" && !clientFilter}
+              canAdd={role === "CLIENT" || (staff ? createClients.has(clientFilter) : Boolean(clientFilter))}
               onToggle={(entry, key) => void toggle(entry, key)}
               onEdit={(entry, field, value) => void editField(entry, field, value)}
               onAdd={addRow}
               services={sheetServices}
-              onOpen={(entry) => setEditor({ entry, date: entry.entry_date })}
+              onOpen={openEntry}
             />
           ) : (
             <div className="cal-month-layout">
@@ -636,15 +681,17 @@ export function ContentCalendarPage({ role }: { role: Role }) {
                           <button
                             key={entry.id}
                             type="button"
-                            className={`cal-chip${entry.no_post ? " no-post" : ""}${entry.edited ? " edited" : ""}`}
+                            className={`cal-chip${entry.no_post ? " no-post" : ""}${entry.edited ? " edited" : ""}${entry.added_by_team ? " team" : ""}`}
                             onClick={() => {
                               setSelectedDay(key);
-                              setEditor({ entry, date: key });
+                              openEntry(entry);
                             }}
-                            title={entry.title}
+                            title={
+                              entry.added_by_team ? `${entry.title} · added by ${entry.created_by_name}` : entry.title
+                            }
                           >
                             <strong>{entry.no_post ? "No post" : entry.title}</strong>
-                            {role === "ADMIN" && <small>{entry.client.name}</small>}
+                            {role !== "CLIENT" && <small>{entry.client.name}</small>}
                             {!entry.no_post && (
                               <span className="cal-chip-ticks" aria-hidden="true">
                                 {TICKS.map((tick) => (
@@ -671,14 +718,16 @@ export function ContentCalendarPage({ role }: { role: Role }) {
                     <span>SELECTED DAY</span>
                     <h3>{longDate(selectedDay)}</h3>
                   </div>
-                  <button
-                    type="button"
-                    className="cal-icon-button"
-                    aria-label="Add an entry on this day"
-                    onClick={() => setEditor({ entry: null, date: selectedDay })}
-                  >
-                    <Plus />
-                  </button>
+                  {canCreate && (
+                    <button
+                      type="button"
+                      className="cal-icon-button"
+                      aria-label="Add an entry on this day"
+                      onClick={() => setEditor({ entry: null, date: selectedDay })}
+                    >
+                      <Plus />
+                    </button>
+                  )}
                 </header>
                 {(meetingsByDay.get(selectedDay) ?? []).length > 0 && (
                   <ul>
@@ -690,7 +739,9 @@ export function ContentCalendarPage({ role }: { role: Role }) {
                   </ul>
                 )}
                 {dayEntries.length === 0 ? (
-                  <p className="cal-empty">Nothing planned. Add an idea for this day.</p>
+                  <p className="cal-empty">
+                    {canCreate ? "Nothing planned. Add an idea for this day." : "Nothing planned."}
+                  </p>
                 ) : (
                   <ul>
                     {dayEntries.map((entry) => (
@@ -698,7 +749,7 @@ export function ContentCalendarPage({ role }: { role: Role }) {
                         <EntryCard
                           entry={entry}
                           role={role}
-                          onOpen={() => setEditor({ entry, date: entry.entry_date })}
+                          onOpen={() => openEntry(entry)}
                           onToggle={(key) => void toggle(entry, key)}
                         />
                       </li>
@@ -717,8 +768,8 @@ export function ContentCalendarPage({ role }: { role: Role }) {
           base={base}
           entry={editor.entry}
           date={editor.date}
-          clients={clients}
-          defaultClient={clientFilter}
+          clients={staff ? clients.filter((item) => createClients.has(item.id)) : clients}
+          defaultClient={!staff || createClients.has(clientFilter) ? clientFilter : ""}
           onClose={() => setEditor(null)}
           onSaved={(entry, message) => {
             saved(entry, message);
@@ -752,6 +803,7 @@ function TickBox({
   onToggle: () => void;
 }) {
   const automatic = tick === "edited" && role === "CLIENT";
+  const viewOnly = role === "STAFF";
   const checked = entry[tick];
   return (
     <button
@@ -759,9 +811,9 @@ function TickBox({
       role="checkbox"
       aria-checked={checked}
       aria-label={`${label}: ${entry.title}`}
-      title={automatic ? "Ticks itself when your video is approved" : label}
+      title={automatic ? "Ticks itself when your video is approved" : viewOnly ? `${label} (view only)` : label}
       className={`cal-tick${checked ? " on" : ""}${automatic ? " auto" : ""}`}
-      disabled={automatic}
+      disabled={automatic || viewOnly}
       onClick={onToggle}
     >
       <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -775,12 +827,12 @@ function TaskBadge({ task, role }: { task: NonNullable<CalendarEntry["task"]>; r
   const done = task.status === "APPROVED" || task.status === "COMPLETED";
   const body = (
     <>
-      {role === "ADMIN" ? `${task.code} · ` : ""}
+      {role !== "CLIENT" ? `${task.code} · ` : ""}
       {done ? "Edited" : STATUS_TEXT[task.status]}
     </>
   );
   const className = `cal-task-badge${done ? " done" : task.status === "CANCELLED" ? " cancelled" : ""}`;
-  return role === "ADMIN" ? (
+  return role !== "CLIENT" ? (
     <Link href={`/tasks?task=${task.id}`} className={className}>
       {body}
     </Link>
@@ -826,9 +878,12 @@ function EntryCard({
   onToggle: (key: Tick) => void;
 }) {
   return (
-    <article className={`cal-card${entry.no_post ? " no-post" : ""}`}>
+    <article
+      className={`cal-card${entry.no_post ? " no-post" : ""}${entry.added_by_team ? " team" : ""}`}
+      title={entry.added_by_team ? `Added by ${entry.created_by_name} (team)` : undefined}
+    >
       <button type="button" className="cal-card-title" onClick={onOpen}>
-        {role === "ADMIN" && <small>{entry.client.name}</small>}
+        {role !== "CLIENT" && <small>{entry.client.name}</small>}
         <strong>{entry.no_post ? "No post day" : entry.title}</strong>
       </button>
       {!entry.no_post && (
@@ -934,7 +989,7 @@ function EntryDialog({
   async function submit(event: FormEvent) {
     event.preventDefault();
     setMessage("");
-    if (role === "ADMIN" && !entry && !form.client_id) return setMessage("Choose the client.");
+    if (role !== "CLIENT" && !entry && !form.client_id) return setMessage("Choose the client.");
     if (!form.no_post && !form.title.trim()) return setMessage("Give the video a title.");
     if (needsService) return setMessage("Choose the service: Reel, Carousel…");
     setBusy(true);
@@ -963,7 +1018,7 @@ function EntryDialog({
             base,
             json("POST", {
               ...payload,
-              ...(role === "ADMIN" ? { client_id: form.client_id } : {}),
+              ...(role !== "CLIENT" ? { client_id: form.client_id } : {}),
               ...(form.priority && !form.no_post ? { priority: form.priority } : {}),
               ...(form.service_id && !form.no_post ? { service_id: form.service_id } : {}),
             }),
@@ -1000,7 +1055,15 @@ function EntryDialog({
       <section className="cal-dialog" role="dialog" aria-modal="true" aria-labelledby="cal-dialog-title">
         <header>
           <div>
-            <span>{entry ? (role === "ADMIN" ? entry.client.name.toUpperCase() : "CALENDAR ENTRY") : "NEW ENTRY"}</span>
+            <span>
+              {entry
+                ? role === "ADMIN"
+                  ? entry.client.name.toUpperCase()
+                  : "CALENDAR ENTRY"
+                : role === "STAFF"
+                  ? "NEW VIDEO · THE TICKET WILL BE YOURS"
+                  : "NEW ENTRY"}
+            </span>
             <h2 id="cal-dialog-title">{entry ? (entry.no_post ? "No post day" : entry.title) : "Plan a video"}</h2>
             {entry && <p>Added by {entry.created_by_name}</p>}
           </div>
@@ -1018,7 +1081,7 @@ function EntryDialog({
           {locked && (
             <p className="cal-form-hint">Your agency is working on this video, so its date and title are fixed.</p>
           )}
-          {role === "ADMIN" && !entry && (
+          {role !== "CLIENT" && !entry && (
             <label className="cal-field wide">
               <span>Client</span>
               <LooplessSelect
@@ -1042,19 +1105,21 @@ function EntryDialog({
               clearable={false}
             />
           </label>
-          <div className="cal-field">
-            <span>Day type</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={form.no_post}
-              className={`cal-switch${form.no_post ? " on" : ""}`}
-              disabled={locked}
-              onClick={() => setForm((current) => ({ ...current, no_post: !current.no_post }))}
-            >
-              <i aria-hidden="true" /> {form.no_post ? "No post on this day" : "Post on this day"}
-            </button>
-          </div>
+          {role !== "STAFF" && (
+            <div className="cal-field">
+              <span>Day type</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.no_post}
+                className={`cal-switch${form.no_post ? " on" : ""}`}
+                disabled={locked}
+                onClick={() => setForm((current) => ({ ...current, no_post: !current.no_post }))}
+              >
+                <i aria-hidden="true" /> {form.no_post ? "No post on this day" : "Post on this day"}
+              </button>
+            </div>
+          )}
           {!form.no_post && (
             <>
               <label className="cal-field wide">
@@ -1186,7 +1251,7 @@ function EntryDialog({
             </button>
             <button type="submit" className="cal-btn primary" disabled={busy}>
               {busy ? <RefreshCw className="spin" /> : null}
-              {entry ? "Save" : "Add entry"}
+              {entry ? "Save" : role === "STAFF" ? "Add video" : "Add entry"}
             </button>
           </footer>
         </form>

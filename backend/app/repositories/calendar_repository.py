@@ -42,6 +42,8 @@ class CalendarEntryRow:
     pdf_url: str = ""
     service_id: UUID | None = None
     service_name: str | None = None
+    # Added by a manager or employee (owner request 2026-11-26: shown in another colour).
+    added_by_team: bool = False
 
 
 _SELECT = """
@@ -50,12 +52,14 @@ SELECT e.id, e.client_id, c.name, c.code, e.entry_date, e.title, e.reference_url
   e.script_file_name, e.script_storage_path, e.script_mime_type, e.script_size_bytes,
   e.task_id, t.number, t.title, t.status::text,
   COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email, ''),
-  e.created_at, e.updated_at, e.script_url, e.pdf_url, e.service_id, sv.name
+  e.created_at, e.updated_at, e.script_url, e.pdf_url, e.service_id, sv.name,
+  COALESCE(ur.code IN ('COMPANY_MANAGER', 'COMPANY_EMPLOYEE'), FALSE)
 FROM content_calendar_entries e
 JOIN clients c ON c.id = e.client_id
 LEFT JOIN company_services sv ON sv.id = e.service_id
 LEFT JOIN tasks t ON t.id = e.task_id
 LEFT JOIN users u ON u.id = e.created_by_id
+LEFT JOIN roles ur ON ur.id = u.role_id
 """
 
 # Columns a caller may change through update(); anything else is ignored.
@@ -89,10 +93,14 @@ class CalendarRepository:
         client_id: UUID | None,
         start: date | None,
         end: date | None,
+        client_ids: list[UUID] | None = None,
     ) -> list[CalendarEntryRow]:
+        """`client_ids`: only these clients (a manager's or employee's clients)."""
         where = ["e.company_id = %(company)s"]
         if client_id is not None:
             where.append("e.client_id = %(client)s")
+        if client_ids is not None:
+            where.append("e.client_id = ANY(%(clients)s)")
         if start is not None:
             where.append("e.entry_date >= %(start)s")
         if end is not None:
@@ -100,7 +108,13 @@ class CalendarRepository:
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
                 _SELECT + " WHERE " + " AND ".join(where) + " ORDER BY e.entry_date, e.created_at",
-                {"company": company_id, "client": client_id, "start": start, "end": end},
+                {
+                    "company": company_id,
+                    "client": client_id,
+                    "clients": client_ids or [],
+                    "start": start,
+                    "end": end,
+                },
             )
             return [_row(row) for row in cursor.fetchall()]
 

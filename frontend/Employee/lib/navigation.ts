@@ -2,6 +2,7 @@ import {
   Banknote,
   CalendarClock,
   CalendarDays,
+  CalendarRange,
   ChartNoAxesCombined,
   ClipboardList,
   Contact,
@@ -16,6 +17,8 @@ export const navigationItems = [
   { href: "/tasks", label: "My Tasks", icon: ClipboardList, module: "TASKS" },
   { href: "/salary", label: "My Salary", icon: Banknote, module: "TASKS" },
   { href: "/calendar", label: "Work Calendar", icon: CalendarDays },
+  // Content calendars of the clients the admin gave access to (owner request 2026-11-26).
+  { href: "/content-calendar", label: "Content Calendar", icon: CalendarRange },
   { href: "/chat", label: "Chat", icon: MessagesSquare },
   // Mail opens in its own tab (owner request 2026-11-15).
   { href: "/mail", label: "Mail", icon: Mail, newTab: true },

@@ -52,6 +52,21 @@ const CLOSED: TaskStatus[] = ["APPROVED", "COMPLETED", "CANCELLED"];
 const VIEW_KEY = "adverse-workspace-task-view";
 const TASK_ID = /^[0-9a-f-]{36}$/i;
 
+type Role = WorkerTask["my_role"];
+const ROLE_TEXT: Record<Role, string> = {
+  ASSIGNEE: "Assigned to you",
+  MONITOR: "You monitor this task",
+  CLIENT_WRITE: "Client access · you can update it",
+  CLIENT_READ: "Client access · view only",
+};
+const ROLE_SHORT: Record<Role, string> = {
+  ASSIGNEE: "Assigned",
+  MONITOR: "Monitoring",
+  CLIENT_WRITE: "Client · write",
+  CLIENT_READ: "Client · view",
+};
+type MyClient = { client: { id: string; name: string }; level: "READ" | "WRITE" | "CREATE" };
+
 /** Keep ?task=<id> in the address bar so an open task can be shared or reloaded. */
 function syncUrl(id: string | null) {
   const url = new URL(window.location.href);
@@ -70,6 +85,8 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [role, setRole] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [myClients, setMyClients] = useState<MyClient[]>([]);
   const [quick, setQuick] = useState<QuickFilter>("all");
   const [view, setView] = useState<TaskView>("board");
   const [dragging, setDragging] = useState<WorkerTask | null>(null);
@@ -89,6 +106,10 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
       } catch {
         // Storage unavailable: keep the board.
       }
+      // Clients the admin gave this person access to (owner request 2026-11-26).
+      api<{ items: MyClient[] }>("/api/workspace/client-access")
+        .then((data) => setMyClients(data.items))
+        .catch(() => setMyClients([]));
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -99,7 +120,7 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
       setError("");
       try {
         const data = await api<Paged<WorkerTask>>(
-          `/api/workspace/tasks${query({ search, status, role, page_size: 500 })}`,
+          `/api/workspace/tasks${query({ search, status, role, client_id: clientId, page_size: 500 })}`,
         );
         setItems(data.items);
       } catch (requestError) {
@@ -108,7 +129,7 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
         setLoading(false);
       }
     },
-    [search, status, role],
+    [search, status, role, clientId],
   );
 
   useEffect(() => {
@@ -164,7 +185,7 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
     [items, reviewLabel],
   );
   const visible = useMemo(() => items.filter((task) => matchesQuick(task, quick)), [items, quick]);
-  const filtered = Boolean(search || status || role || quick !== "all");
+  const filtered = Boolean(search || status || role || clientId || quick !== "all");
   const columns = COLUMNS.filter((column) =>
     quick === "all" && !status && column !== "CANCELLED" ? true : visible.some((task) => task.status === column),
   );
@@ -186,7 +207,7 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
           onView={choose}
         />
         <QuickFilters chips={chips} value={quick} onChange={setQuick}>
-          {canMonitor && (
+          {(canMonitor || myClients.length > 0) && (
             <LooplessSelect
               value={role}
               onValueChange={setRole}
@@ -194,7 +215,19 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
               options={[
                 { value: "", label: "All my tasks" },
                 { value: "ASSIGNEE", label: "Assigned to me" },
-                { value: "MONITOR", label: "I monitor" },
+                ...(canMonitor ? [{ value: "MONITOR", label: "I monitor" }] : []),
+                ...(myClients.length > 0 ? [{ value: "CLIENT", label: "Client tickets" }] : []),
+              ]}
+            />
+          )}
+          {myClients.length > 0 && (
+            <LooplessSelect
+              value={clientId}
+              onValueChange={setClientId}
+              ariaLabel="Filter by client"
+              options={[
+                { value: "", label: "All clients" },
+                ...myClients.map((item) => ({ value: item.client.id, label: item.client.name })),
               ]}
             />
           )}
@@ -278,11 +311,11 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
                           title={task.title}
                           client={task.client_name}
                           priority={task.priority}
-                          person={task.my_role === "MONITOR" ? task.assignee_name : "You"}
+                          person={task.my_role === "ASSIGNEE" ? "You" : task.assignee_name}
                           personTitle={
-                            task.my_role === "MONITOR"
-                              ? `You monitor this task · ${task.assignee_name ?? "not assigned"}`
-                              : "Assigned to you"
+                            task.my_role === "ASSIGNEE"
+                              ? ROLE_TEXT.ASSIGNEE
+                              : `${ROLE_TEXT[task.my_role]} · ${task.assignee_name ?? "not assigned"}`
                           }
                           dueDate={task.due_date}
                           overdue={task.is_overdue}
@@ -331,7 +364,7 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
                   <strong>{task.title}</strong>
                 </div>
                 <span>{task.client_name}</span>
-                <span>{task.my_role === "MONITOR" ? "Monitoring" : "Assigned"}</span>
+                <span>{ROLE_SHORT[task.my_role]}</span>
                 <span className={task.is_overdue ? "production-overdue" : undefined}>
                   {task.due_date ? formatDate(task.due_date) : "—"}
                 </span>
@@ -421,7 +454,7 @@ function TaskDetail({
           <>
             <em className={statusTone(task.status)}>{STATUS_LABELS[task.status]}</em>
             {task.is_overdue && <em className="overdue">Overdue</em>}
-            <em>{task.my_role === "MONITOR" ? "You monitor this task" : "Assigned to you"}</em>
+            <em>{ROLE_TEXT[task.my_role]}</em>
             <em>{PRIORITY_LABELS[task.priority]} priority</em>
           </>
         }
@@ -439,7 +472,7 @@ function TaskDetail({
               <dt>Due date</dt>
               <dd>{formatDate(task.due_date)}</dd>
             </div>
-            {task.my_role === "MONITOR" && (
+            {task.my_role !== "ASSIGNEE" && (
               <div>
                 <dt>Assigned to</dt>
                 <dd>{task.assignee_name ?? "—"}</dd>
@@ -549,9 +582,11 @@ function StatusPanel({
       eyebrow="WORKFLOW"
       title={STATUS_LABELS[task.status]}
       description={
-        task.my_role === "MONITOR"
-          ? "As monitor you can only change the status. Only the Admin approves work."
-          : "Submit your work when it is ready. Only the Admin approves it."
+        task.my_role === "CLIENT_READ"
+          ? "You can view this client's work; the people on it change its status."
+          : task.my_role === "ASSIGNEE"
+            ? "Submit your work when it is ready. Only the Admin approves it."
+            : "You can only change the status. Only the Admin approves work."
       }
     >
       <div className="production-panel-body">
@@ -726,24 +761,28 @@ function CommentsPanel({ task, onChange }: { task: WorkerTaskDetail; onChange: (
             ))}
           </ul>
         )}
-        <form className="production-comment-form" onSubmit={post}>
-          {error && <div className="management-form-message">{error}</div>}
-          <span className="management-input organization-textarea-shell">
-            <MessageSquare aria-hidden="true" />
-            <textarea
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              placeholder="Write a comment"
-              maxLength={5000}
-            />
-          </span>
-          <div className="production-inline-actions">
-            <button type="submit" className="management-primary-action" disabled={saving || !content.trim()}>
-              {saving ? <RefreshCw className="spin" /> : <Send />}
-              {saving ? "Posting…" : "Post comment"}
-            </button>
-          </div>
-        </form>
+        {!task.can_comment ? (
+          <p className="production-muted">You have view-only access to this client, so you cannot comment.</p>
+        ) : (
+          <form className="production-comment-form" onSubmit={post}>
+            {error && <div className="management-form-message">{error}</div>}
+            <span className="management-input organization-textarea-shell">
+              <MessageSquare aria-hidden="true" />
+              <textarea
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                placeholder="Write a comment"
+                maxLength={5000}
+              />
+            </span>
+            <div className="production-inline-actions">
+              <button type="submit" className="management-primary-action" disabled={saving || !content.trim()}>
+                {saving ? <RefreshCw className="spin" /> : <Send />}
+                {saving ? "Posting…" : "Post comment"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </Panel>
   );

@@ -26,6 +26,8 @@ from app.services.calendar_service import calendar_service
 router = APIRouter(prefix="/company/calendar", tags=["content-calendar"])
 client_router = APIRouter(prefix="/client-portal/calendar", tags=["client-portal"])
 staff_router = APIRouter(prefix="/workspace/calendar", tags=["workspace"])
+# Content calendars of the clients a manager or employee has access to (owner request 2026-11-26).
+team_router = APIRouter(prefix="/workspace/content-calendar", tags=["workspace"])
 
 ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorResponse, "description": "Not signed in."},
@@ -102,6 +104,49 @@ def admin_link_task(
     entry_id: UUID, request: CalendarTaskLink, context: AuthenticatedContext
 ) -> CalendarEntryResponse:
     return calendar_service.link_task(context, entry_id, request.task_id)
+
+
+# -- managers and employees with client access ------------------------------------------------
+
+
+@team_router.get(
+    "",
+    response_model=CalendarListResponse,
+    summary="Content calendars of the clients I have access to",
+    responses=ERRORS,
+)
+def team_list(
+    context: AuthenticatedContext,
+    client_id: UUID | None = Query(None),
+    start: date | None = Query(None),
+    end: date | None = Query(None),
+) -> CalendarListResponse:
+    return calendar_service.staff_list(context, client_id, start, end)
+
+
+@team_router.get(
+    "/services",
+    response_model=list[CalendarServiceOption],
+    summary="Services I can pick for a client's video",
+    responses=ERRORS,
+)
+def team_services(
+    context: AuthenticatedContext, client_id: UUID = Query(...)
+) -> list[CalendarServiceOption]:
+    return calendar_service.staff_services(context, client_id)
+
+
+@team_router.post(
+    "",
+    response_model=CalendarEntryResponse,
+    status_code=201,
+    summary="Add a video to a client's calendar (Create access); the ticket is mine",
+    responses=ERRORS,
+)
+def team_create(
+    request: CalendarEntryCreate, context: AuthenticatedContext
+) -> CalendarEntryResponse:
+    return calendar_service.staff_create(context, request)
 
 
 # -- client ----------------------------------------------------------------------------------
