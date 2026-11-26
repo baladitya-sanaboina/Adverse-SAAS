@@ -40,17 +40,48 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      // The app is open and in front: the page shows its own alert and plays the chime.
-      if (windows.some((client) => client.visibilityState === "visible" && client.focused)) return;
+      // Every push must show a notification: Safari/iPhone cancel the subscription after a few
+      // pushes that show nothing. When the app is open in front, the page already chimes, so
+      // this one is silent.
+      const inFront = windows.some((client) => client.visibilityState === "visible" && client.focused);
       await self.registration.showNotification(data.title || "Adverse", {
         body: data.body || "",
         tag: data.tag || undefined,
-        renotify: Boolean(data.tag),
+        renotify: Boolean(data.tag) && !inFront,
+        silent: inFront,
         icon: "/logos/adverse-favicon-192.png",
         badge: "/logos/adverse-favicon-192.png",
         data: { link: data.link || "/" },
       });
     })(),
+  );
+});
+
+function keyBytes(base64) {
+  const padded = `${base64}${"=".repeat((4 - (base64.length % 4)) % 4)}`.replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
+}
+
+// The browser replaced this device's push subscription: subscribe again and tell the server,
+// so alerts keep arriving without the app having to be opened first.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      const response = await fetch("/api/push/key", { cache: "no-store", credentials: "include" });
+      if (!response.ok) return;
+      const { enabled, public_key: publicKey } = await response.json();
+      if (!enabled || !publicKey) return;
+      const subscription = await self.registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: keyBytes(publicKey),
+      });
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+    })().catch(() => undefined),
   );
 });
 

@@ -137,6 +137,15 @@ export function playChime() {
   }
 }
 
+/** Phones (Android Chrome) refuse `new Notification()`; there only the service worker can show one. */
+function showThroughWorker(title: string, body: string, tag: string, link: string): boolean {
+  if (!("serviceWorker" in navigator)) return false;
+  void navigator.serviceWorker.ready
+    .then((registration) => registration.showNotification(title, { body, tag, data: { link } }))
+    .catch(() => undefined);
+  return true;
+}
+
 function showDesktop(item: AppNotification, onOpen: () => void): boolean {
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return false;
   try {
@@ -148,7 +157,7 @@ function showDesktop(item: AppNotification, onOpen: () => void): boolean {
     };
     return true;
   } catch {
-    return false;
+    return showThroughWorker(item.title, item.body, item.id, item.link || "/");
   }
 }
 
@@ -178,8 +187,15 @@ function stored(key: string): string | null {
  * 2. notifications: asks the browser for permission to show alerts and play a sound.
  * "Not now" on the alerts card asks again after 3 days.
  */
+/** iPhone/iPad Safari has no notifications at all until the app is added to the Home Screen. */
+function iosNeedsHomeScreen(): boolean {
+  const ios =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  return ios && !installed() && Date.now() - Number(stored(INSTALL_KEY) ?? 0) > ASK_AGAIN_MS;
+}
+
 function PermissionPrompts() {
-  const [step, setStep] = useState<"cookies" | "alerts" | "install" | null>(null);
+  const [step, setStep] = useState<"cookies" | "alerts" | "install" | "ios" | null>(null);
 
   useEffect(() => {
     const offerInstall = () =>
@@ -190,6 +206,7 @@ function PermissionPrompts() {
         const asked = Number(stored(ASKED_KEY) ?? 0);
         if (Date.now() - asked > ASK_AGAIN_MS) return setStep("alerts");
       }
+      if (iosNeedsHomeScreen()) return setStep("ios");
       if (offerInstall()) setStep("install");
     }, 1200);
     // The browser can offer "Install" a little after the page loads.
@@ -206,7 +223,7 @@ function PermissionPrompts() {
       typeof Notification !== "undefined" &&
       Notification.permission === "default" &&
       Date.now() - Number(stored(ASKED_KEY) ?? 0) > 3 * 24 * 60 * 60 * 1000;
-    setStep(askAlerts ? "alerts" : null);
+    setStep(askAlerts ? "alerts" : iosNeedsHomeScreen() ? "ios" : null);
   };
 
   const allowAlerts = async () => {
@@ -218,10 +235,16 @@ function PermissionPrompts() {
       if (result === "granted") {
         writePref(DESKTOP_KEY, true);
         writePref(SOUND_KEY, true);
-        playChime();
-        new Notification("Notifications are on", { body: "You will hear a chime for new updates." });
-        // Also when the app is closed (Web Push).
+        // Also when the app is closed (Web Push). First, so a failing test alert cannot skip it.
         void enablePush();
+        playChime();
+        const title = "Notifications are on";
+        const body = "You will hear a chime for new updates.";
+        try {
+          new Notification(title, { body });
+        } catch {
+          showThroughWorker(title, body, "notifications-on", "/");
+        }
       }
     } catch {
       // The browser refused to ask; the setting stays available on the Notifications page.
@@ -235,10 +258,12 @@ function PermissionPrompts() {
         className="notify-consent"
         role="dialog"
         aria-live="polite"
-        aria-label={step === "cookies" ? "Cookies" : step === "install" ? "Install the app" : "Notifications"}
+        aria-label={
+          step === "cookies" ? "Cookies" : step === "install" || step === "ios" ? "Install the app" : "Notifications"
+        }
       >
         <span className="notify-consent-icon" aria-hidden="true">
-          {step === "cookies" ? <Cookie /> : step === "install" ? <Download /> : <BellRing />}
+          {step === "cookies" ? <Cookie /> : step === "install" || step === "ios" ? <Download /> : <BellRing />}
         </span>
         <div>
           <strong>
@@ -246,19 +271,34 @@ function PermissionPrompts() {
               ? "We use cookies"
               : step === "install"
                 ? "Install Adverse as an app"
-                : "Turn on notifications?"}
+                : step === "ios"
+                  ? "Get alerts on this iPhone"
+                  : "Turn on notifications?"}
           </strong>
           <p>
             {step === "cookies"
               ? "Only the sign-in cookies that keep you logged in for 7 days on this device. No ads, no tracking."
               : step === "install"
                 ? "Open it from your dock, taskbar or home screen like any app. Alerts arrive even when it is closed."
-                : "Get an alert with a sound when a task is assigned, approved or paid, even when Adverse is closed."}
+                : step === "ios"
+                  ? "Tap Share, then Add to Home Screen. Open Adverse from that icon and allow notifications; alerts then arrive even when it is closed."
+                  : "Get an alert with a sound when a task is assigned, approved or paid, even when Adverse is closed."}
           </p>
           <div className="notify-consent-actions">
             {step === "cookies" ? (
               <button type="button" className="primary" onClick={nextAfterCookies}>
                 Accept
+              </button>
+            ) : step === "ios" ? (
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  writeRaw(INSTALL_KEY, String(Date.now()));
+                  setStep(null);
+                }}
+              >
+                Got it
               </button>
             ) : step === "install" ? (
               <>

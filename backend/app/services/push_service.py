@@ -22,6 +22,21 @@ logger = logging.getLogger(__name__)
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="push")
 
 
+def vapid_contact() -> str:
+    """The contact sent with each push. Apple's push service refuses a localhost address
+    (403 BadJwtToken), which stopped every push to iPhones and Safari; placeholders are replaced
+    by the company's real sender address."""
+    subject = settings.vapid_subject.strip()
+    if subject.startswith(("mailto:", "https://")) and not any(
+        word in subject for word in ("localhost", "example.com", "example.org")
+    ):
+        return subject
+    if settings.smtp_from_email.strip():
+        return f"mailto:{settings.smtp_from_email.strip()}"
+    domain = settings.internal_email_domain.strip().lower().lstrip("@") or "adverseindia.com"
+    return f"mailto:admin@{domain}"
+
+
 class PushService:
     def __init__(self, repository: PushRepository | None = None) -> None:
         self.repository = repository or PushRepository()
@@ -73,7 +88,7 @@ class PushService:
                 },
                 data=data,
                 vapid_private_key=settings.vapid_private_key.get_secret_value(),
-                vapid_claims={"sub": settings.vapid_subject},
+                vapid_claims={"sub": vapid_contact()},
                 ttl=6 * 3600,
                 headers={"Urgency": "high"},
                 timeout=10,
@@ -83,7 +98,8 @@ class PushService:
             status = getattr(error.response, "status_code", None)
             self.repository.failed(subscription.id, gone=status in (404, 410))
             if status not in (404, 410):
-                logger.info("Push failed (%s) for one device", status)
+                reason = getattr(error.response, "text", "")[:200]
+                logger.warning("Push failed (%s) for one device: %s", status, reason)
         except Exception:  # noqa: BLE001
             self.repository.failed(subscription.id, gone=False)
             logger.info("Push failed for one device", exc_info=True)

@@ -59,9 +59,24 @@ class PushRulesTest(unittest.TestCase):
         ):
             config.vapid_private_key = SecretStr("x")
             config.vapid_subject = "mailto:admin@localhost"
+            config.smtp_from_email = "team@adverse.test"
             service._send_now([uuid4()], {"title": "Hi", "link": "/mail"})
         self.assertEqual(repo.ok, [repo.rows[0].id])
         self.assertIn('"link": "/mail"', send.call_args.kwargs["data"])
+        # Apple refuses a localhost contact, so the real sender address is used instead.
+        self.assertEqual(send.call_args.kwargs["vapid_claims"], {"sub": "mailto:team@adverse.test"})
+
+    def test_contact_is_never_a_placeholder(self) -> None:
+        from app.services.push_service import vapid_contact
+
+        with patch("app.services.push_service.settings") as config:
+            config.smtp_from_email = ""
+            config.internal_email_domain = "adverseindia.com"
+            for placeholder in ("mailto:admin@localhost", "mailto:you@example.com", ""):
+                config.vapid_subject = placeholder
+                self.assertEqual(vapid_contact(), "mailto:admin@adverseindia.com")
+            config.vapid_subject = "mailto:owner@adverseindia.com"
+            self.assertEqual(vapid_contact(), "mailto:owner@adverseindia.com")
 
 
 if __name__ == "__main__":
