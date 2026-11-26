@@ -447,3 +447,25 @@ class CalendarTicketTest(unittest.TestCase):
         service.create_calendar_ticket(COMPANY, CLIENT, ADMIN, "Reel", "", date(2026, 11, 30))
         self.assertEqual(repo.created["client_price_final"], Decimal("700.00"))
         self.assertEqual(repo.created["client_price_reason"], "")
+
+    def test_a_waiting_task_follows_a_new_service(self) -> None:
+        carousel = uuid4()
+        repo = FakeTaskRepository()
+        repo.get_service = lambda company_id, service_id: ServiceRef(  # type: ignore[method-assign]
+            carousel, "Carousel", "CAROUSEL", "ACTIVE", "PER_PIECE"
+        )
+        repo.rates[("CLIENT", CLIENT)] = Decimal("250")
+        repo.task = task_row(status="PENDING", assignee_user_id=None, commission_final=None)
+        service = TaskService(repo, FakeFinanceRepository())  # type: ignore[arg-type]
+        service.change_calendar_ticket_service(COMPANY, repo.task.id, ADMIN, carousel)
+        self.assertEqual(repo.task.service_id, carousel)
+        self.assertEqual(repo.task.client_price_final, Decimal("250.00"))
+        assert repo.applied is not None
+        self.assertEqual(
+            repo.applied.price_changes[0][:3],
+            ("CLIENT_PRICE", Decimal("400.00"), Decimal("250.00")),
+        )
+
+        repo.task = task_row(status="ASSIGNED")  # commission already set from the old service
+        service.change_calendar_ticket_service(COMPANY, repo.task.id, ADMIN, carousel)
+        self.assertEqual(repo.task.service_id, SERVICE)

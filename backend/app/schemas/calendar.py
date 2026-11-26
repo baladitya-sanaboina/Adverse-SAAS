@@ -121,6 +121,7 @@ class CalendarEntryUpdate(BaseModel):
     posted_instagram: bool | None = None
     posted_youtube: bool | None = None
     edited_manual: bool | None = None
+    service_id: UUID | None = None
 
     @field_validator("title", "notes")
     @classmethod

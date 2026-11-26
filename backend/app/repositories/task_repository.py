@@ -56,6 +56,9 @@ _UPDATABLE_COLUMNS = frozenset(
         "assignee_user_id",
         "assignee_type",
         "monitor_user_id",
+        "service_id",
+        "client_pricing_model",
+        "client_price_default",
         "client_price_final",
         "client_price_reason",
         "package_id",
@@ -74,6 +77,7 @@ _ENUM_CASTS = {
     "priority": '"TaskPriority"',
     "status": '"TaskStatus"',
     "assignee_type": '"TaskAssigneeType"',
+    "client_pricing_model": '"ServicePricingModel"',
 }
 
 

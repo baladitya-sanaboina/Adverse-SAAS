@@ -908,9 +908,15 @@ function EntryDialog({
     notes: entry?.notes ?? "",
     no_post: entry?.no_post ?? false,
     priority: "",
-    service_id: "",
+    service_id: entry?.service?.id ?? "",
   });
-  const services = useCalendarServices(base, role, form.client_id);
+  const listed = useCalendarServices(base, role, form.client_id);
+  const services =
+    entry?.service && !listed.some((item) => item.id === entry.service?.id) ? [entry.service, ...listed] : listed;
+  // The service sets the manager's fixed rate when the task is assigned, so after that it is
+  // fixed (the admin can still change the task's prices).
+  const serviceLocked = entry?.task != null && !["PENDING", "CANCELLED"].includes(entry.task.status);
+  const needsService = !form.no_post && !form.service_id && (!entry || entry.no_post);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -930,7 +936,7 @@ function EntryDialog({
     setMessage("");
     if (role === "ADMIN" && !entry && !form.client_id) return setMessage("Choose the client.");
     if (!form.no_post && !form.title.trim()) return setMessage("Give the video a title.");
-    if (!entry && !form.no_post && !form.service_id) return setMessage("Choose the service: Reel, Carousel…");
+    if (needsService) return setMessage("Choose the service: Reel, Carousel…");
     setBusy(true);
     try {
       const payload = {
@@ -943,7 +949,14 @@ function EntryDialog({
         no_post: form.no_post,
       };
       if (entry) {
-        onSaved(await send<CalendarEntry>(`${base}/${entry.id}`, json("PATCH", payload)), "Entry saved.");
+        const serviceChanged = !form.no_post && form.service_id && form.service_id !== entry.service?.id;
+        onSaved(
+          await send<CalendarEntry>(
+            `${base}/${entry.id}`,
+            json("PATCH", { ...payload, ...(serviceChanged ? { service_id: form.service_id } : {}) }),
+          ),
+          "Entry saved.",
+        );
       } else {
         onCreated(
           await send<CalendarEntry>(
@@ -1054,11 +1067,9 @@ function EntryDialog({
                   onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
                 />
               </label>
-              {!entry && (
+              {!serviceLocked && (
                 <div className="cal-field wide">
-                  <span>
-                    Service <em aria-hidden="true">*</em>
-                  </span>
+                  <span>Service {(!entry || entry.no_post) && <em aria-hidden="true">*</em>}</span>
                   <LooplessSelect
                     value={form.service_id}
                     ariaLabel="Service"
@@ -1070,10 +1081,13 @@ function EntryDialog({
                   />
                 </div>
               )}
-              {entry?.service && (
+              {serviceLocked && entry?.service && (
                 <div className="cal-field wide">
                   <span>Service</span>
-                  <p className="cal-muted">{entry.service.name}</p>
+                  <p className="cal-muted">
+                    {entry.service.name}
+                    {role === "ADMIN" ? " · fixed once assigned; change the prices on the task if needed" : ""}
+                  </p>
                 </div>
               )}
               {!entry && (

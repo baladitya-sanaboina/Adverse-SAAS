@@ -57,6 +57,7 @@ CLIENT_FIELDS = frozenset(
         "script_ready",
         "posted_instagram",
         "posted_youtube",
+        "service_id",
     }
 )
 
@@ -143,6 +144,28 @@ class CalendarService:
             raise AuthenticationError(
                 422, "SERVICE_NOT_AVAILABLE", "Choose one of the services in the list."
             )
+
+    def _check_service_change(
+        self, company_id: UUID, before: CalendarEntryRow, changes: dict[str, object]
+    ) -> None:
+        """A new service must be active and may change only until the task is assigned (the
+        manager's commission is set from the service then). A no-post day that becomes a video
+        needs a service, like a new entry."""
+        service_id = changes.get("service_id")
+        if isinstance(service_id, UUID) and service_id != before.service_id:
+            self._check_service(company_id, service_id)
+            if before.task_status not in (None, "PENDING", "CANCELLED"):
+                raise AuthenticationError(
+                    409,
+                    "SERVICE_LOCKED",
+                    "This video is already assigned, so its service is fixed. The admin can "
+                    "still change its prices on the task.",
+                )
+        if before.no_post and changes.get("no_post") is False:
+            if (service_id or before.service_id) is None:
+                raise AuthenticationError(
+                    422, "SERVICE_REQUIRED", "Choose the service: Reel, Carousel, Thumbnail..."
+                )
 
     def _service_options(self, company_id: UUID, client_id: UUID) -> list[CalendarServiceOption]:
         out = []
@@ -318,6 +341,10 @@ class CalendarService:
             self.tickets.sync_calendar_ticket(
                 company_id, after.task_id, actor_id, after.title, after.entry_date
             )
+        if after.service_id is not None and after.service_id != before.service_id:
+            self.tickets.change_calendar_ticket_service(
+                company_id, after.task_id, actor_id, after.service_id
+            )
 
     # -- admin -------------------------------------------------------------------------------
 
@@ -368,7 +395,9 @@ class CalendarService:
     ) -> CalendarEntryResponse:
         company_id = self._admin(context, "EDIT")
         before = self._entry(company_id, entry_id, None)
-        self.repository.update(company_id, entry_id, request.model_dump(exclude_none=True))
+        values = request.model_dump(exclude_none=True)
+        self._check_service_change(company_id, before, values)
+        self.repository.update(company_id, entry_id, values)
         self._follow(company_id, before, context.user_id)
         return entry_response(self._entry(company_id, entry_id, None))
 
@@ -468,6 +497,7 @@ class CalendarService:
                 "ENTRY_IN_PRODUCTION",
                 "Your agency is working on this video, so only the ticks can change.",
             )
+        self._check_service_change(company_id, before, changes)
         self.repository.update(company_id, entry_id, changes)
         self._follow(company_id, before, context.user_id)
         return entry_response(self._entry(company_id, entry_id, client.id))

@@ -114,6 +114,7 @@ class FakeTickets:
         self.cancelled: list[UUID] = []
         self.priorities: list[str | None] = []
         self.services: list[UUID | None] = []
+        self.service_changes: list[tuple[UUID, UUID]] = []
 
     def create_calendar_ticket(self, company_id, client_id, actor_id, title, description, due, priority=None, service_id=None):  # type: ignore[no-untyped-def]
         task_id = uuid4()
@@ -126,6 +127,9 @@ class FakeTickets:
     def sync_calendar_ticket(self, company_id, task_id, actor_id, title, due):  # type: ignore[no-untyped-def]
         self.synced.append((task_id, title, due))
 
+    def change_calendar_ticket_service(self, company_id, task_id, actor_id, service_id):  # type: ignore[no-untyped-def]
+        self.service_changes.append((task_id, service_id))
+
     def cancel_calendar_ticket(self, company_id, task_id, actor_id):  # type: ignore[no-untyped-def]
         if self.statuses.get(task_id) != "PENDING":
             raise AuthenticationError(409, "ENTRY_IN_PRODUCTION", "Started.")
@@ -133,13 +137,15 @@ class FakeTickets:
 
 
 REEL = uuid4()
+CAROUSEL = uuid4()
 
 
 class FakeTasks:
     def get_service(self, company_id: UUID, service_id: UUID) -> ServiceRef | None:
-        return (
-            ServiceRef(REEL, "Reel", "REEL", "ACTIVE", "PER_VIDEO") if service_id == REEL else None
-        )
+        return {
+            REEL: ServiceRef(REEL, "Reel", "REEL", "ACTIVE", "PER_VIDEO"),
+            CAROUSEL: ServiceRef(CAROUSEL, "Carousel", "CAROUSEL", "ACTIVE", "PER_PIECE"),
+        }.get(service_id)
 
     def calendar_service_choices(self, company_id: UUID, client_id: UUID) -> list[UUID]:
         return [REEL]
@@ -323,6 +329,58 @@ class CalendarServiceTest(unittest.TestCase):
         service.client_update(
             context("COMPANY_CLIENT", USER_A), entry.id, CalendarEntryUpdate(posted_youtube=True)
         )
+
+    def test_a_wrong_service_can_be_fixed_until_assigned(self, *_: Any) -> None:
+        task = uuid4()
+        entry = row(
+            CLIENT_A, service_id=CAROUSEL, task_id=task, task_number=4, task_status="PENDING"
+        )
+        service, repository = self.service(entry, tickets=FakeTickets({task: "PENDING"}))
+        service.client_update(
+            context("COMPANY_CLIENT", USER_A), entry.id, CalendarEntryUpdate(service_id=REEL)
+        )
+        self.assertEqual(repository.rows[entry.id].service_id, REEL)
+        self.assertEqual(self.tickets.service_changes, [(task, REEL)])
+        with self.assertRaises(AuthenticationError) as unknown:
+            service.admin_update(
+                context("COMPANY_ADMIN"), entry.id, CalendarEntryUpdate(service_id=uuid4())
+            )
+        self.assertEqual(unknown.exception.status_code, 422)
+
+    def test_service_is_locked_once_assigned(self, *_: Any) -> None:
+        entry = row(
+            CLIENT_A, service_id=REEL, task_id=uuid4(), task_number=5, task_status="ASSIGNED"
+        )
+        service, repository = self.service(entry)
+        for update in (service.client_update, service.admin_update):
+            who = (
+                context("COMPANY_CLIENT", USER_A)
+                if update == service.client_update
+                else context("COMPANY_ADMIN")
+            )
+            with self.assertRaises(AuthenticationError) as locked:
+                update(who, entry.id, CalendarEntryUpdate(service_id=CAROUSEL))
+            self.assertEqual(locked.exception.code, "SERVICE_LOCKED")
+        self.assertEqual(repository.rows[entry.id].service_id, REEL)
+        # Saving the same service again (the edit form sends it) is fine.
+        service.client_update(
+            context("COMPANY_CLIENT", USER_A), entry.id, CalendarEntryUpdate(service_id=REEL)
+        )
+
+    def test_no_post_day_becoming_a_video_needs_a_service(self, *_: Any) -> None:
+        entry = row(CLIENT_A, no_post=True)
+        service, _ = self.service(entry)
+        with self.assertRaises(AuthenticationError) as missing:
+            service.client_update(
+                context("COMPANY_CLIENT", USER_A), entry.id, CalendarEntryUpdate(no_post=False)
+            )
+        self.assertEqual(missing.exception.code, "SERVICE_REQUIRED")
+        service.client_update(
+            context("COMPANY_CLIENT", USER_A),
+            entry.id,
+            CalendarEntryUpdate(no_post=False, service_id=CAROUSEL),
+        )
+        self.assertEqual(self.tickets.services, [CAROUSEL])
 
     def test_staff_other_than_admin_have_no_access(self, *_: Any) -> None:
         service, _ = self.service(row(CLIENT_A))

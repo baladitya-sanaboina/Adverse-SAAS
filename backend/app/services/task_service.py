@@ -866,8 +866,8 @@ class TaskService:
         priority: TaskPriority | None = None,
         service_id: UUID | None = None,
     ) -> UUID | None:
-        """Turn a calendar entry into a Pending, unassigned task. The service is the one the
-        client uses most that has a client rate; priority is the one chosen on the entry, or
+        """Turn a calendar entry into a Pending, unassigned task. The service is the one chosen
+        on the entry (older entries: the one the client uses most with a client rate); priority is the one chosen on the entry, or
         comes from how soon the date is. A client with no rate yet still gets the task (owner
         report 2026-11-19: it must always reach the admin's To assign list), priced 0 with the
         reason "No client rate yet" so the admin sets the price while assigning.
@@ -938,6 +938,48 @@ class TaskService:
                     "priority": calendar_priority(due_date, today),
                 }
             )
+
+        self._mutate(company_id, task_id, actor_id, plan)
+
+    def change_calendar_ticket_service(
+        self, company_id: UUID, task_id: UUID, actor_id: UUID, service_id: UUID
+    ) -> None:
+        """Move a not-yet-assigned ticket to the service now chosen on its calendar entry,
+        with that service's client rate. Once assigned, the commission depends on the service,
+        so it only changes on the task itself."""
+        service = self.repository.get_service(company_id, service_id)
+        if service is None:
+            return
+
+        def plan(row: TaskRow) -> TaskMutation:
+            if row.status != "PENDING" or row.service_id == service.id:
+                return TaskMutation()
+            rate = self.repository.current_rate(company_id, "CLIENT", row.client_id, service.id)
+            new_price = money(rate) if rate is not None else money(Decimal("0"))
+            mutation = TaskMutation(
+                updates={
+                    "service_id": service.id,
+                    "client_pricing_model": service.client_pricing_model,
+                    "client_price_default": rate,
+                    "client_price_final": new_price,
+                    "client_price_reason": "" if rate is not None else NO_RATE_REASON,
+                },
+                status_change=(
+                    row.status,
+                    row.status,
+                    f"Service changed from {row.service_name} to {service.name} on the calendar",
+                ),
+            )
+            if money(row.client_price_final) != new_price:
+                mutation.price_changes.append(
+                    (
+                        "CLIENT_PRICE",
+                        row.client_price_final,
+                        new_price,
+                        f"Service changed to {service.name}",
+                    )
+                )
+            return mutation
 
         self._mutate(company_id, task_id, actor_id, plan)
 
