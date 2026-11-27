@@ -42,6 +42,10 @@ class InvoiceRow:
     tax_rate: Decimal = Decimal("0")
     tax_amount: Decimal = Decimal("0")
     client_gstin: str = ""
+    # Payment sheet this invoice covers (None: a date-range invoice or one made before
+    # 2026-11-28) and the budget left (+) or extra used (-) brought in from the sheet before.
+    sheet_index: int | None = None
+    carried_in: Decimal = Decimal("0")
 
     @property
     def code(self) -> str:
@@ -81,7 +85,7 @@ _SELECT = """
       i.payments_total, i.budget_added, i.payments, i.notes, u.name, i.sent_at, i.paid_at,
       i.created_at,
       (SELECT COUNT(*) FROM invoice_lines l WHERE l.invoice_id = i.id)::int,
-      i.prefix, i.tax_rate, i.tax_amount, i.client_gstin
+      i.prefix, i.tax_rate, i.tax_amount, i.client_gstin, i.sheet_index, i.carried_in
     FROM invoices i
     JOIN clients c ON c.id = i.client_id
     JOIN users u ON u.id = i.created_by_id
@@ -103,22 +107,31 @@ class InvoiceRepository:
     ) -> UUID:
         invoice_id = uuid4()
         with database_pool.connection(timeout=5) as connection, connection.cursor() as cursor:
-            # Serialise numbering per company (same approach as task codes).
+            # Serialise numbering per company (same approach as task codes). The counter only
+            # goes up, so a deleted draft's number is never given out again (2026-11-28).
             cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"invoice:{company_id}",))
             cursor.execute(
-                "SELECT COALESCE(MAX(number), 0) + 1 FROM invoices WHERE company_id=%s",
-                (company_id,),
+                "SELECT GREATEST("
+                "(SELECT COALESCE(MAX(number), 0) FROM invoices WHERE company_id=%(c)s),"
+                "(SELECT COALESCE(MAX(last_number), 0) FROM invoice_counters WHERE company_id=%(c)s)"
+                ") + 1",
+                {"c": company_id},
             )
             row = cursor.fetchone()
             number = int(row[0]) if row else 1
+            cursor.execute(
+                "INSERT INTO invoice_counters (company_id, last_number) VALUES (%s, %s) "
+                "ON CONFLICT (company_id) DO UPDATE SET last_number = EXCLUDED.last_number",
+                (company_id, number),
+            )
             cursor.execute(
                 """
                 INSERT INTO invoices (id, company_id, client_id, number, status, source,
                   period_start, period_end, issue_date, due_date, currency, subtotal,
                   payments_total, budget_added, payments, notes, created_by_id, tax_rate,
-                  tax_amount, client_gstin, created_at, updated_at)
+                  tax_amount, client_gstin, sheet_index, carried_in, created_at, updated_at)
                 VALUES (%s,%s,%s,%s,'DRAFT',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,
-                  NOW() AT TIME ZONE 'UTC', NOW() AT TIME ZONE 'UTC')
+                  %s,%s, NOW() AT TIME ZONE 'UTC', NOW() AT TIME ZONE 'UTC')
                 """,
                 (
                     invoice_id,
@@ -140,6 +153,8 @@ class InvoiceRepository:
                     header.get("tax_rate", Decimal("0")),
                     header.get("tax_amount", Decimal("0")),
                     header.get("client_gstin", ""),
+                    header.get("sheet_index"),
+                    header.get("carried_in", Decimal("0")),
                 ),
             )
             for position, line in enumerate(lines, start=1):

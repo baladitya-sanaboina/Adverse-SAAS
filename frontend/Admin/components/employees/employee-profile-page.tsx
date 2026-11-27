@@ -8,6 +8,7 @@ import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import type { CurrentUser } from "@/lib/auth/types";
+import { PhoneInput } from "@loopless-shared/forms/phone-input";
 import "@/styles/profile.css";
 import "@/styles/employee-directory.css";
 
@@ -308,11 +309,12 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                         </label>
                         <label>
                           Phone number
-                          <input
+                          <PhoneInput
                             value={form.phone_number}
-                            placeholder="+91 98765 43210"
-                            onChange={(event) => setForm({ ...form, phone_number: event.target.value })}
-                          />
+                            onChange={(phone_number) => setForm({ ...form, phone_number })}
+                          >
+                            {(phone) => <input {...phone} placeholder="98765 43210" />}
+                          </PhoneInput>
                         </label>
                       </div>
                     ) : (

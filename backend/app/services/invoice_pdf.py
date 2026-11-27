@@ -26,6 +26,7 @@ from reportlab.platypus import (  # type: ignore[import-untyped]
     TableStyle,
 )
 
+from app.core.settings import settings
 from app.repositories.invoice_repository import CompanyProfile, InvoiceLineRow, InvoiceRow
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
@@ -146,6 +147,25 @@ def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _company_email(company: CompanyProfile) -> str | None:
+    """The address printed on invoices and statements (owner request 2026-11-28)."""
+    return settings.invoice_contact_email.strip() or company.email
+
+
+def _carried_label(invoice: InvoiceRow) -> str:
+    carried = Decimal(invoice.carried_in)
+    before = (
+        f"sheet {invoice.sheet_index - 1}"
+        if invoice.sheet_index and invoice.sheet_index > 1
+        else "earlier"
+    )
+    if carried < 0:
+        return f"Extra used before this invoice ({before})"
+    return (
+        f"Previous budget left (from {before})" if before != "earlier" else "Previous budget left"
+    )
+
+
 def render_invoice_pdf(
     invoice: InvoiceRow, lines: list[InvoiceLineRow], company: CompanyProfile
 ) -> bytes:
@@ -200,7 +220,7 @@ def render_invoice_pdf(
                     "FROM",
                     company.name,
                     [
-                        company.email,
+                        _company_email(company),
                         company.phone,
                         company.address,
                         f"GSTIN {company.gstin}" if getattr(company, "gstin", None) else None,
@@ -266,6 +286,46 @@ def render_invoice_pdf(
             Paragraph("Amount", s["head_right"]),
         ]
     ]
+    # Money in first (owner request 2026-11-28): the budget left from before and each payment
+    # with its date, then every video. Money in is green with a plus sign.
+    carried = Decimal(invoice.carried_in)
+    right_cell = ParagraphStyle("r", parent=s["cell"], alignment=TA_RIGHT)
+    money_in = ParagraphStyle("in", parent=right_cell, textColor=GREEN, fontName="Poppins-Medium")
+    if carried != 0:
+        rows.append(
+            [
+                Paragraph("", s["cell"]),
+                Paragraph(_day(invoice.period_start), s["cell"]),
+                Paragraph(f"<b>{_escape(_carried_label(invoice))}</b>", s["cell"]),
+                Paragraph("Budget", s["cell"]),
+                Paragraph(
+                    ("+" if carried > 0 else "−") + amount_text(abs(carried), money),
+                    (
+                        money_in
+                        if carried > 0
+                        else ParagraphStyle("o", parent=right_cell, textColor=RED)
+                    ),
+                ),
+            ]
+        )
+    for payment in invoice.payments:
+        method = METHODS.get(str(payment.get("method")), str(payment.get("method")))
+        reference = str(payment.get("reference") or "")
+        rows.append(
+            [
+                Paragraph("", s["cell"]),
+                Paragraph(_day(str(payment.get("received_on"))), s["cell"]),
+                Paragraph(
+                    "<b>Payment received</b>"
+                    + _escape(f" · {method}" + (f" · {reference}" if reference else "")),
+                    s["cell"],
+                ),
+                Paragraph("Budget", s["cell"]),
+                Paragraph(
+                    "+" + amount_text(Decimal(str(payment.get("amount", "0"))), money), money_in
+                ),
+            ]
+        )
     for line in lines:
         rows.append(
             [
@@ -273,10 +333,7 @@ def render_invoice_pdf(
                 Paragraph(_day(line.delivered_on), s["cell"]),
                 Paragraph(_escape(line.title), s["cell"]),
                 Paragraph(_escape(line.service_name), s["cell"]),
-                Paragraph(
-                    amount_text(line.amount, money),
-                    ParagraphStyle("r", parent=s["cell"], alignment=TA_RIGHT),
-                ),
+                Paragraph(amount_text(line.amount, money), right_cell),
             ]
         )
     if not lines:
@@ -302,25 +359,27 @@ def render_invoice_pdf(
     story += [table, Spacer(1, 6 * mm)]
 
     # Totals.
+    # Budget left = brought in + paid − work (+ GST); below zero it is a balance due.
     tax = Decimal(invoice.tax_amount)
-    balance = Decimal(invoice.subtotal) + tax - Decimal(invoice.payments_total)
-    total_rows = [
-        ["Work delivered", f"{len(lines)} {'item' if len(lines) == 1 else 'items'}"],
-        ["Subtotal", amount_text(invoice.subtotal, money)],
-        ["Payments received in this period", amount_text(invoice.payments_total, money)],
-    ]
+    total = Decimal(invoice.subtotal) + tax
+    left = carried + Decimal(invoice.payments_total) - total
+    total_rows: list[list[str]] = []
+    if carried != 0:
+        total_rows.append([_carried_label(invoice), amount_text(carried, money)])
+    total_rows.append(["Payments received", amount_text(invoice.payments_total, money)])
+    if Decimal(invoice.budget_added) > 0:
+        total_rows.append(["Budget added in this period", amount_text(invoice.budget_added, money)])
+    items = f"{len(lines)} {'item' if len(lines) == 1 else 'items'}"
+    total_rows.append([f"Work delivered · {items}", amount_text(invoice.subtotal, money)])
     if tax > 0:
         rate = f"{Decimal(invoice.tax_rate).normalize():f}"
-        total_rows.insert(2, [f"GST @ {rate}%", amount_text(tax, money)])
-        total_rows.insert(
-            3, ["Total with GST", amount_text(Decimal(invoice.subtotal) + tax, money)]
-        )
-    if Decimal(invoice.budget_added) > 0:
-        total_rows.insert(
-            2, ["Budget added in this period", amount_text(invoice.budget_added, money)]
-        )
-    balance_label = "Balance due" if balance > 0 else "Paid in full" if balance == 0 else "Credit"
-    total_rows.append([balance_label, amount_text(abs(balance), money)])
+        total_rows.append([f"GST @ {rate}%", amount_text(tax, money)])
+        total_rows.append(["Total with GST", amount_text(total, money)])
+    total_rows.append(
+        ["Budget left", amount_text(left, money)]
+        if left >= 0
+        else ["Balance due", amount_text(-left, money)]
+    )
     totals = Table(
         [[Paragraph(a, s["muted"]), Paragraph(b, s["right"])] for a, b in total_rows[:-1]]
         + [
@@ -346,48 +405,6 @@ def render_invoice_pdf(
         )
     )
     story += [KeepTogether([totals]), Spacer(1, 7 * mm)]
-
-    # Payments received.
-    if invoice.payments:
-        pay_rows: list[list[Any]] = [
-            [
-                Paragraph("Date", s["label"]),
-                Paragraph("Method", s["label"]),
-                Paragraph("Reference", s["label"]),
-                Paragraph("Amount", ParagraphStyle("lr", parent=s["label"], alignment=TA_RIGHT)),
-            ]
-        ]
-        for payment in invoice.payments:
-            pay_rows.append(
-                [
-                    Paragraph(_day(str(payment.get("received_on"))), s["cell"]),
-                    Paragraph(
-                        METHODS.get(str(payment.get("method")), str(payment.get("method"))),
-                        s["cell"],
-                    ),
-                    Paragraph(_escape(str(payment.get("reference") or "—")), s["cell"]),
-                    Paragraph(
-                        amount_text(Decimal(str(payment.get("amount", "0"))), money),
-                        ParagraphStyle("pr", parent=s["cell"], alignment=TA_RIGHT),
-                    ),
-                ]
-            )
-        payments = Table(
-            pay_rows, colWidths=[width * 0.22, width * 0.22, width * 0.34, width * 0.22]
-        )
-        payments.setStyle(
-            TableStyle(
-                [
-                    ("LINEBELOW", (0, 0), (-1, -1), 0.4, LINE),
-                    ("TOPPADDING", (0, 0), (-1, -1), 5),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-                ]
-            )
-        )
-        story += [
-            KeepTogether([Paragraph("PAYMENTS RECEIVED", s["label"]), Spacer(1, 2 * mm), payments]),
-            Spacer(1, 6 * mm),
-        ]
 
     if invoice.notes:
         story += [Paragraph("NOTES", s["label"]), Paragraph(_escape(invoice.notes), s["muted"])]
@@ -481,7 +498,9 @@ def render_sheet_statement_pdf(
     parties = Table(
         [
             [
-                block("FROM", company.name, [company.email, company.phone, company.address]),
+                block(
+                    "FROM", company.name, [_company_email(company), company.phone, company.address]
+                ),
                 block(owner_label.upper(), owner_name, [owner_code]),
             ]
         ],
@@ -686,7 +705,11 @@ def render_payslip_pdf(
     parties = Table(
         [
             [
-                block("EMPLOYER", company.name, [company.email, company.phone, company.address]),
+                block(
+                    "EMPLOYER",
+                    company.name,
+                    [_company_email(company), company.phone, company.address],
+                ),
                 block(
                     "EMPLOYEE",
                     employee.get("name", ""),

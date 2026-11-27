@@ -19,16 +19,33 @@ import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { loadCompanyDashboard } from "@/lib/company-dashboard/client";
 import type { CompanyDashboard } from "@/lib/company-dashboard/types";
 import { MoneyPrivacy, PrivacyToggle, useMoneyPrivacy, usePrivateMoney } from "@loopless-shared/production/privacy";
-import { STATUS_LABELS, api, errorText, formatDate, money as formatMoney, query } from "@/lib/production/client";
-import type { ReportPeriod, TaskStatus } from "@/lib/production/types";
+import {
+  STATUS_LABELS,
+  api,
+  errorText,
+  formatDate,
+  methodLabel,
+  money as formatMoney,
+  query,
+} from "@/lib/production/client";
+import type {
+  ClientPayment,
+  ManagerPayout,
+  PaymentList,
+  ReportPeriod,
+  SalaryPayment,
+  TaskStatus,
+} from "@/lib/production/types";
+import { PaymentsByDatePanel, monthRange, type DatedPayment } from "@loopless-shared/dashboard/payments-by-date";
 import { STATUS_TEXT, ownerLine, type SheetsOverview } from "@/components/sheets/sheet-types";
 import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
 import { AvailabilityPanel } from "@loopless-shared/chat/availability-panel";
 import "@/styles/production.css";
 
-// Password asked before the Admin dashboard shows money (owner request 2026-11-14). Change it with
+// Password asked before the Admin dashboard shows money (owner request 2026-11-14; 3422 since
+// 2026-11-28). Change it with
 // NEXT_PUBLIC_MONEY_PASSWORD. Screen privacy only: the server already limits money to the Admin.
-const MONEY_PASSWORD = process.env.NEXT_PUBLIC_MONEY_PASSWORD || "1234";
+const MONEY_PASSWORD = process.env.NEXT_PUBLIC_MONEY_PASSWORD || "3422";
 
 type Trend = { month: string; revenue: string; team_cost: string; margin: string };
 type AdminDashboard = {
@@ -309,6 +326,7 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
       <SheetAlertsPanel currency={data.currency} />
       <BudgetPanel data={data} />
       <ClientPaymentsPanel data={data} />
+      <AdminPaymentsPanel currency={data.currency} />
     </div>
   );
 }
@@ -748,6 +766,86 @@ function ClientPaymentsPanel({ data }: { data: AdminDashboard }) {
         )}
       </div>
     </article>
+  );
+}
+
+/* ------------------------------------------------------------------ payments by date */
+
+/** Every payment of a month, day by day (owner request 2026-11-28): client payments in,
+ * salaries and manager top-ups out. */
+function AdminPaymentsPanel({ currency }: { currency: string }) {
+  const money = usePrivateMoney(formatMoney);
+  const [month, setMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [rows, setRows] = useState<DatedPayment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    const range = query({ ...monthRange(month), page_size: 100 });
+    try {
+      const [received, salaries, payouts] = await Promise.all([
+        api<PaymentList<ClientPayment>>(`/api/company/finance/client-payments${range}`),
+        api<PaymentList<SalaryPayment>>(`/api/company/finance/salary-payments${range}`),
+        api<PaymentList<ManagerPayout>>(`/api/company/finance/manager-payouts${range}`),
+      ]);
+      const note = (method: ClientPayment["method"], reference: string) =>
+        `${methodLabel(method)}${reference ? ` · ${reference}` : ""}`;
+      setRows([
+        ...received.items.map((item) => ({
+          id: `c-${item.id}`,
+          day: item.received_on,
+          title: item.client.name,
+          detail: `Client payment · ${note(item.method, item.reference)}`,
+          amount: Number(item.amount),
+          direction: "IN" as const,
+        })),
+        ...salaries.items.map((item) => ({
+          id: `s-${item.id}`,
+          day: item.paid_on,
+          title: item.employee_name,
+          detail: `Salary for ${new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(
+            new Date(`${item.period_month.slice(0, 10)}T00:00:00`),
+          )} · ${note(item.method, item.reference)}`,
+          amount: Number(item.amount),
+          direction: "OUT" as const,
+        })),
+        ...payouts.items.map((item) => ({
+          id: `p-${item.id}`,
+          day: item.paid_on,
+          title: item.manager_name,
+          detail: `Manager top-up · ${note(item.method, item.reference)}`,
+          amount: Number(item.amount),
+          direction: "OUT" as const,
+        })),
+      ]);
+    } catch (requestError) {
+      setError(errorText(requestError, "Unable to load payments."));
+    } finally {
+      setLoading(false);
+    }
+  }, [month]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  return (
+    <PaymentsByDatePanel
+      rows={rows}
+      month={month}
+      onMonth={setMonth}
+      money={(amount) => money(amount, currency)}
+      loading={loading}
+      error={error}
+      inLabel="Received from clients"
+      outLabel="Paid to the team"
+    />
   );
 }
 

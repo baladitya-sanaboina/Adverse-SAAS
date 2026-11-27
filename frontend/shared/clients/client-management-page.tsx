@@ -28,6 +28,7 @@ import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog"
 import { CrudActionButtons } from "@/components/foundation/crud-action-buttons";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import type { CurrentUser } from "@/lib/auth/types";
+import { PhoneInput } from "../forms/phone-input";
 import "@loopless-shared/styles/client-management.css";
 
 // Internal logins (Adverse IDs) use this domain (INTERNAL_EMAIL_DOMAIN on the server).
@@ -1514,15 +1515,33 @@ export function ClientManagementPage({
                             {contactFields.map(({ key, label, icon: Icon }) => (
                               <label className="management-field" key={key}>
                                 <span>{label}</span>
-                                <span className="management-input">
-                                  <Icon />
-                                  <input
+                                {key === "phone" ? (
+                                  <PhoneInput
                                     value={String(contactForm[key])}
-                                    onChange={(event) => updateContact(key, event.target.value)}
-                                    onBlur={() => touchContact(key)}
-                                    aria-invalid={Boolean(contactErrors[key])}
-                                  />
-                                </span>
+                                    onChange={(value) => updateContact(key, value)}
+                                  >
+                                    {(phone) => (
+                                      <span className="management-input">
+                                        <Icon />
+                                        <input
+                                          {...phone}
+                                          onBlur={() => touchContact(key)}
+                                          aria-invalid={Boolean(contactErrors[key])}
+                                        />
+                                      </span>
+                                    )}
+                                  </PhoneInput>
+                                ) : (
+                                  <span className="management-input">
+                                    <Icon />
+                                    <input
+                                      value={String(contactForm[key])}
+                                      onChange={(event) => updateContact(key, event.target.value)}
+                                      onBlur={() => touchContact(key)}
+                                      aria-invalid={Boolean(contactErrors[key])}
+                                    />
+                                  </span>
+                                )}
                                 {contactErrors[key] && <small>{contactErrors[key]}</small>}
                               </label>
                             ))}
@@ -1796,15 +1815,30 @@ export function ClientManagementPage({
                       {fields.map(({ key, label, icon: Icon, wide }) => (
                         <label className={`management-field ${wide ? "wide" : ""}`} key={key}>
                           <span>{label}</span>
-                          <span className="management-input">
-                            <Icon />
-                            <input
-                              value={form[key]}
-                              onChange={(event) => update(key, event.target.value)}
-                              onBlur={() => touchField(key)}
-                              aria-invalid={Boolean(fieldErrors[key])}
-                            />
-                          </span>
+                          {key === "phone" ? (
+                            <PhoneInput value={form[key]} onChange={(value) => update(key, value)}>
+                              {(phone) => (
+                                <span className="management-input">
+                                  <Icon />
+                                  <input
+                                    {...phone}
+                                    onBlur={() => touchField(key)}
+                                    aria-invalid={Boolean(fieldErrors[key])}
+                                  />
+                                </span>
+                              )}
+                            </PhoneInput>
+                          ) : (
+                            <span className="management-input">
+                              <Icon />
+                              <input
+                                value={form[key]}
+                                onChange={(event) => update(key, event.target.value)}
+                                onBlur={() => touchField(key)}
+                                aria-invalid={Boolean(fieldErrors[key])}
+                              />
+                            </span>
+                          )}
                           {fieldErrors[key] && <small>{fieldErrors[key]}</small>}
                         </label>
                       ))}

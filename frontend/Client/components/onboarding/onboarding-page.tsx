@@ -29,6 +29,8 @@ import {
   UserRound,
 } from "lucide-react";
 import { OrbitLoader } from "@/components/loader/orbit-loader";
+import { PhotoCropper } from "@/components/profile/photo-cropper";
+import { PhoneInput } from "@/components/foundation/phone-input";
 import "@/styles/onboarding.css";
 
 type Field = {
@@ -277,6 +279,7 @@ export function OnboardingPage({ token }: { token: string }) {
   const [uploading, setUploading] = useState("");
   const [problem, setProblem] = useState("");
   const [uploadProblem, setUploadProblem] = useState("");
+  const [cropping, setCropping] = useState<File | null>(null);
   const base = `/api/public/onboarding/${encodeURIComponent(token)}`;
 
   const load = useCallback(async () => {
@@ -388,12 +391,19 @@ export function OnboardingPage({ token }: { token: string }) {
     setSeen((previous) => new Set(previous).add(index));
   }
 
-  async function upload(key: string, event: ChangeEvent<HTMLInputElement>) {
+  function upload(key: string, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
     setUploadProblem("");
     if (file.size > 5 * 1024 * 1024) return setUploadProblem(`${file.name} is larger than 5 MB.`);
+    // The profile photo is cropped to a square first (owner request 2026-11-28).
+    if (key === "photo" && file.type.startsWith("image/")) return setCropping(file);
+    void send(key, file);
+  }
+
+  async function send(key: string, file: File) {
+    setCropping(null);
     setUploading(key);
     const data = new FormData();
     data.append("file", file);
@@ -450,6 +460,9 @@ export function OnboardingPage({ token }: { token: string }) {
 
   return (
     <Shell>
+      {cropping && (
+        <PhotoCropper file={cropping} onCancel={() => setCropping(null)} onDone={(file) => void send("photo", file)} />
+      )}
       <div className="ow-shell">
         <aside className="ow-rail">
           <Brand />
@@ -594,6 +607,10 @@ export function OnboardingPage({ token }: { token: string }) {
                                   placeholder={field.placeholder}
                                   onChange={(event) => change(event.target.value)}
                                 />
+                              ) : field.input === "tel" ? (
+                                <PhoneInput value={value} onChange={change}>
+                                  {(phone) => <input {...phone} placeholder="98765 43210" />}
+                                </PhoneInput>
                               ) : (
                                 <input
                                   type={field.input ?? "text"}

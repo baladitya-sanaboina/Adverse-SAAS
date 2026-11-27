@@ -11,7 +11,6 @@ import { CheckCheck, Download, ReceiptText, Search, Wallet } from "lucide-react"
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { DashLoading, Panel, PanelHead } from "@/components/dashboard/role-dashboard-ui";
 import { PaymentSheets, type Sheet, type SheetLine } from "@/lib/payment-sheets";
-import { AmountEye, MoneyPrivacy, usePrivateMoney } from "@/lib/privacy";
 import "@/styles/client-portal.css";
 import "@/styles/billing.css";
 
@@ -83,16 +82,9 @@ function csvCell(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
+// Amounts are always shown to the client (owner request 2026-11-28: no show/hide).
 export function BillingPage() {
-  return (
-    <MoneyPrivacy>
-      <BillingContent />
-    </MoneyPrivacy>
-  );
-}
-
-function BillingContent() {
-  const money = usePrivateMoney(formatMoney);
+  const money = formatMoney;
   const [data, setData] = useState<Billing | null>(null);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -174,7 +166,7 @@ function BillingContent() {
         <section className="billing-balance" aria-label="Budget">
           <div className="billing-balance-main">
             <span className="billing-balance-label">
-              {!budget.has_budget ? "Payment due" : over ? "Over budget by" : "Budget left"}
+              {!budget.has_budget ? "Payment due" : over ? "Over budget by" : "Available budget"}
             </span>
             <span className="billing-balance-amount">
               <strong className={over ? "negative" : undefined}>
@@ -182,7 +174,6 @@ function BillingContent() {
                   ? money(over ? budget.overage : budget.remaining, currency)
                   : money(data.pending_amount, currency)}
               </strong>
-              <AmountEye />
             </span>
             {!budget.has_budget && (
               <small>

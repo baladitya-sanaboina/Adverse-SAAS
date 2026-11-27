@@ -22,6 +22,8 @@ import {
   SheetHeader,
   StatusProgress,
   TaskCard,
+  BoardColumnMore,
+  useBoardColumnLimits,
   TaskSheet,
   TasksHeader,
   matchesQuick,
@@ -477,6 +479,8 @@ function TaskBoard({
     }
   }
 
+  const columnLimits = useBoardColumnLimits();
+
   function drop(target: TaskStatus) {
     const task = dragging;
     setDragging(null);
@@ -520,7 +524,7 @@ function TaskBoard({
               {tasks.length === 0 ? (
                 <p className="production-board-empty">No tasks</p>
               ) : (
-                tasks.map((task) => (
+                tasks.slice(0, columnLimits.limit(status)).map((task) => (
                   <TaskCard
                     key={task.id}
                     code={task.code}
@@ -550,6 +554,12 @@ function TaskBoard({
                   />
                 ))
               )}
+              <BoardColumnMore
+                shown={Math.min(columnLimits.limit(status), tasks.length)}
+                total={tasks.length}
+                onMore={() => columnLimits.more(status)}
+                onLess={() => columnLimits.less(status)}
+              />
             </section>
           );
         })}

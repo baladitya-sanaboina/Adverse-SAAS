@@ -378,6 +378,11 @@ class BudgetCycle:
     carried_in: Decimal = Decimal("0.00")
     ran_out_on: date | None = None
     lines: tuple[CycleLine, ...] = ()
+    # Which inputs belong to this sheet (2026-11-28, so its invoice lists exactly these): the
+    # position of its payment in `entries` (None: an open sheet with no payment yet) and the
+    # positions of its work in `deliveries`.
+    entry_index: int | None = None
+    delivery_indexes: tuple[int, ...] = ()
 
     @property
     def remaining(self) -> Decimal:
@@ -431,16 +436,16 @@ def budget_cycles(
     first sheet; adjustments belong to the sheet they fall in. Each sheet starts with the previous
     sheet's balance carried in, records the day its money ran out, and lists its own lines with
     the running balance."""
-    opened: list[tuple[date, datetime, Decimal, str]] = []
-    for day, kind, amount, *rest in entries:
+    opened: list[tuple[date, datetime, Decimal, str, int | None]] = []
+    for position, (day, kind, amount, *rest) in enumerate(entries):
         if kind in ("INITIAL", "TOP_UP") and Decimal(amount) > 0:
             label = str(rest[0]) if rest else "Payment"
             at = rest[1] if len(rest) > 1 else None
-            opened.append((*_moment(day, at, late=False), Decimal(amount), label))
+            opened.append((*_moment(day, at, late=False), Decimal(amount), label, position))
     if not opened and open_without_payment and deliveries:
         # Work but no payment yet: one open sheet from the first piece of work, starting at zero.
         first = min(delivery[0] for delivery in deliveries)
-        opened.append((first, datetime.min, Decimal("0"), ""))
+        opened.append((first, datetime.min, Decimal("0"), "", None))
     if not opened:
         return []
     opened.sort(key=lambda item: (item[0], item[1]))
@@ -457,7 +462,7 @@ def budget_cycles(
     def window_of(day: date, at: object = None) -> int:
         key = _moment(day, at, late=True)
         found = 0
-        for index, (start, start_at, _, _) in enumerate(opened):
+        for index, (start, start_at, *_) in enumerate(opened):
             if (start, start_at) <= key:
                 found = index
         return found
@@ -467,16 +472,18 @@ def budget_cycles(
     events: list[
         list[tuple[date, int, Literal["PAYMENT", "ADJUSTMENT", "WORK"], str, Decimal, bool]]
     ] = [[] for _ in windows]
+    members: list[list[int]] = [[] for _ in windows]
     for day, kind, amount, *_ in entries:
         if kind == "ADJUSTMENT":
             events[window_of(day)].append(
                 (day, 0, "ADJUSTMENT", "Adjustment", Decimal(amount), False)
             )
-    for delivery in deliveries:
+    for position, delivery in enumerate(deliveries):
         day, amount = delivery[0], delivery[1]
         extra: list[object] = list(delivery[2:])
         counts = bool(extra[1]) if len(extra) > 1 else True
         approved_at = extra[2] if len(extra) > 2 else None
+        members[window_of(day, approved_at)].append(position)
         events[window_of(day, approved_at)].append(
             (day, 1, "WORK", str(extra[0]) if extra else "", -Decimal(amount), counts)
         )
@@ -501,7 +508,7 @@ def budget_cycles(
         items = 0
         ran_out_on: date | None = start if index > 0 and carried < 0 else None
         # The payment is a dated line too, so work done before the first payment shows first.
-        paid, payment = opened[index][2], opened[index][3]
+        paid, payment, entry_index = opened[index][2], opened[index][3], opened[index][4]
         # The payment goes first so that, on the same day, it counts before that day's work.
         dated: list[
             tuple[date, int, Literal["PAYMENT", "ADJUSTMENT", "WORK"], str, Decimal, bool]
@@ -529,6 +536,8 @@ def budget_cycles(
             carried_in=money(carried),
             ran_out_on=ran_out_on,
             lines=tuple(lines),
+            entry_index=entry_index,
+            delivery_indexes=tuple(members[index]),
         )
         cycles.append(cycle)
         carried = cycle.remaining

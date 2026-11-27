@@ -29,7 +29,6 @@ from app.schemas.production import (
     BudgetEntryRequest,
     BudgetEntryResponse,
     ClientBudgetResponse,
-    ClientBudgetSummary,
     ClientDeliveryLine,
     ClientMonthPoint,
     ClientPaymentLine,
@@ -89,7 +88,6 @@ from app.services.production_rules import (
     PAYMENT_METHOD_TEXT,
     SalaryRate,
     budget_cycles,
-    budget_position,
     entry_time,
     last_month_starts,
     money,
@@ -455,10 +453,21 @@ class FinanceService:
             )
         else:
             salary = self.employee_salary(company_id, context.user_id)
-            this_month = next(
-                (line for line in salary.months if line.month == today.replace(day=1)), None
+            month = today.replace(day=1)
+            this_month = next((line for line in salary.months if line.month == month), None)
+            # Owner report 2026-11-28: salary paid but the dashboard showed 0. With no monthly
+            # salary set for this month, show what was paid for it.
+            paid_this_month = money(
+                sum(
+                    (
+                        Decimal(item.amount)
+                        for item in salary.payments
+                        if item.period_month == month
+                    ),
+                    ZERO,
+                )
             )
-            current_month = this_month.due if this_month else ZERO
+            current_month = this_month.due if this_month and this_month.due > 0 else paid_this_month
             pending, currency = salary.pending, salary.currency
         upcoming = self.task_service.list_worker_tasks(
             context, WorkerTaskFilters(role="ASSIGNEE", page_size=5)
@@ -495,7 +504,10 @@ class FinanceService:
             if row.completed or row.in_progress
         ]
         totals = self.tasks.budget_totals(company_id, client.id)
-        position = budget_position(totals.total, totals.used, totals.committed)
+        # The budget is what the client paid, as on the Admin's payment sheets (2026-11-28).
+        from app.services.invoice_service import invoice_service
+
+        budget = invoice_service.client_budget(company_id, client.id)
         payments = self.repository.list_client_payments_for_client(company_id, client.id)
         total_paid = sum((money(payment.amount) for payment in payments), ZERO)
         total_charged = money(totals.used)
@@ -519,13 +531,7 @@ class FinanceService:
                 )
                 for row in services
             ],
-            budget=ClientBudgetSummary(
-                has_budget=position.has_budget,
-                total=position.total,
-                used=position.used,
-                remaining=position.remaining,
-                overage=position.overage,
-            ),
+            budget=budget,
             total_charged=total_charged,
             total_paid=total_paid,
             pending_amount=max(total_charged - total_paid, ZERO),
@@ -1309,7 +1315,8 @@ class FinanceService:
                         overdue_invoices=row.overdue_invoices,
                     )
                 )
-            total = money(row.budget_total)
+            # Budget = money the client paid (each payment opens a sheet, 2026-11-28).
+            total = received
             if total <= 0:
                 continue
             used = money(row.billed_all_time)

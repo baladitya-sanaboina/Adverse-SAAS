@@ -6,7 +6,7 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlarmClock, CheckCheck, ClipboardList, HandCoins, Hourglass, Wallet } from "lucide-react";
+import { AlarmClock, CheckCheck, ClipboardList, HandCoins, Hourglass, TriangleAlert, Wallet } from "lucide-react";
 import {
   DashHeader,
   DashLoading,
@@ -26,6 +26,8 @@ import type { WorkerTask, WorkspaceDashboard } from "./types";
 import { useLiveRefresh } from "../realtime/realtime";
 import { AvailabilityPanel } from "../chat/availability-panel";
 import { TodayFocus } from "./today-focus";
+import { PaymentsByDatePanel, type DatedPayment } from "../dashboard/payments-by-date";
+import { methodLabel } from "../production/client";
 
 type Role = "MANAGER" | "EMPLOYEE";
 type Me = { user: { name: string }; company: { name: string } | null };
@@ -42,6 +44,8 @@ function compactMoney(amount: number, currency: string): string {
 }
 
 export function WorkspaceDashboardPage({ role }: { role: Role }) {
+  // Managers always see their amounts (owner request 2026-11-28: no show/hide for managers).
+  if (role === "MANAGER") return <WorkspaceDashboardContent role={role} />;
   return (
     <MoneyPrivacy>
       <WorkspaceDashboardContent role={role} />
@@ -107,7 +111,7 @@ function WorkspaceDashboardContent({ role }: { role: Role }) {
         subtitle={subtitle}
         actions={
           <>
-            <PrivacyToggle />
+            {role === "EMPLOYEE" && <PrivacyToggle />}
             <Link href={earningsHref} className="management-secondary-action">
               <Wallet /> {role === "MANAGER" ? "My earnings" : "My salary"}
             </Link>
@@ -172,6 +176,8 @@ function WorkspaceDashboardContent({ role }: { role: Role }) {
               </Tile>
             )}
           </section>
+
+          {role === "MANAGER" && earnings && <ManagerDuePanel earnings={earnings} money={money} />}
 
           <section className="company-dashboard-grid production-dash-grid">
             <TodayFocus endpoint="/api/workspace/tasks/focus" scope="WORKER" />
@@ -317,9 +323,110 @@ function WorkspaceDashboardContent({ role }: { role: Role }) {
             </Panel>
           </section>
 
+          {role === "MANAGER" && earnings && <ManagerPaymentsPanel earnings={earnings} money={money} />}
+
           <AvailabilityPanel />
         </div>
       )}
     </div>
+  );
+}
+
+type Money = (amount: string | number, currency: string) => string;
+
+function dayText(value: string): string {
+  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(
+    new Date(`${value.slice(0, 10)}T00:00:00`),
+  );
+}
+
+/** Money the Admin owes the manager (owner request 2026-11-28): shown only when something is due.
+ * Overdue once the advance has been used up for a day or more. */
+function ManagerDuePanel({ earnings, money }: { earnings: ManagerEarnings; money: Money }) {
+  const [now] = useState(() => Date.now());
+  const wallet = earnings.wallet;
+  const owed = wallet ? Math.max(0, -Number(wallet.balance)) : Number(earnings.pending);
+  if (!(owed > 0)) return null;
+  const current = wallet?.periods[wallet.periods.length - 1];
+  const since = current?.ran_out_on ?? null;
+  const days = since ? Math.max(0, Math.floor((now - new Date(`${since}T00:00:00`).getTime()) / 86_400_000)) : 0;
+  const waiting = earnings.tasks
+    .filter((task) => task.approved_at && (!since || task.approved_at.slice(0, 10) >= since))
+    .sort((a, b) => (b.approved_at ?? "").localeCompare(a.approved_at ?? ""));
+  return (
+    <Panel>
+      <PanelHead
+        eyebrow={days > 0 ? "OVERDUE PAYMENTS" : "PENDING PAYMENTS"}
+        title={`${money(owed, earnings.currency)} due to you`}
+        aside={
+          days > 0 ? (
+            <span className="production-dash-due-badge">
+              <TriangleAlert aria-hidden="true" />
+              {days} {days === 1 ? "day" : "days"} overdue
+            </span>
+          ) : undefined
+        }
+      />
+      <div className="production-dash-panel-body">
+        <p className="production-dash-footnote">
+          {since
+            ? `Your advance ran out on ${dayText(since)}. The work approved since then is waiting for a top-up from the Admin.`
+            : "Commission earned and not paid yet."}
+        </p>
+        {waiting.length > 0 && (
+          <ul className="production-dash-rows">
+            {waiting.slice(0, 6).map((task) => (
+              <li key={task.task_id}>
+                <Link href={`/tasks?task=${task.task_id}`}>
+                  <span>
+                    <small>
+                      {task.code} · {task.service_name}
+                    </small>
+                    <strong>{task.title}</strong>
+                  </span>
+                  <span className="meta">
+                    <em className={days > 0 ? "overdue" : undefined}>{money(task.commission, earnings.currency)}</em>
+                    <small>Approved {dayText(task.approved_at ?? "")}</small>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+/** Top-ups the manager received, by month and date (owner request 2026-11-28). */
+function ManagerPaymentsPanel({ earnings, money }: { earnings: ManagerEarnings; money: Money }) {
+  const [month, setMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const rows = useMemo<DatedPayment[]>(
+    () =>
+      earnings.payouts
+        .filter((payout) => payout.paid_on.startsWith(month))
+        .map((payout) => ({
+          id: payout.id,
+          day: payout.paid_on.slice(0, 10),
+          title: "Top-up from the Admin",
+          detail: `${methodLabel(payout.method)}${payout.reference ? ` · ${payout.reference}` : ""}`,
+          amount: Number(payout.amount),
+          direction: "IN" as const,
+        })),
+    [earnings.payouts, month],
+  );
+  return (
+    <PaymentsByDatePanel
+      rows={rows}
+      month={month}
+      onMonth={setMonth}
+      money={(amount) => money(amount, earnings.currency)}
+      eyebrow="MY PAYMENTS"
+      inLabel="Received"
+      empty="No top-ups received in this month."
+    />
   );
 }

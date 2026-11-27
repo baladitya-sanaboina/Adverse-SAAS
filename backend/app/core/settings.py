@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     smtp_from_email: str = ""
     smtp_from_name: str = "Adverse"
     smtp_use_tls: bool = True
+    # The company address printed on invoices, statements and payslips (owner request
+    # 2026-11-28). Empty = the company's contact email from Company settings.
+    invoice_contact_email: str = "reachadverse@gmail.com"
     # The same mail about the same thing is not sent again within this window (owner request
     # 2026-11-15: a task submitted, sent back and submitted again mails once).
     mail_repeat_window_minutes: int = Field(default=30, ge=0, le=1440)

@@ -110,6 +110,7 @@ model Company {
   taskComments        TaskComment[]
   notifications       Notification[]
   invoices            Invoice[]
+  invoiceCounter      InvoiceCounter?
   clientPackages      ClientPackage[]
   mailMessages        MailMessage[]
   mailTickets         MailTicket[]
@@ -1575,6 +1576,8 @@ model Invoice {
   taxRate       Decimal       @default(0) @map("tax_rate") @db.Decimal(5, 2)
   taxAmount     Decimal       @default(0) @map("tax_amount") @db.Decimal(12, 2)
   clientGstin   String        @default("") @map("client_gstin") @db.VarChar(20)
+  sheetIndex    Int?          @map("sheet_index")
+  carriedIn     Decimal       @default(0) @map("carried_in") @db.Decimal(12, 2)
   createdById   String        @map("created_by_id") @db.Uuid
   sentAt        DateTime?     @map("sent_at")
   paidAt        DateTime?     @map("paid_at")
@@ -1588,6 +1591,16 @@ model Invoice {
   @@unique([companyId, number])
   @@index([companyId, clientId, createdAt])
   @@map("invoices")
+}
+
+/// Last invoice number given out per company, so a deleted draft's number is never reused
+/// (owner request 2026-11-28).
+model InvoiceCounter {
+  companyId  String  @id @map("company_id") @db.Uuid
+  lastNumber Int     @default(0) @map("last_number")
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_counters")
 }
 
 model InvoiceLine {
@@ -1869,6 +1882,8 @@ model MailMessage {
   threadId        String           @map("thread_id") @db.Uuid
   replyToId       String?          @map("reply_to_id") @db.Uuid
   kind            String           @default("PERSONAL") @db.VarChar(40)
+  /// PRIMARY or UPDATES (owner request 2026-11-28); null = mail from a person goes to Primary.
+  category        String?          @db.VarChar(12)
   subject         String           @db.VarChar(200)
   body            String           @default("")
   link            String           @default("") @db.VarChar(300)

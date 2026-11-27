@@ -3,6 +3,8 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { Camera, Eye, EyeOff, LockKeyhole, Save, Settings, UserRound } from "lucide-react";
 import Image from "next/image";
+import { PhoneInput } from "@/components/foundation/phone-input";
+import { PhotoCropper } from "@/components/profile/photo-cropper";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
@@ -25,6 +27,7 @@ const passwordError = (value: string) =>
     : "Use 12+ characters with uppercase, lowercase, number and symbol.";
 
 export function ProfilePage({ initialTab = "profile" }: { initialTab?: Tab }) {
+  const [cropping, setCropping] = useState<File | null>(null);
   const [tab, setTab] = useState<Tab>(initialTab);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [form, setForm] = useState({
@@ -132,12 +135,18 @@ export function ProfilePage({ initialTab = "profile" }: { initialTab?: Tab }) {
       setConfirmAction(null);
     }
   }
-  async function upload(event: ChangeEvent<HTMLInputElement>) {
+  // The photo is cropped to a square first (owner request 2026-11-28), then uploaded.
+  function upload(event: ChangeEvent<HTMLInputElement>) {
     const image = event.target.files?.[0];
+    event.target.value = "";
     if (!image) return;
     setError("");
     if (!["image/jpeg", "image/png", "image/webp"].includes(image.type) || image.size > 5 * 1024 * 1024)
       return setError("Use a JPG, PNG or WEBP image up to 5 MB.");
+    setCropping(image);
+  }
+  async function sendImage(image: File) {
+    setCropping(null);
     const body = new FormData();
     body.append("image", image);
     setLoading(true);
@@ -157,6 +166,9 @@ export function ProfilePage({ initialTab = "profile" }: { initialTab?: Tab }) {
 
   return (
     <>
+      {cropping && (
+        <PhotoCropper file={cropping} onCancel={() => setCropping(null)} onDone={(file) => void sendImage(file)} />
+      )}
       <DashboardHero
         title=""
         highlight="My Profile"
@@ -261,11 +273,12 @@ export function ProfilePage({ initialTab = "profile" }: { initialTab?: Tab }) {
                           </label>
                           <label>
                             Phone number
-                            <input
+                            <PhoneInput
                               value={form.phone_number}
-                              onChange={(e) => setForm({ ...form, phone_number: e.target.value })}
-                              placeholder="+91 98765 43210"
-                            />
+                              onChange={(phone_number) => setForm({ ...form, phone_number })}
+                            >
+                              {(phone) => <input {...phone} placeholder="98765 43210" />}
+                            </PhoneInput>
                           </label>
                         </div>
                         <button className="profile-save" disabled={loading}>

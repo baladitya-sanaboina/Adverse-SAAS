@@ -51,6 +51,10 @@ type Invoice = {
   client_gstin: string;
   payments_total: string;
   budget_added: string;
+  /** Budget left (+) or extra used (−) brought in before this invoice (2026-11-28). */
+  carried_in?: string;
+  sheet_index?: number | null;
+  /** Above zero: still to pay. Below zero: budget left. */
   balance: string;
   items: number;
   notes: string;
@@ -106,7 +110,7 @@ function syncUrl(sheet: Sheet) {
 function balanceText(invoice: Invoice): string {
   const balance = Number(invoice.balance);
   if (balance > 0) return money(balance, invoice.currency);
-  if (balance < 0) return `${money(-balance, invoice.currency)} credit`;
+  if (balance < 0) return `${money(-balance, invoice.currency)} budget left`;
   return "Settled";
 }
 
@@ -322,6 +326,7 @@ type Preview = {
   total: string;
   payments_total: string;
   budget_added: string;
+  carried_in?: string;
   lines: { position: number; delivered_on: string; title: string; service_name: string; amount: string }[];
 };
 type Range = "topup" | "this-month" | "last-month" | "custom";
@@ -483,7 +488,8 @@ function CreateInvoice({
     { value: "custom", label: "Pick dates" },
   ];
   const shown = preview?.lines.slice(0, 6) ?? [];
-  const balance = preview ? Number(preview.total) - Number(preview.payments_total) : 0;
+  const carried = Number(preview?.carried_in ?? 0);
+  const balance = preview ? Number(preview.total) - Number(preview.payments_total) - carried : 0;
 
   return (
     <>
@@ -591,6 +597,12 @@ function CreateInvoice({
                       <strong>{money(preview.tax_amount, preview.currency)}</strong>
                     </span>
                   )}
+                  {carried !== 0 && (
+                    <span>
+                      <small>{carried > 0 ? "Previous budget left" : "Extra used before"}</small>
+                      <strong>{money(carried, preview.currency)}</strong>
+                    </span>
+                  )}
                   {Number(preview.payments_total) > 0 && (
                     <span>
                       <small>Paid in these dates</small>
@@ -598,8 +610,8 @@ function CreateInvoice({
                     </span>
                   )}
                   <span>
-                    <small>{balance > 0 ? "Balance due" : "Balance"}</small>
-                    <strong>{money(Math.max(balance, 0), preview.currency)}</strong>
+                    <small>{balance > 0 ? "Balance due" : "Budget left"}</small>
+                    <strong>{money(Math.abs(balance), preview.currency)}</strong>
                   </span>
                 </div>
                 {preview.items === 0 ? (
@@ -885,6 +897,15 @@ function InvoiceDetailSheet({
                 <dd>{invoice.client_gstin}</dd>
               </div>
             )}
+            {Number(invoice.carried_in ?? 0) !== 0 && (
+              <div>
+                <dt>
+                  {Number(invoice.carried_in) > 0 ? "Previous budget left" : "Extra used before"}
+                  {invoice.sheet_index && invoice.sheet_index > 1 ? ` (sheet ${invoice.sheet_index - 1})` : ""}
+                </dt>
+                <dd>{money(invoice.carried_in ?? 0, invoice.currency)}</dd>
+              </div>
+            )}
             <div>
               <dt>Payments in period</dt>
               <dd>{money(invoice.payments_total, invoice.currency)}</dd>
@@ -896,9 +917,9 @@ function InvoiceDetailSheet({
               </div>
             )}
             <div>
-              <dt>{balance > 0 ? "Balance due" : balance < 0 ? "Credit" : "Balance"}</dt>
+              <dt>{balance > 0 ? "Balance due" : "Budget left"}</dt>
               <dd className={balance > 0 ? "invoice-balance" : undefined}>
-                {balance === 0 ? "Settled" : money(Math.abs(balance), invoice.currency)}
+                {money(Math.abs(balance), invoice.currency)}
               </dd>
             </div>
             <div>

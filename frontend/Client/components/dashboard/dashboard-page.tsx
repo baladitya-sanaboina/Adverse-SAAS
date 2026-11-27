@@ -204,7 +204,7 @@ export function DashboardPage() {
             Being worked on now
           </Tile>
           <Tile
-            title={over ? "Over budget" : "Budget left"}
+            title={over ? "Over budget" : "Available budget"}
             value={budget.has_budget ? money(over ? budget.overage : budget.remaining, currency) : "—"}
             icon={<PiggyBank />}
             tone={over ? "negative" : undefined}

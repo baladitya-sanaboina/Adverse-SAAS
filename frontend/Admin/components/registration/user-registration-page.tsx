@@ -6,6 +6,7 @@ import { ArrowLeft, Eye, EyeOff, LockKeyhole, Mail, Pencil, Phone, Plus, UserRou
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
+import { PhoneInput } from "@loopless-shared/forms/phone-input";
 
 type RoleCode = "COMPANY_EMPLOYEE" | "COMPANY_MANAGER";
 type Fields = {
@@ -379,55 +380,60 @@ export function UserRegistrationPage({
                             ? "Personal / notification email"
                             : fieldLabel(key)}
                       </span>
-                      <span className="registration-input-shell">
-                        <FieldIcon aria-hidden="true" />
-                        <input
-                          type={
-                            passwordField && !visible
-                              ? "password"
-                              : key === "email" || key === "notification_email"
-                                ? "email"
-                                : key === "phone_number"
-                                  ? "tel"
+                      {key === "phone_number" ? (
+                        <PhoneInput value={values[key]} onChange={(value) => update(key, value)}>
+                          {(input) => (
+                            <span className="registration-input-shell">
+                              <FieldIcon aria-hidden="true" />
+                              <input {...input} placeholder="98765 43210" aria-invalid={Boolean(errors[key])} />
+                            </span>
+                          )}
+                        </PhoneInput>
+                      ) : (
+                        <span className="registration-input-shell">
+                          <FieldIcon aria-hidden="true" />
+                          <input
+                            type={
+                              passwordField && !visible
+                                ? "password"
+                                : key === "email" || key === "notification_email"
+                                  ? "email"
                                   : "text"
-                          }
-                          autoComplete={
-                            key === "email" || key === "notification_email"
-                              ? "email"
-                              : key === "phone_number"
-                                ? "tel"
+                            }
+                            autoComplete={
+                              key === "email" || key === "notification_email"
+                                ? "email"
                                 : passwordField
                                   ? "new-password"
                                   : "name"
-                          }
-                          placeholder={
-                            key === "name"
-                              ? `${currentTitle} full name`
-                              : key === "email"
-                                ? `${currentTitle.toLowerCase()}@adverseindia.com`
-                                : key === "notification_email"
-                                  ? "person@gmail.com"
-                                  : key === "phone_number"
-                                    ? "+91 98765 43210"
+                            }
+                            placeholder={
+                              key === "name"
+                                ? `${currentTitle} full name`
+                                : key === "email"
+                                  ? `${currentTitle.toLowerCase()}@adverseindia.com`
+                                  : key === "notification_email"
+                                    ? "person@gmail.com"
                                     : key === "confirm_password"
                                       ? "Repeat the password"
                                       : "Create a secure password"
-                          }
-                          value={values[key]}
-                          onChange={(event) => update(key, event.target.value)}
-                          aria-invalid={Boolean(errors[key])}
-                        />
-                        {passwordField && (
-                          <button
-                            type="button"
-                            className="registration-password-toggle"
-                            aria-label={`${visible ? "Hide" : "Show"} ${key === "password" ? "password" : "confirmed password"}`}
-                            onClick={() => setVisiblePasswords((current) => ({ ...current, [key]: !current[key] }))}
-                          >
-                            {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-                          </button>
-                        )}
-                      </span>
+                            }
+                            value={values[key]}
+                            onChange={(event) => update(key, event.target.value)}
+                            aria-invalid={Boolean(errors[key])}
+                          />
+                          {passwordField && (
+                            <button
+                              type="button"
+                              className="registration-password-toggle"
+                              aria-label={`${visible ? "Hide" : "Show"} ${key === "password" ? "password" : "confirmed password"}`}
+                              onClick={() => setVisiblePasswords((current) => ({ ...current, [key]: !current[key] }))}
+                            >
+                              {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                            </button>
+                          )}
+                        </span>
+                      )}
                       {errors[key] && <small>{errors[key]}</small>}
                     </label>
                   );
