@@ -21,6 +21,7 @@ import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog"
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { IntegrationsSettings, WorkflowSettings } from "@/components/settings/integrations-workflow-settings";
 import { ServicesPricingSettings } from "@/components/settings/services-pricing-settings";
+import { PhoneInput } from "@loopless-shared/forms/phone-input";
 
 type Settings = {
   company_id: string;
@@ -363,11 +364,20 @@ export function CompanySettingsPage() {
                         ] as const
                       ).map(([label, key, type]) => (
                         <Field label={label} key={key}>
-                          <input
-                            type={type}
-                            value={data.contact[key] ?? ""}
-                            onChange={(e) => change("contact", key, e.target.value || null)}
-                          />
+                          {type === "tel" ? (
+                            <PhoneInput
+                              value={data.contact[key] ?? ""}
+                              onChange={(value) => change("contact", key, value || null)}
+                            >
+                              {(phone) => <input {...phone} />}
+                            </PhoneInput>
+                          ) : (
+                            <input
+                              type={type}
+                              value={data.contact[key] ?? ""}
+                              onChange={(e) => change("contact", key, e.target.value || null)}
+                            />
+                          )}
                         </Field>
                       ))}
                       <Field label="Business address" wide>

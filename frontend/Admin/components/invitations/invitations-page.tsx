@@ -7,6 +7,7 @@ import { ConfirmationDialog } from "@/components/foundation/confirmation-dialog"
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { ManagementModal } from "@/components/foundation/management-modal";
 import "@/styles/invitations.css";
+import { PhoneInput } from "@loopless-shared/forms/phone-input";
 import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type InvitationRoleCode = "COMPANY_EMPLOYEE" | "COMPANY_MANAGER" | "COMPANY_CLIENT";
@@ -431,28 +432,27 @@ export function InvitationsPage() {
           </label>
           <label className="management-field">
             <span>Mobile number</span>
-            <span className="management-input">
-              <Phone aria-hidden="true" />
-              <input
-                type="tel"
-                autoComplete="tel"
-                value={phone}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setPhone(value);
-                  setPhoneError(
-                    !value.trim()
-                      ? "Mobile number is required."
-                      : phonePattern.test(value.trim())
-                        ? ""
-                        : "Please enter a valid mobile number.",
-                  );
-                  setError("");
-                }}
-                aria-invalid={Boolean(phoneError)}
-                placeholder="+91 98765 43210"
-              />
-            </span>
+            <PhoneInput
+              value={phone}
+              onChange={(value) => {
+                setPhone(value);
+                setPhoneError(
+                  !value.trim()
+                    ? "Mobile number is required."
+                    : phonePattern.test(value.trim())
+                      ? ""
+                      : "Please enter a valid mobile number.",
+                );
+                setError("");
+              }}
+            >
+              {(input) => (
+                <span className="management-input">
+                  <Phone aria-hidden="true" />
+                  <input {...input} aria-invalid={Boolean(phoneError)} placeholder="98765 43210" />
+                </span>
+              )}
+            </PhoneInput>
             {phoneError && <small>{phoneError}</small>}
           </label>
           {staffRole && (

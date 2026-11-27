@@ -33,7 +33,15 @@ HEAD_FONT = "Poppins,'Segoe UI',Helvetica,Arial,sans-serif"
 FONT = "'Segoe UI',Helvetica,Arial,sans-serif"
 MONO = "'Courier New',Consolas,monospace"
 DEFAULT_PHONE = "+91 9392513422"
-_MONEY_LABELS = ("amount", "total", "balance", "amount due", "balance due", "advance left now")
+_MONEY_LABELS = (
+    "amount",
+    "total",
+    "balance",
+    "amount due",
+    "balance due",
+    "budget left",
+    "advance left now",
+)
 
 
 def _origin() -> str:

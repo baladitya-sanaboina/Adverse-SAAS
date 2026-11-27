@@ -398,15 +398,19 @@ class EmailService:
         portal_url: str,
         pdf: bytes,
         filename: str,
+        balance: tuple[str, str] | None = None,
     ) -> None:
-        """Invoice email with the PDF attached (Phase 11)."""
+        """Invoice email with the PDF attached (Phase 11). `balance` is the highlighted line:
+        ("Budget left", amount) or ("Amount due", amount) (owner request 2026-11-28)."""
+        label, value = balance or ("Amount due", amount)
         message = EmailMessage()
         message["Subject"] = f"Invoice {invoice_code} from {company_name}"
         message["From"] = settings.smtp_from_email or settings.smtp_username
         message["To"] = email
         message.set_content(
-            f"Hello {client_name},\n\nPlease find attached invoice {invoice_code} for {amount} "
-            f"covering work delivered {period}.\n\nYou can also view all your invoices and "
+            f"Hello {client_name},\n\nPlease find attached invoice {invoice_code} for the work "
+            f"delivered {period}: {amount}. {label}: {value}.\n\nYou can also view all your "
+            "invoices and "
             f"payments in your client portal: {portal_url}\n\nThank you,\n{company_name}"
         )
         message.add_alternative(
@@ -417,8 +421,8 @@ class EmailService:
                     f"Please find attached invoice {invoice_code} for the work delivered "
                     f"{period}. Each video is listed in the PDF with its date and amount."
                 ],
-                rows=[("Invoice", invoice_code), ("Period", period)],
-                highlight=("Amount due", amount),
+                rows=[("Invoice", invoice_code), ("Period", period), ("Work delivered", amount)],
+                highlight=(label, value),
                 eyebrow="Invoice",
                 action_label="View in your client portal",
                 action_url=portal_url,

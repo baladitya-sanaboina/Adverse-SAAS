@@ -50,13 +50,10 @@ function Failed({ error, onRetry }: { error: string; onRetry: () => void }) {
 }
 
 /** Manager's own commission: earned on approval, minus payouts received. */
-/** Manager → Payment Sheets (owner request 2026-11-14): each Admin top-up is a sheet. */
+/** Manager → Payment Sheets (owner request 2026-11-14): each Admin top-up is a sheet. Amounts
+ * are always shown to managers (owner request 2026-11-28: no show/hide). */
 export function ManagerSheetsPage() {
-  return (
-    <MoneyPrivacy>
-      <ManagerSheetsPageContent />
-    </MoneyPrivacy>
-  );
+  return <ManagerSheetsPageContent />;
 }
 
 function ManagerSheetsPageContent() {
@@ -67,7 +64,6 @@ function ManagerSheetsPageContent() {
       <DashboardHero
         title=""
         highlight="Payment Sheets"
-        action={<PrivacyToggle className="" />}
         description="Every top-up from the Admin opens a new sheet. What is left, or owed, carries into the next one."
         compact
       />
@@ -93,11 +89,7 @@ function ManagerSheetsPageContent() {
 }
 
 export function ManagerEarningsPage() {
-  return (
-    <MoneyPrivacy>
-      <ManagerEarningsPageContent />
-    </MoneyPrivacy>
-  );
+  return <ManagerEarningsPageContent />;
 }
 
 function ManagerEarningsPageContent() {
@@ -109,7 +101,6 @@ function ManagerEarningsPageContent() {
       <DashboardHero
         title=""
         highlight="My Earnings"
-        action={<PrivacyToggle className="" />}
         description="Your advance from the Admin, the commission it covers, and every top-up you have received."
         compact
       />

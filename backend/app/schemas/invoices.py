@@ -122,6 +122,10 @@ class InvoiceResponse(BaseModel):
     client_gstin: str = ""
     payments_total: Money
     budget_added: Money
+    # Budget left (+) or extra used (-) brought in before this invoice (2026-11-28).
+    carried_in: Money = Decimal("0.00")
+    sheet_index: int | None = None
+    # Above zero: still to pay; below zero: budget left.
     balance: Money
     items: int
     notes: str
@@ -149,6 +153,7 @@ class InvoicePreviewResponse(BaseModel):
     total: Money = Decimal("0.00")
     payments_total: Money
     budget_added: Money
+    carried_in: Money = Decimal("0.00")
     lines: list[InvoiceLineResponse]
 
 

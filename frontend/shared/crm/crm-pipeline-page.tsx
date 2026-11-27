@@ -39,6 +39,7 @@ import type {
   Paged,
 } from "./types";
 import "@loopless-shared/styles/crm-pipeline.css";
+import { PhoneInput } from "../forms/phone-input";
 
 type WorkspaceView = "pipeline" | "leads" | "opportunities";
 type PipelineLayout = "board" | "list";
@@ -1506,14 +1507,13 @@ function LeadEditor({
           </InputShell>
         </Field>
         <Field label="Phone" error={errors.phone}>
-          <InputShell icon={<Phone />}>
-            <input
-              value={form.phone}
-              onChange={(e) => onChange("phone", e.target.value)}
-              onBlur={() => onBlur("phone")}
-              aria-invalid={Boolean(errors.phone)}
-            />
-          </InputShell>
+          <PhoneInput value={form.phone} onChange={(value) => onChange("phone", value)}>
+            {(phone) => (
+              <InputShell icon={<Phone />}>
+                <input {...phone} onBlur={() => onBlur("phone")} aria-invalid={Boolean(errors.phone)} />
+              </InputShell>
+            )}
+          </PhoneInput>
         </Field>
         <Field label="Source">
           <LooplessSelect

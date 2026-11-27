@@ -61,8 +61,8 @@ from app.services.notification_service import notification_service
 from app.services.permission_service import validate_user_action_access
 from app.services.production_rules import (
     PAYMENT_METHOD_TEXT,
+    BudgetCycle,
     budget_cycles,
-    budget_position,
     daily_summary,
     entry_time,
     money,
@@ -94,6 +94,59 @@ def _period_sheet(period: WalletPeriod) -> PaymentSheet:
         items=period.items,
         ran_out_on=period.ran_out_on,
         lines=period.lines,
+    )
+
+
+def _balance(row: InvoiceRow) -> Decimal:
+    """Above zero: still to pay. Below zero: budget left (2026-11-28, was called credit)."""
+    return money(row.total - Decimal(row.payments_total) - Decimal(row.carried_in))
+
+
+def _balance_line(row: InvoiceRow) -> tuple[str, str]:
+    """The invoice's closing line for mails: budget left, or the amount due when it ran over."""
+    balance = _balance(row)
+    if balance > 0:
+        return "Amount due", amount_text(balance, row.currency)
+    return "Budget left", amount_text(-balance, row.currency)
+
+
+def _sheet(cycle: BudgetCycle, invoice: InvoiceRow | None = None) -> PaymentSheet:
+    return PaymentSheet(
+        index=cycle.index,
+        start=cycle.start,
+        end=cycle.end,
+        paid=cycle.amount,
+        carried_in=cycle.carried_in,
+        used=cycle.used,
+        left=cycle.remaining,
+        items=cycle.items,
+        ran_out_on=cycle.ran_out_on,
+        lines=[
+            SheetLine(
+                day=line.day,
+                kind=line.kind,
+                label=line.label,
+                amount=line.amount,
+                balance=line.balance,
+            )
+            for line in cycle.lines
+        ],
+        invoice_id=invoice.id if invoice else None,
+        invoice_code=invoice.code if invoice else None,
+        invoice_status=invoice.status if invoice else None,
+    )
+
+
+def _budget(sheets: list[PaymentSheet]) -> ClientBudgetSummary:
+    paid = money(sum((Decimal(sheet.paid) for sheet in sheets), ZERO))
+    used = money(sum((Decimal(sheet.used) for sheet in sheets), ZERO))
+    left = money(Decimal(sheets[-1].left)) if sheets else ZERO
+    return ClientBudgetSummary(
+        has_budget=paid > 0,
+        total=paid,
+        used=used,
+        remaining=max(left, ZERO),
+        overage=max(-left, ZERO),
     )
 
 
@@ -229,7 +282,9 @@ class InvoiceService:
             client_gstin=row.client_gstin,
             payments_total=money(row.payments_total),
             budget_added=money(row.budget_added),
-            balance=money(row.total - Decimal(row.payments_total)),
+            carried_in=money(row.carried_in),
+            sheet_index=row.sheet_index,
+            balance=_balance(row),
             items=row.line_count,
             notes=row.notes,
             created_by_name=row.created_by_name,
@@ -297,6 +352,27 @@ class InvoiceService:
             return ZERO, money(ZERO), tax.gstin if tax else ""
         return Decimal(tax.gst_rate), money(subtotal * Decimal(tax.gst_rate) / 100), tax.gstin
 
+    def _opening_balance(self, company_id: UUID, client_id: UUID, start: date) -> Decimal:
+        """Budget left (+) or extra used (-) before `start`: payments minus work delivered."""
+        tz, _, _ = self._zone(company_id)
+        paid = sum(
+            (
+                Decimal(payment.amount)
+                for payment in self.finance.list_client_payments_for_client(company_id, client_id)
+                if payment.received_on < start
+            ),
+            ZERO,
+        )
+        used = sum(
+            (
+                Decimal(row.amount)
+                for row in self.finance.client_deliveries(company_id, client_id, tz)
+                if row.delivered_on < start
+            ),
+            ZERO,
+        )
+        return money(paid - used)
+
     def _make(
         self,
         company_id: UUID,
@@ -308,8 +384,68 @@ class InvoiceService:
         due_date: date | None = None,
         notes: str = "",
     ) -> UUID:
-        _, _, today = self._zone(company_id)
+        """An invoice for a date range, opening with the budget left before it."""
         deliveries, payments, budget_added = self._collect(company_id, client_id, start, end)
+        return self._save(
+            company_id,
+            client_id,
+            actor_id,
+            start,
+            end,
+            source,
+            deliveries,
+            payments,
+            budget_added,
+            carried_in=self._opening_balance(company_id, client_id, start),
+            due_date=due_date,
+            notes=notes,
+        )
+
+    def _make_for_sheet(
+        self,
+        company_id: UUID,
+        client_id: UUID,
+        actor_id: UUID,
+        cycle: BudgetCycle,
+        payments: list[Any],
+        rows: list[Any],
+    ) -> UUID:
+        """The invoice of one payment sheet: exactly its payment and its work (two payments on
+        the same day are two sheets with two invoices), opening with what the sheet before left."""
+        _, _, today = self._zone(company_id)
+        start, end = cycle.start, cycle.end or min(cycle.ran_out_on or today, today)
+        return self._save(
+            company_id,
+            client_id,
+            actor_id,
+            start,
+            max(end, start),
+            "SHEET",
+            [rows[position] for position in cycle.delivery_indexes],
+            [payments[cycle.entry_index]] if cycle.entry_index is not None else [],
+            ZERO,
+            carried_in=cycle.carried_in,
+            sheet_index=cycle.index,
+        )
+
+    def _save(
+        self,
+        company_id: UUID,
+        client_id: UUID,
+        actor_id: UUID,
+        start: date,
+        end: date,
+        source: str,
+        deliveries: list[Any],
+        payments: list[Any],
+        budget_added: Decimal,
+        *,
+        carried_in: Decimal = ZERO,
+        sheet_index: int | None = None,
+        due_date: date | None = None,
+        notes: str = "",
+    ) -> UUID:
+        _, _, today = self._zone(company_id)
         subtotal = money(sum((Decimal(row.amount) for row in deliveries), ZERO))
         tax_rate, tax_amount, gstin = self._tax(company_id, client_id, subtotal)
         return self.repository.create(
@@ -329,6 +465,8 @@ class InvoiceService:
                 "client_gstin": gstin,
                 "payments_total": money(sum((Decimal(p.amount) for p in payments), ZERO)),
                 "budget_added": money(budget_added),
+                "carried_in": money(carried_in),
+                "sheet_index": sheet_index,
                 "payments": [
                     {
                         "received_on": payment.received_on.isoformat(),
@@ -406,6 +544,7 @@ class InvoiceService:
             total=money(subtotal + tax_amount),
             payments_total=paid,
             budget_added=money(budget_added),
+            carried_in=self._opening_balance(company_id, client_id, start),
             lines=[
                 InvoiceLineResponse(
                     position=index,
@@ -493,6 +632,7 @@ class InvoiceService:
                 return
             period = f"{row.period_start:%d %b %Y} – {row.period_end:%d %b %Y}"
             amount = amount_text(row.total, row.currency)
+            label, value = _balance_line(row)
             lines = self.repository.lines(row.id)
             table = [["Date", "Work", "Amount"]] + [
                 [
@@ -506,7 +646,7 @@ class InvoiceService:
                 company_id,
                 [client_user],
                 f"Invoice {row.code} from {company}",
-                f"Your invoice {row.code} for {period} is ready: {amount}.",
+                f"Your invoice {row.code} for {period} is ready: {amount}. {label}: {value}.",
                 "/billing",
                 "PAYMENT",
                 once_key=f"invoice-box:{row.id}",
@@ -515,7 +655,12 @@ class InvoiceService:
                     [
                         f"Hello {row.client_name}, your invoice for the work delivered {period} is ready."
                     ],
-                    rows=[("Invoice", row.code), ("Period", period), ("Amount", amount)],
+                    rows=[
+                        ("Invoice", row.code),
+                        ("Period", period),
+                        ("Work delivered", amount),
+                        (label, value),
+                    ],
                     table=table if lines else [],
                     action="Open billing",
                     note="The PDF is attached to the mail sent to your Gmail and can be downloaded from Billing.",
@@ -549,6 +694,7 @@ class InvoiceService:
                     portal_url=_portal_url(),
                     pdf=content,
                     filename=filename,
+                    balance=_balance_line(row),
                 )
                 emailed, message = True, f"Emailed to {email}."
             except Exception:  # noqa: BLE001 - the invoice is still available in the portal
@@ -581,26 +727,76 @@ class InvoiceService:
 
     # -- invoices per payment sheet (owner request 2026-11-15) --------------------------------
 
-    def _sheet_invoices(self, company_id: UUID, client_id: UUID) -> dict[date, InvoiceRow]:
+    def _sheet_invoices(
+        self, company_id: UUID, client_id: UUID, cycles: list[BudgetCycle]
+    ) -> dict[int, InvoiceRow]:
+        """Each payment sheet's invoice, by sheet number (2026-11-28). An invoice made before
+        sheet numbers were stored is matched by its start date to the first sheet that day."""
         rows, _ = self.repository.list(company_id, client_id, ["DRAFT", "SENT", "PAID"], 1, 200)
-        return {row.period_start: row for row in rows if row.source == "SHEET"}
+        made: dict[int, InvoiceRow] = {}
+        older: list[InvoiceRow] = []
+        for row in sorted((row for row in rows if row.source == "SHEET"), key=lambda r: r.number):
+            if row.sheet_index is not None:
+                made.setdefault(row.sheet_index, row)
+            else:
+                older.append(row)
+        for row in older:
+            cycle = next(
+                (c for c in cycles if c.index not in made and c.start == row.period_start), None
+            )
+            if cycle is not None:
+                made[cycle.index] = row
+        return made
 
-    def _sheet_period(self, sheet: PaymentSheet, today: date) -> tuple[date, date]:
-        return sheet.start, sheet.end or min(sheet.ran_out_on or today, today)
+    def _client_cycles(
+        self, company_id: UUID, client_id: UUID
+    ) -> tuple[list[BudgetCycle], list[Any], list[Any]]:
+        """Client payment sheets: each payment received opens a sheet (owner decision
+        2026-11-14); delivered videos are taken from it. Work with no payment yet still shows.
+        Also returns the payments and deliveries (oldest first) the sheets point into."""
+        tz, _, _ = self._zone(company_id)
+        payments = self.finance.list_client_payments_for_client(company_id, client_id)
+        rows = list(reversed(self.finance.client_deliveries(company_id, client_id, tz)))
+        cycles = budget_cycles(
+            [
+                (
+                    payment.received_on,
+                    "TOP_UP",
+                    Decimal(payment.amount),
+                    f"Payment received · {PAYMENT_METHOD_TEXT.get(payment.method, payment.method)}"
+                    + (f" · {payment.reference}" if payment.reference else ""),
+                    entry_time(payment.received_on, payment.created_at),  # same-day order
+                )
+                for payment in payments
+            ],
+            [
+                (
+                    row.delivered_on,
+                    Decimal(row.amount),
+                    row.title if row.kind == "PACKAGE" else f"{row.title} · {row.service_name}",
+                    row.kind == "WORK",
+                    row.delivered_at if row.kind == "WORK" else None,
+                )
+                for row in rows
+            ],
+            open_without_payment=True,
+        )
+        return cycles, payments, rows
 
     def ensure_sheet_invoices(self, company_id: UUID, client_id: UUID, actor_id: UUID) -> None:
         """A draft invoice for every payment sheet that has finished: its money ran out, or the
         next payment closed it. Made once per sheet; the admin checks and sends it."""
         try:
-            _, _, today = self._zone(company_id)
-            made = self._sheet_invoices(company_id, client_id)
-            for sheet in self._client_sheets(company_id, client_id):
-                had_money = sheet.paid + sheet.carried_in > 0
-                finished = sheet.end is not None or (had_money and sheet.left <= 0)
-                if not finished or sheet.items == 0 or sheet.start in made:
+            cycles, payments, rows = self._client_cycles(company_id, client_id)
+            made = self._sheet_invoices(company_id, client_id, cycles)
+            for cycle in cycles:
+                had_money = cycle.amount + cycle.carried_in > 0
+                finished = cycle.end is not None or (had_money and cycle.remaining <= 0)
+                if not finished or cycle.items == 0 or cycle.index in made:
                     continue
-                start, end = self._sheet_period(sheet, today)
-                invoice_id = self._make(company_id, client_id, actor_id, start, end, "SHEET")
+                invoice_id = self._make_for_sheet(
+                    company_id, client_id, actor_id, cycle, payments, rows
+                )
                 row = self.repository.get(company_id, invoice_id)
                 if row is None:
                     continue
@@ -609,7 +805,7 @@ class InvoiceService:
                     notification_service.admins(company_id),
                     "invoice.ready",
                     f"Invoice {row.code} is ready for {row.client_name}",
-                    f"Payment sheet {sheet.index} is complete. Review the draft and send it.",
+                    f"Payment sheet {cycle.index} is complete. Review the draft and send it.",
                     f"/invoices?invoice={row.id}",
                     {"invoice_id": str(row.id), "client_id": str(client_id)},
                 )
@@ -623,23 +819,24 @@ class InvoiceService:
         company_id = self._admin(context, "CREATE")
         if self.tasks.get_client(company_id, request.client_id) is None:
             raise AuthenticationError(404, "CLIENT_NOT_FOUND", "Client was not found.")
-        sheet = next(
+        cycles, payments, rows = self._client_cycles(company_id, request.client_id)
+        cycle = next(
             (
                 item
-                for item in self._client_sheets(company_id, request.client_id)
+                for item in cycles
                 if item.start == request.start
                 and (request.index is None or item.index == request.index)
             ),
             None,
         )
-        if sheet is None:
+        if cycle is None:
             raise AuthenticationError(404, "SHEET_NOT_FOUND", "That payment sheet was not found.")
-        existing = self._sheet_invoices(company_id, request.client_id).get(sheet.start)
+        existing = self._sheet_invoices(company_id, request.client_id, cycles).get(cycle.index)
         if existing is not None:
             return self._detail(company_id, existing.id)
-        _, _, today = self._zone(company_id)
-        start, end = self._sheet_period(sheet, today)
-        invoice_id = self._make(company_id, request.client_id, context.user_id, start, end, "SHEET")
+        invoice_id = self._make_for_sheet(
+            company_id, request.client_id, context.user_id, cycle, payments, rows
+        )
         return self._detail(company_id, invoice_id)
 
     def email_sheet(self, context: AuthContext, request: SheetEmailRequest) -> SheetEmailResponse:
@@ -942,63 +1139,15 @@ class InvoiceService:
     def _client_sheets(
         self, company_id: UUID, client_id: UUID, with_invoices: bool = False
     ) -> list[PaymentSheet]:
-        """Client payment sheets: each payment received opens a sheet (owner decision
-        2026-11-14); delivered videos are taken from it. Work with no payment yet still shows."""
-        tz, _, _ = self._zone(company_id)
-        made = self._sheet_invoices(company_id, client_id) if with_invoices else {}
-        payments = self.finance.list_client_payments_for_client(company_id, client_id)
-        rows = list(reversed(self.finance.client_deliveries(company_id, client_id, tz)))
-        cycles = budget_cycles(
-            [
-                (
-                    payment.received_on,
-                    "TOP_UP",
-                    Decimal(payment.amount),
-                    f"Payment received · {PAYMENT_METHOD_TEXT.get(payment.method, payment.method)}"
-                    + (f" · {payment.reference}" if payment.reference else ""),
-                    entry_time(payment.received_on, payment.created_at),  # same-day order
-                )
-                for payment in payments
-            ],
-            [
-                (
-                    row.delivered_on,
-                    Decimal(row.amount),
-                    row.title if row.kind == "PACKAGE" else f"{row.title} · {row.service_name}",
-                    row.kind == "WORK",
-                    row.delivered_at if row.kind == "WORK" else None,
-                )
-                for row in rows
-            ],
-            open_without_payment=True,
-        )
-        return [
-            PaymentSheet(
-                index=cycle.index,
-                start=cycle.start,
-                end=cycle.end,
-                paid=cycle.amount,
-                carried_in=cycle.carried_in,
-                used=cycle.used,
-                left=cycle.remaining,
-                items=cycle.items,
-                ran_out_on=cycle.ran_out_on,
-                lines=[
-                    SheetLine(
-                        day=line.day,
-                        kind=line.kind,
-                        label=line.label,
-                        amount=line.amount,
-                        balance=line.balance,
-                    )
-                    for line in cycle.lines
-                ],
-                invoice_id=made[cycle.start].id if cycle.start in made else None,
-                invoice_code=made[cycle.start].code if cycle.start in made else None,
-                invoice_status=made[cycle.start].status if cycle.start in made else None,
-            )
-            for cycle in cycles
-        ]
+        """Client payment sheets (see `_client_cycles`), with each one's invoice when asked."""
+        cycles, _, _ = self._client_cycles(company_id, client_id)
+        made = self._sheet_invoices(company_id, client_id, cycles) if with_invoices else {}
+        return [_sheet(cycle, made.get(cycle.index)) for cycle in cycles]
+
+    def client_budget(self, company_id: UUID, client_id: UUID) -> ClientBudgetSummary:
+        """The client's budget is the money they paid (owner model 2026-11-14: each payment opens
+        a sheet); used is the work delivered; left is the last sheet's balance."""
+        return _budget(self._client_sheets(company_id, client_id))
 
     def client_sheets(self, context: AuthContext, client_id: UUID) -> list[PaymentSheet]:
         company_id = self._admin(context, "VIEW")
@@ -1051,26 +1200,23 @@ class InvoiceService:
     def client_billing(self, context: AuthContext) -> ClientBillingResponse:
         company_id, client = self._client_of(context)
         tz, zone, today = self._zone(company_id)
-        cycles, deliveries_asc = self._cycles(company_id, client.id)
         rows_asc = list(reversed(self.finance.client_deliveries(company_id, client.id, tz)))
-        entries = self._budget_entries(company_id, client.id, zone)
-        left = running_budget_left([(day, amount) for day, _, amount in entries], deliveries_asc)
-        totals = self.tasks.budget_totals(company_id, client.id)
-        position = budget_position(totals.total, totals.used, totals.committed)
+        deliveries_asc = [(row.delivered_on, Decimal(row.amount)) for row in rows_asc]
         payments = self.finance.list_client_payments_for_client(company_id, client.id)
+        # The budget is what the client paid (2026-11-28: the same numbers as the Admin's sheets).
+        left = running_budget_left(
+            [(payment.received_on, Decimal(payment.amount)) for payment in payments],
+            deliveries_asc,
+        )
+        sheets = self._client_sheets(company_id, client.id)
+        totals = self.tasks.budget_totals(company_id, client.id)
         total_paid = money(sum((Decimal(p.amount) for p in payments), ZERO))
         month_start, month_end = resolve_period("this_month", today)
         invoices, _ = self.repository.list(company_id, client.id, ["SENT", "PAID"], 1, 100)
         return ClientBillingResponse(
             client_name=client.name,
             currency=self.finance.company_currency(company_id),
-            budget=ClientBudgetSummary(
-                has_budget=position.has_budget,
-                total=position.total,
-                used=position.used,
-                remaining=position.remaining,
-                overage=position.overage,
-            ),
+            budget=_budget(sheets),
             total_charged=money(totals.used),
             total_paid=total_paid,
             pending_amount=max(money(totals.used) - total_paid, ZERO),
@@ -1086,8 +1232,22 @@ class InvoiceService:
                     ZERO,
                 )
             ),
-            cycles=cycles,
-            sheets=self._client_sheets(company_id, client.id),
+            cycles=[
+                BudgetCycleResponse(
+                    index=sheet.index,
+                    start=sheet.start,
+                    end=sheet.end,
+                    amount=sheet.paid,
+                    used=sheet.used,
+                    remaining=sheet.left,
+                    items=sheet.items,
+                    carried_in=sheet.carried_in,
+                    ran_out_on=sheet.ran_out_on,
+                    lines=sheet.lines,
+                )
+                for sheet in sheets
+            ],
+            sheets=sheets,
             deliveries=[
                 ClientDeliveryRow(
                     delivered_on=row.delivered_on,
@@ -1125,7 +1285,7 @@ class InvoiceService:
                     tax_amount=money(row.tax_amount),
                     total=money(row.total),
                     payments_total=money(row.payments_total),
-                    balance=money(row.total - Decimal(row.payments_total)),
+                    balance=_balance(row),
                     items=row.line_count,
                 )
                 for row in invoices

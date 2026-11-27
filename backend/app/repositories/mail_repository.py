@@ -96,12 +96,16 @@ _RECEIVED = f"(m.status = 'SENT' AND {_mine_as_recipient('AND r.deleted_at IS NU
 _IN_BOX = _mine_as_recipient("AND r.deleted_at IS NULL AND r.archived_at IS NULL")
 
 # Which of my messages a folder lists (its threads are listed, newest activity first).
+# Primary or Updates: the app's choice when it made the mail (`category`, 2026-11-28), else mail
+# from a person is Primary and mail from Adverse is Updates.
+_PRIMARY = (
+    "(m.category = 'PRIMARY' OR (m.category IS NULL AND m.sender_id IS NOT NULL "
+    "AND m.sender_id <> %(me)s))"
+)
+_UPDATES = "(m.category = 'UPDATES' OR (m.category IS NULL AND m.sender_id IS NULL))"
 FOLDER_SQL = {
-    "INBOX": (
-        "(m.status = 'SENT' AND m.sender_id IS NOT NULL AND m.sender_id <> %(me)s "
-        f"AND {_IN_BOX})"
-    ),
-    "UPDATES": f"(m.status = 'SENT' AND m.sender_id IS NULL AND {_IN_BOX})",
+    "INBOX": f"(m.status = 'SENT' AND {_PRIMARY} AND {_IN_BOX})",
+    "UPDATES": f"(m.status = 'SENT' AND {_UPDATES} AND {_IN_BOX})",
     "STARRED": (
         "((m.status = 'SENT' AND "
         f"{_mine_as_recipient('AND r.deleted_at IS NULL AND r.starred_at IS NOT NULL')}) "
@@ -216,17 +220,18 @@ class MailRepository:
         scheduled_at: datetime | None = None,
         card: dict[str, Any] | None = None,
         starred: bool = False,
+        category: str | None = None,
     ) -> UUID:
         """recipients: user ids (all To) or (user id, TO|CC|BCC) pairs. `card` is the mail's
         structured layout (title, rows, table, button) for app mails. `starred`: already
-        starred for the recipients (a priority mail)."""
+        starred for the recipients (a priority mail). `category`: PRIMARY or UPDATES tab."""
         pairs = [item if isinstance(item, tuple) else (item, "TO") for item in recipients]
         message_id = uuid4()
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO mail_messages (id, company_id, sender_id, thread_id, reply_to_id, kind, "
-                "subject, body, link, status, scheduled_at, card, created_at) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW() AT TIME ZONE 'UTC')",
+                "subject, body, link, status, scheduled_at, card, category, created_at) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW() AT TIME ZONE 'UTC')",
                 (
                     message_id,
                     company_id,
@@ -240,6 +245,7 @@ class MailRepository:
                     status,
                     scheduled_at,
                     Jsonb(card) if card else None,
+                    category,
                 ),
             )
             _insert_recipients(cursor, message_id, pairs)

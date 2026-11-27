@@ -750,8 +750,10 @@ class MailService:
         sender_id: UUID | None = None,
         starred: bool = False,
         files: Sequence[tuple[bytes, str, str]] = (),
+        category: str | None = None,
     ) -> None:
         """A mail from the app. Never raises: a failed mail must not undo the work.
+        `category`: PRIMARY or UPDATES tab (default: from a person Primary, else Updates).
         `files`: (content, file name, MIME type) attached to the mail (e.g. onboarding PDFs).
         `starred`: a priority mail, starred for the recipients.
         notify=False when the caller already sends its own bell notification.
@@ -789,6 +791,7 @@ class MailService:
                     for item in stored
                 ]
                 or None,
+                category=category,
             )
             sender = self.people_repository.person(company_id, sender_id) if sender_id else None
             title = f"Mail from {sender.name}" if sender else "New mail from Adverse"
@@ -807,7 +810,15 @@ class MailService:
             return True
 
 
-_HIGHLIGHT_LABELS = ("amount", "total", "balance", "amount due", "balance due", "advance left now")
+_HIGHLIGHT_LABELS = (
+    "amount",
+    "total",
+    "balance",
+    "amount due",
+    "balance due",
+    "budget left",
+    "advance left now",
+)
 _ROW = re.compile(r"^([A-Z][A-Za-z /&'().-]{1,28}):\s+(\S.{0,160})$")
 KIND_LABELS = {
     "TASK": "Task update",

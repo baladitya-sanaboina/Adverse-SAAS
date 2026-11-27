@@ -74,7 +74,10 @@ class TaskEvents:
         row: TaskRow,
         key: str,
         actor_id: UUID | None = None,
+        category: str = "UPDATES",
     ) -> None:
+        """Task mails (owner request 2026-11-28): the first mail about a task (you were given it,
+        or asked to monitor it) goes to Primary; every later update goes to Updates."""
         if self.mail is None:
             return
         people = [user_id for user_id in recipients if user_id and user_id != actor_id]
@@ -112,6 +115,7 @@ class TaskEvents:
             once_key=key,
             card=card,
             sender_id=actor_id,
+            category=category,
         )
 
     def _row(self, company_id: UUID, task_id: UUID) -> TaskRow | None:
@@ -154,6 +158,7 @@ class TaskEvents:
                     row,
                     f"task-assigned:{row.id}",
                     actor_id,
+                    "PRIMARY",
                 )
             if row.monitor_user_id and row.monitor_user_id != previous_monitor:
                 self._mail(
@@ -164,6 +169,7 @@ class TaskEvents:
                     row,
                     f"task-monitor:{row.id}",
                     actor_id,
+                    "PRIMARY",
                 )
             if row.monitor_user_id and row.monitor_user_id != previous_monitor:
                 self.notifier.notify(

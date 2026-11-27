@@ -5,8 +5,19 @@
  * compact header, quick filter chips, richer board cards, a slide-in task sheet and a status
  * progress bar. Colours and type come from the existing theme tokens only.
  */
-import { useEffect, useRef, type DragEvent, type ReactNode } from "react";
-import { CalendarDays, Check, List, MessageSquare, Paperclip, Search, SquareKanban, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import {
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  List,
+  MessageSquare,
+  Paperclip,
+  Search,
+  SquareKanban,
+  X,
+} from "lucide-react";
 import { PRIORITY_LABELS, STATUS_LABELS } from "./client";
 import type { TaskPriority, TaskStatus } from "./types";
 import "../styles/task-board.css";
@@ -371,6 +382,56 @@ export function StatusProgress({ status }: { status: TaskStatus }) {
       </ol>
       {(cancelled || status === "PENDING") && (
         <p>{cancelled ? "This task was cancelled." : "Not assigned yet. Assign someone to start the work."}</p>
+      )}
+    </div>
+  );
+}
+
+/* Long board columns fold (owner request 2026-11-28): each column shows the first cards, and
+   "Show more" opens the next ones. */
+export const BOARD_COLUMN_PAGE = 6;
+
+export function useBoardColumnLimits() {
+  const [limits, setLimits] = useState<Record<string, number>>({});
+  const limit = useCallback((column: string) => limits[column] ?? BOARD_COLUMN_PAGE, [limits]);
+  const more = useCallback(
+    (column: string) =>
+      setLimits((current) => ({ ...current, [column]: (current[column] ?? BOARD_COLUMN_PAGE) + BOARD_COLUMN_PAGE })),
+    [],
+  );
+  const less = useCallback(
+    (column: string) => setLimits((current) => ({ ...current, [column]: BOARD_COLUMN_PAGE })),
+    [],
+  );
+  return { limit, more, less };
+}
+
+export function BoardColumnMore({
+  shown,
+  total,
+  onMore,
+  onLess,
+}: {
+  shown: number;
+  total: number;
+  onMore: () => void;
+  onLess: () => void;
+}) {
+  if (total <= BOARD_COLUMN_PAGE) return null;
+  const left = total - shown;
+  return (
+    <div className="production-board-more">
+      {left > 0 && (
+        <button type="button" onClick={onMore}>
+          <ChevronDown aria-hidden="true" />
+          Show more ({left})
+        </button>
+      )}
+      {shown > BOARD_COLUMN_PAGE && (
+        <button type="button" className="less" onClick={onLess}>
+          <ChevronUp aria-hidden="true" />
+          Show less
+        </button>
       )}
     </div>
   );

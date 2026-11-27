@@ -71,7 +71,7 @@ EMPLOYEE_LINK_DAYS = 7
 
 CLIENT_FORM: tuple[PublicField, ...] = (
     PublicField(key="contact_person", label="Main contact person", required=True),
-    PublicField(key="contact_phone", label="Contact phone", required=True),
+    PublicField(key="contact_phone", label="Contact phone", required=True, input="tel"),
     PublicField(key="contact_email", label="Contact email", required=False),
     PublicField(key="business_name", label="Business name on invoices", required=False),
     PublicField(
@@ -103,7 +103,7 @@ CLIENT_FORM: tuple[PublicField, ...] = (
     ),
 )
 EMPLOYEE_FORM: tuple[PublicField, ...] = (
-    PublicField(key="phone", label="Your phone number", required=True),
+    PublicField(key="phone", label="Your phone number", required=True, input="tel"),
     PublicField(key="address", label="Your address", required=False, multiline=True),
     PublicField(key="emergency_contact", label="Emergency contact (name and phone)", required=True),
 )

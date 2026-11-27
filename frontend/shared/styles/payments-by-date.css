@@ -1,0 +1,170 @@
+/* Payments by date on the Admin and Manager dashboards (owner request 2026-11-28). Theme tokens
+   and the dashboard's existing row style only. */
+.pay-date-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pay-date-filters .loopless-select {
+  min-width: 150px;
+}
+
+.pay-date-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.pay-date-totals > span {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.pay-date-totals small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+.pay-date-totals strong {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.pay-date-totals .in strong,
+.pay-date-day em.in,
+.pay-date-row em.in {
+  color: #287150;
+}
+
+.pay-date-totals .out strong,
+.pay-date-day em.out,
+.pay-date-row em.out {
+  color: #b74858;
+}
+
+.pay-date-days {
+  display: grid;
+  gap: 12px;
+  max-height: 460px;
+  overflow: auto;
+}
+
+.pay-date-days.refreshing {
+  opacity: 0.6;
+}
+
+.pay-date-day > header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: color-mix(in srgb, #0876ed 8%, var(--surface));
+}
+
+.pay-date-day > header strong {
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.pay-date-day > header span {
+  display: inline-flex;
+  gap: 10px;
+}
+
+.pay-date-day em {
+  font-size: 0.64rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.production-dash-rows .pay-date-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.production-dash-rows li:last-child .pay-date-row {
+  border-bottom: 0;
+}
+
+.pay-date-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pay-date-row em {
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pay-date-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+}
+
+.pay-date-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.pay-date-icon.in {
+  color: #287150;
+  background: color-mix(in srgb, #287150 12%, transparent);
+}
+
+.pay-date-icon.out {
+  color: #b74858;
+  background: color-mix(in srgb, #b74858 12%, transparent);
+}
+
+@media (max-width: 640px) {
+  .pay-date-filters {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .pay-date-filters .loopless-select {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+}
+
+/* Manager dashboard: how long a payment due to them has been waiting (2026-11-28). */
+.production-dash-due-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #b74858;
+  background: color-mix(in srgb, #b74858 12%, transparent);
+  font-size: 0.62rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.production-dash-due-badge svg {
+  width: 14px;
+  height: 14px;
+}

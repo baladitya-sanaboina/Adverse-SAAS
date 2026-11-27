@@ -33,6 +33,8 @@ import {
   SheetHeader,
   StatusProgress,
   TaskCard,
+  BoardColumnMore,
+  useBoardColumnLimits,
   TaskSheet,
   TasksHeader,
   matchesQuick,
@@ -79,6 +81,7 @@ function syncUrl(id: string | null) {
 export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const columnLimits = useBoardColumnLimits();
   const [items, setItems] = useState<WorkerTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -303,7 +306,7 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
                     {tasks.length === 0 ? (
                       <p className="production-board-empty">No tasks</p>
                     ) : (
-                      tasks.map((task) => (
+                      tasks.slice(0, columnLimits.limit(column)).map((task) => (
                         <TaskCard
                           key={task.id}
                           code={task.code}
@@ -338,6 +341,12 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
                         />
                       ))
                     )}
+                    <BoardColumnMore
+                      shown={Math.min(columnLimits.limit(column), tasks.length)}
+                      total={tasks.length}
+                      onMore={() => columnLimits.more(column)}
+                      onLess={() => columnLimits.less(column)}
+                    />
                   </section>
                 );
               })}
