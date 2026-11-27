@@ -43,23 +43,19 @@ if [[ ! -f $dev_env/backend.env ]]; then
   dev_url="${base%/*}/${base##*/}_dev$query"
   origins="https://$(dev_host admin),https://$(dev_host manager),https://$(dev_host employee),https://$(dev_host client)"
   {
-    grep -vE '^(APP_NAME|ENVIRONMENT|DATABASE_URL|REDIS_URL|JWT_SECRET|SMTP_[A-Z_]+|MAIL_DELIVERY_ENABLED|CORS_ORIGINS|VAPID_SUBJECT|DEFAULT_ADMIN_PASSWORD)=' \
+    grep -vE '^(APP_NAME|ENVIRONMENT|DATABASE_URL|REDIS_URL|JWT_SECRET|MAIL_DELIVERY_ENABLED|MAIL_ALLOWED_RECIPIENTS|CORS_ORIGINS|VAPID_SUBJECT|DEFAULT_ADMIN_PASSWORD)=' \
       $prod_env/backend.env
     cat <<ENV
 
-# Dev site (install_dev_site.sh). Mail is logged, never sent.
+# Dev site (install_dev_site.sh). Mail is logged, never sent, except to the addresses in
+# MAIL_ALLOWED_RECIPIENTS (the owner's own Gmail, for testing).
 APP_NAME="Adverse API (dev)"
 ENVIRONMENT=staging
 DATABASE_URL=$dev_url
 REDIS_URL=redis://127.0.0.1:6379/1
 JWT_SECRET=$(openssl rand -hex 32)
 MAIL_DELIVERY_ENABLED=false
-SMTP_HOST=127.0.0.1
-SMTP_PORT=2525
-SMTP_USERNAME=dev-site-mail-off
-SMTP_PASSWORD=unused
-SMTP_FROM_EMAIL=dev-site@$base_domain
-SMTP_USE_TLS=false
+MAIL_ALLOWED_RECIPIENTS=
 CORS_ORIGINS=$origins
 VAPID_SUBJECT=https://$(dev_host admin)
 ENV

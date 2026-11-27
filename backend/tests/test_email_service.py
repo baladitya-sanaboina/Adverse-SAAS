@@ -132,6 +132,15 @@ class MailDeliverySwitchTests(unittest.TestCase):
         smtp.SMTP_SSL.assert_not_called()
 
     @patch.object(settings, "mail_delivery_enabled", False)
+    @patch.object(settings, "mail_allowed_recipients", "Client@Gmail.com, other@gmail.com")
+    @patch.object(settings, "mail_repeat_window_minutes", 0)
+    @patch.object(settings, "smtp_username", "sender@gmail.com")
+    def test_allowed_addresses_still_get_mail_when_delivery_is_off(self) -> None:
+        with patch("app.services.email_service.smtplib") as smtp:
+            EmailService()._send(self._message())
+        smtp.SMTP.assert_called_once()
+
+    @patch.object(settings, "mail_delivery_enabled", False)
     @patch.object(settings, "smtp_host", "127.0.0.1")
     def test_health_is_ready_when_delivery_is_off(self) -> None:
         with patch("app.services.email_service.smtplib") as smtp:

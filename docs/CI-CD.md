@@ -18,7 +18,7 @@ Pull requests and other branches never deploy.
 2. The dev site updates by itself. Test there.
 3. On GitHub, open a Pull Request from `dev` into `main` and click **Merge**. Only this updates production.
 
-The dev site runs on the same VPS but is fully separate: `/opt/adverse-dev`, `/etc/adverse-dev`, database `adverse_dev`, Redis database 1, ports 8100 and 3100–3103. Its data is a copy of production. On the dev site, mail is logged and never sent (`MAIL_DELIVERY_ENABLED=false`), and push subscriptions are removed from the copy. To replace the dev data with a fresh copy of production, run `sudo adverse-dev-refresh` on the VPS. One-time setup: `sudo bash scripts/production/install_dev_site.sh`. It needs DNS A records for the five `dev-` names.
+The dev site runs on the same VPS but is fully separate: `/opt/adverse-dev`, `/etc/adverse-dev`, database `adverse_dev`, Redis database 1, ports 8100 and 3100–3103. Its data is a copy of production. On the dev site, mail is logged and never sent (`MAIL_DELIVERY_ENABLED=false`), except to the addresses listed in `MAIL_ALLOWED_RECIPIENTS` in `/etc/adverse-dev/backend.env` (the owner's own Gmail, for testing), and push subscriptions are removed from the copy. To replace the dev data with a fresh copy of production, run `sudo adverse-dev-refresh` on the VPS. One-time setup: `sudo bash scripts/production/install_dev_site.sh`. It needs DNS A records for the five `dev-` names.
 
 ## Backups
 
