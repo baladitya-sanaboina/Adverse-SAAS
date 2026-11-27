@@ -13,7 +13,8 @@ export type TaskStatus =
   | "COMPLETED"
   | "CANCELLED";
 export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-export type AssigneeRole = "MANAGER" | "EMPLOYEE";
+/** ADMIN: the Admin can take a task too (owner request 2026-11-28); no commission. */
+export type AssigneeRole = "MANAGER" | "EMPLOYEE" | "ADMIN";
 export type FileKind = "REFERENCE" | "DELIVERABLE";
 export type PaymentMethod = "CASH" | "BANK_TRANSFER" | "UPI" | "CHEQUE" | "CARD" | "OTHER";
 export type BudgetEntryType = "INITIAL" | "TOP_UP" | "ADJUSTMENT";
@@ -294,6 +295,9 @@ export type TeamReportRow = {
   earnings: string;
   paid: string;
   pending: string;
+  /** Employees: the monthly salary in effect today, else the next one set (2026-11-28). */
+  monthly_salary?: string | null;
+  salary_from?: string | null;
 };
 export type ServiceReportRow = {
   service: NamedRef;

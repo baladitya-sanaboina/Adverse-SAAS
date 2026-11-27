@@ -280,6 +280,35 @@ class TaskRepository:
           AND u.status IN ('ACTIVE', 'PENDING_VERIFICATION')
     """
 
+    # Who a task can be given to (owner request 2026-11-28: the Admin does some tasks too).
+    _ASSIGNEE_SQL = """
+        SELECT u.id, u.name,
+            CASE r.code WHEN 'COMPANY_MANAGER' THEN 'MANAGER'
+                        WHEN 'COMPANY_ADMIN' THEN 'ADMIN' ELSE 'EMPLOYEE' END,
+            COALESCE(e.employee_code, ''), u.email
+        FROM users u
+        JOIN roles r ON r.id = u.role_id
+        LEFT JOIN employees e ON e.user_id = u.id AND e.company_id = u.company_id
+        WHERE u.company_id = %s
+          AND r.code IN ('COMPANY_MANAGER', 'COMPANY_EMPLOYEE', 'COMPANY_ADMIN')
+          AND u.status IN ('ACTIVE', 'PENDING_VERIFICATION')
+    """
+
+    def get_assignee(self, company_id: UUID, user_id: UUID) -> PersonRow | None:
+        """An active Manager, Employee or Admin of the company."""
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(self._ASSIGNEE_SQL + " AND u.id = %s", (company_id, user_id))
+            row = cursor.fetchone()
+            return PersonRow(*row) if row else None
+
+    def list_assignees(self, company_id: UUID) -> list[PersonRow]:
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                self._ASSIGNEE_SQL + " ORDER BY r.code = 'COMPANY_ADMIN' DESC, u.name",
+                (company_id,),
+            )
+            return [PersonRow(*row) for row in cursor.fetchall()]
+
     def get_person(self, company_id: UUID, user_id: UUID) -> PersonRow | None:
         """An active Manager or Employee of the company."""
         with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:

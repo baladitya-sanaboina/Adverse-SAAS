@@ -57,7 +57,7 @@ import {
 } from "lucide-react";
 import { LooplessSelect } from "@/components/foundation/loopless-select";
 import { subscribeRealtime } from "../realtime/realtime";
-import { chatApi, clock, initials, jsonBody, type ChatMessage } from "./chat-types";
+import { chatApi, clock, initials, jsonBody, photoSrc, type ChatMessage } from "./chat-types";
 import { audioContext, repeat, sounds, unlockSounds } from "./call-sounds";
 import { OrbitLoader } from "../branding/orbit-loader";
 import "../styles/call.css";
@@ -227,10 +227,14 @@ function colourFor(name: string): string {
 }
 
 function Avatar({ name, image, size = "md" }: { name: string; image?: string | null; size?: "md" | "lg" }) {
+  // The photo when it loads, else the first letter (owner request 2026-11-28).
+  const src = photoSrc(image);
+  const [failed, setFailed] = useState("");
+  const showPhoto = Boolean(src) && failed !== src;
   return (
-    <span className={`callroom-avatar ${size}`} style={image ? undefined : { background: colourFor(name) }}>
+    <span className={`callroom-avatar ${size}`} style={showPhoto ? undefined : { background: colourFor(name) }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {image ? <img src={image} alt="" /> : initials(name)}
+      {showPhoto && src ? <img src={src} alt="" onError={() => setFailed(src)} /> : initials(name)}
     </span>
   );
 }

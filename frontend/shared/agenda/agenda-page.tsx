@@ -1256,11 +1256,7 @@ function Details({
 }
 
 function Avatar({ person }: { person: Person }) {
-  const initials = person.name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
+  const initials = person.name.trim().charAt(0).toUpperCase();
   return (
     <b className="agenda-avatar" aria-hidden="true">
       {initials || "?"}

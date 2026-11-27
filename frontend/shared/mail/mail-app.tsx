@@ -97,6 +97,7 @@ import {
   type Ticket,
   type TicketStatus,
 } from "./mail-types";
+import { photoSrc } from "../chat/chat-types";
 import "../styles/mail-app.css";
 import { LooplessDate } from "@/components/foundation/loopless-date";
 
@@ -335,6 +336,9 @@ function linkify(text: string): ReactNode[] {
 
 function Face({ person, size = 36 }: { person: Person | null; size?: number }) {
   const style = { width: size, height: size, fontSize: size * 0.36 };
+  // The photo when it loads, else the first letter (owner request 2026-11-28).
+  const src = photoSrc(person?.image);
+  const [failed, setFailed] = useState("");
   if (!person) {
     return (
       <span className="mailx-face app" style={style} aria-hidden="true">
@@ -345,9 +349,9 @@ function Face({ person, size = 36 }: { person: Person | null; size?: number }) {
   }
   return (
     <span className="mailx-face" style={{ ...style, background: colourFor(person.id) }} aria-hidden="true">
-      {person.image ? (
+      {src && failed !== src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={person.image} alt="" />
+        <img src={src} alt="" onError={() => setFailed(src)} />
       ) : (
         initialsOf(person.name)
       )}

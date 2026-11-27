@@ -15,7 +15,8 @@ from app.schemas.service_pricing import PricingModel
 from app.services.production_rules import ReportPeriod, TaskStatus
 
 TaskPriority = Literal["LOW", "MEDIUM", "HIGH", "URGENT"]
-AssigneeType = Literal["MANAGER", "EMPLOYEE"]
+# ADMIN: the Admin can take a task too (owner request 2026-11-28); no commission or salary.
+AssigneeType = Literal["MANAGER", "EMPLOYEE", "ADMIN"]
 TaskFileKind = Literal["REFERENCE", "DELIVERABLE"]
 BudgetEntryType = Literal["INITIAL", "TOP_UP", "ADJUSTMENT"]
 PaymentMethod = Literal["CASH", "BANK_TRANSFER", "UPI", "CHEQUE", "CARD", "OTHER"]
@@ -867,6 +868,9 @@ class TeamReportRow(BaseModel):
     earnings: Money
     paid: Money
     pending: Money
+    # Employees: the monthly salary in effect today, else the next one set (2026-11-28).
+    monthly_salary: Money | None = None
+    salary_from: date | None = None
 
 
 class ServiceReportRow(BaseModel):

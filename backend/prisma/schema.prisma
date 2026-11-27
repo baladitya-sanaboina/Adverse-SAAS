@@ -245,6 +245,7 @@ model ClientAccess {
 enum TaskAssigneeType {
   MANAGER
   EMPLOYEE
+  ADMIN
 }
 
 enum TaskFileKind {

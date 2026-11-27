@@ -292,6 +292,7 @@ function PaymentEditor({
   subjects,
   defaultSubject = "",
   defaultAmount = "",
+  suggest,
   back,
   onCancel,
   onSaved,
@@ -301,11 +302,16 @@ function PaymentEditor({
   subjects: ChoiceItem[];
   defaultSubject?: string;
   defaultAmount?: string;
+  /** The usual amount for a person (an employee's monthly salary, a manager's pending). */
+  suggest?: (subject: string) => string;
   back: string;
   onCancel: () => void;
   onSaved: (message: string) => void;
 }) {
   const editing = Boolean(payment);
+  const [suggested, setSuggested] = useState(() =>
+    !payment && !defaultAmount && defaultSubject && suggest ? suggest(defaultSubject) : "",
+  );
   const [subject, setSubject] = useState(() => {
     if (!payment) return defaultSubject;
     if ("client" in payment) return payment.client.id;
@@ -324,8 +330,19 @@ function PaymentEditor({
           reference: payment.reference,
           note: payment.note,
         }
-      : { ...emptyPayment(), amount: defaultAmount },
+      : { ...emptyPayment(), amount: defaultAmount || suggested },
   );
+  // Choosing a person fills in their usual amount (owner request 2026-11-28), unless the
+  // Admin already typed a different one.
+  const chooseSubject = (value: string) => {
+    setSubject(value);
+    if (editing || !suggest) return;
+    const next = value ? suggest(value) : "";
+    if (values.amount === "" || values.amount === suggested) {
+      setValues((current) => ({ ...current, amount: next }));
+    }
+    setSuggested(next);
+  };
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -396,7 +413,7 @@ function PaymentEditor({
         >
           <LooplessSelect
             value={subject}
-            onValueChange={setSubject}
+            onValueChange={chooseSubject}
             ariaLabel={subjectLabel}
             disabled={subjectLocked}
             options={[
@@ -1076,7 +1093,13 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
       ]);
       setRows(report.rows.filter((row) => row.person.role === role));
       setCurrency(report.currency);
-      setHistory(payments.items);
+      // Removed people leave the list and its history (owner request 2026-11-28).
+      const listed = new Set(report.rows.filter((row) => row.person.role === role).map((row) => row.person.id));
+      setHistory(
+        payments.items.filter((item) =>
+          listed.has("user_id" in item ? item.user_id : "manager_user_id" in item ? item.manager_user_id : ""),
+        ),
+      );
       setPeople(
         options.filter((person) => person.role === role).map((person) => ({ id: person.id, name: person.name })),
       );
@@ -1110,6 +1133,12 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
       />
     );
   }
+  const suggest = (subject: string) => {
+    const row = rows.find((item) => item.person.id === subject);
+    if (!row) return "";
+    if (isManager) return Number(row.pending) > 0 ? row.pending : "";
+    return row.monthly_salary ?? "";
+  };
   if (view.mode === "payment") {
     return (
       <PaymentEditor
@@ -1118,6 +1147,7 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
         subjects={people}
         defaultSubject={view.subject}
         defaultAmount={view.amount}
+        suggest={suggest}
         back={backLabel}
         onCancel={() => setView({ mode: "list" })}
         onSaved={backToList}
@@ -1176,7 +1206,7 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
           <div className="organization-table production-people" role="table">
             <div className="organization-table-head">
               <span>{isManager ? "Manager" : "Employee"}</span>
-              <span className="production-money">{isManager ? "Earned" : "Salary due"}</span>
+              <span className="production-money">{isManager ? "Earned" : "Monthly salary"}</span>
               <span className="production-money">Paid</span>
               <span className="production-money">Pending</span>
               <span className="production-money">Open tasks</span>
@@ -1188,8 +1218,19 @@ function PeopleTab({ role, onNotice }: { role: "EMPLOYEE" | "MANAGER"; onNotice:
                   <small>{isManager ? "Manager" : "Employee"}</small>
                   <strong>{row.person.name}</strong>
                 </div>
-                <span className="production-money" data-label={isManager ? "Earned" : "Salary due"}>
-                  {money(row.earnings, currency)}
+                <span className="production-money" data-label={isManager ? "Earned" : "Monthly salary"}>
+                  {isManager ? (
+                    money(row.earnings, currency)
+                  ) : row.monthly_salary ? (
+                    <>
+                      {money(row.monthly_salary, currency)}
+                      {row.salary_from && row.salary_from > today() && (
+                        <small> from {formatDate(row.salary_from)}</small>
+                      )}
+                    </>
+                  ) : (
+                    <small>Not set</small>
+                  )}
                 </span>
                 <span className="production-money" data-label="Paid">
                   {money(row.paid, currency)}

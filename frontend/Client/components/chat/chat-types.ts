@@ -65,9 +65,16 @@ export const ROLE_LABELS: Record<ChatRole, string> = {
   CLIENT: "Client",
 };
 
+/** The first letter of a name, shown when there is no photo (owner request 2026-11-28). */
 export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? (parts[parts.length - 1][0] ?? "") : "")).toUpperCase() || "?";
+  return name.trim().charAt(0).toUpperCase() || "?";
+}
+
+/** A stored profile photo path, loaded through the app's own photo route (2026-11-28: the bare
+ * /storage/... path is not served by the apps, so photos showed blank). */
+export function photoSrc(image: string | null | undefined): string | null {
+  if (!image) return null;
+  return image.startsWith("/storage/profile-images/") ? `/api/profile/image?path=${encodeURIComponent(image)}` : image;
 }
 
 export function clock(value: string): string {

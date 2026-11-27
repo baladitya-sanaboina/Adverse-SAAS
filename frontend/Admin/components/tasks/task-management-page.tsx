@@ -22,8 +22,7 @@ import {
   SheetHeader,
   StatusProgress,
   TaskCard,
-  BoardColumnMore,
-  useBoardColumnLimits,
+  BoardColumnGroups,
   TaskSheet,
   TasksHeader,
   matchesQuick,
@@ -104,7 +103,7 @@ function peopleOptions(people: AssigneeOption[], empty: string, filter?: (person
       .filter((person) => (filter ? filter(person) : true))
       .map((person) => ({
         value: person.id,
-        label: `${person.name} · ${person.role === "MANAGER" ? "Manager" : "Employee"}`,
+        label: `${person.name} · ${person.role === "MANAGER" ? "Manager" : person.role === "ADMIN" ? "Admin" : "Employee"}`,
       })),
   ];
 }
@@ -479,8 +478,6 @@ function TaskBoard({
     }
   }
 
-  const columnLimits = useBoardColumnLimits();
-
   function drop(target: TaskStatus) {
     const task = dragging;
     setDragging(null);
@@ -524,42 +521,40 @@ function TaskBoard({
               {tasks.length === 0 ? (
                 <p className="production-board-empty">No tasks</p>
               ) : (
-                tasks.slice(0, columnLimits.limit(status)).map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    code={task.code}
-                    service={task.service.name}
-                    title={task.title}
-                    client={task.client.name}
-                    priority={task.priority}
-                    person={task.assignee?.name ?? null}
-                    dueDate={task.due_date}
-                    overdue={task.is_overdue}
-                    closed={CLOSED_STATUSES.includes(task.status)}
-                    amount={money(task.client_price, task.currency)}
-                    files={task.files_count}
-                    comments={task.comments_count}
-                    dragging={dragging?.id === task.id}
-                    draggable={!saving}
-                    onOpen={() => onOpen(task.id)}
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("text/plain", task.id);
-                      setDragging(task);
-                    }}
-                    onDragEnd={() => {
-                      setDragging(null);
-                      setHover(null);
-                    }}
-                  />
-                ))
+                <BoardColumnGroups
+                  tasks={tasks}
+                  newestFirst={CLOSED_STATUSES.includes(status)}
+                  render={(task) => (
+                    <TaskCard
+                      key={task.id}
+                      code={task.code}
+                      service={task.service.name}
+                      title={task.title}
+                      client={task.client.name}
+                      priority={task.priority}
+                      person={task.assignee?.name ?? null}
+                      dueDate={task.due_date}
+                      overdue={task.is_overdue}
+                      closed={CLOSED_STATUSES.includes(task.status)}
+                      amount={money(task.client_price, task.currency)}
+                      files={task.files_count}
+                      comments={task.comments_count}
+                      dragging={dragging?.id === task.id}
+                      draggable={!saving}
+                      onOpen={() => onOpen(task.id)}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", task.id);
+                        setDragging(task);
+                      }}
+                      onDragEnd={() => {
+                        setDragging(null);
+                        setHover(null);
+                      }}
+                    />
+                  )}
+                />
               )}
-              <BoardColumnMore
-                shown={Math.min(columnLimits.limit(status), tasks.length)}
-                total={tasks.length}
-                onMore={() => columnLimits.more(status)}
-                onLess={() => columnLimits.less(status)}
-              />
             </section>
           );
         })}
@@ -988,6 +983,9 @@ function TaskForm({
                   {assignee.name} is a salaried employee, so this task has no commission.
                 </div>
               )}
+              {assignee?.role === "ADMIN" && (
+                <div className="production-info">You are doing this task yourself, so it has no commission.</div>
+              )}
               <BudgetBanner budget={preview?.budget ?? null} />
             </>
           )}
@@ -1407,13 +1405,15 @@ function PricePanel({
                 <small>
                   {task.assignee?.role === "EMPLOYEE"
                     ? "Salaried employee"
-                    : task.commission_default !== null && task.commission !== null
-                      ? Number(task.commission_default) === Number(task.commission)
-                        ? "Manager's default rate"
-                        : `Default ${money(task.commission_default, task.currency)}`
-                      : task.assignee
-                        ? "Entered manually"
-                        : "Not assigned"}
+                    : task.assignee?.role === "ADMIN"
+                      ? "Done by the Admin"
+                      : task.commission_default !== null && task.commission !== null
+                        ? Number(task.commission_default) === Number(task.commission)
+                          ? "Manager's default rate"
+                          : `Default ${money(task.commission_default, task.currency)}`
+                        : task.assignee
+                          ? "Entered manually"
+                          : "Not assigned"}
                 </small>
               </dd>
             </div>

@@ -781,38 +781,56 @@
   }
 }
 
-/* "Show more" under a long board column (owner request 2026-11-28). */
-.production-board-more {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 2px;
+/* Board columns fold by due date (owner request 2026-11-28). */
+.production-board-group {
+  display: grid;
+  gap: 8px;
 }
-.production-board-more button {
-  flex: 1 1 auto;
-  min-height: 34px;
-  display: inline-flex;
+
+.production-board-group-head {
+  display: flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  padding: 0 10px;
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  color: #0876ed;
-  background: transparent;
-  font: 600 0.68rem/1 var(--font-poppins), Arial, sans-serif;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  font: 700 0.62rem/1 var(--font-poppins), Arial, sans-serif;
+  text-align: left;
   cursor: pointer;
 }
-.production-board-more button:hover {
-  border-style: solid;
-  border-color: #0876ed;
-  background: color-mix(in srgb, #0876ed 7%, transparent);
+
+.production-board-group-head:hover {
+  color: var(--foreground);
 }
-.production-board-more button.less {
-  flex: 0 0 auto;
-  color: var(--muted);
+
+.production-board-group.today .production-board-group-head {
+  color: #0876ed;
+  background: color-mix(in srgb, #0876ed 10%, transparent);
 }
-.production-board-more svg {
+
+.production-board-group-head span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.production-board-group-head b {
+  min-width: 20px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.58rem;
+  text-align: center;
+}
+
+.production-board-group-head svg {
   width: 14px;
   height: 14px;
+  flex: 0 0 auto;
 }

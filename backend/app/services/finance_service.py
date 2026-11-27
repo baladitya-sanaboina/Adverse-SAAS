@@ -110,6 +110,20 @@ def _pages(total: int, page_size: int) -> int:
     return max(1, (total + page_size - 1) // page_size)
 
 
+def _salary_now_or_next(records: list[SalaryRecordRow], today: date) -> SalaryRecordRow | None:
+    """The salary in effect today, or else the next one that starts later."""
+    current = [
+        record
+        for record in records
+        if record.effective_from <= today
+        and (record.effective_to is None or record.effective_to > today)
+    ]
+    if current:
+        return max(current, key=lambda record: record.effective_from)
+    later = [record for record in records if record.effective_from > today]
+    return min(later, key=lambda record: record.effective_from) if later else None
+
+
 def _rates(records: list[SalaryRecordRow]) -> list[SalaryRate]:
     return [
         SalaryRate(record.monthly_amount, record.effective_from, record.effective_to)
@@ -1195,6 +1209,7 @@ class FinanceService:
                 )
                 paid = money(row.salary_paid_in_range)
                 pending = max(due_all - money(row.salary_paid_all_time), ZERO)
+            salary = _salary_now_or_next(by_user.get(row.user_id, []), today)
             rows.append(
                 TeamReportRow(
                     person=PersonRef(id=row.user_id, name=row.name, role=row.role),
@@ -1204,6 +1219,8 @@ class FinanceService:
                     earnings=earnings,
                     paid=paid,
                     pending=pending,
+                    monthly_salary=money(salary.monthly_amount) if salary else None,
+                    salary_from=salary.effective_from if salary else None,
                 )
             )
         return TeamReportResponse(

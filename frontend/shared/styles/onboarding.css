@@ -983,3 +983,21 @@
     animation: none !important;
   }
 }
+
+/* Country-code box beside a phone number (2026-11-28): the onboarding page's own colours, so
+   "+91" stays readable whatever theme the app is in. */
+.ow .phone-code-button {
+  min-height: 48px;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  color: var(--ink);
+  background: var(--soft);
+  font-size: 0.9rem;
+}
+
+.ow .phone-code.open .phone-code-button,
+.ow .phone-code-button:hover,
+.ow .phone-code-button:focus-visible {
+  border-color: var(--brand);
+  background: var(--surface);
+}
