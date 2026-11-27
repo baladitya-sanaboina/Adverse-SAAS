@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     # The same mail about the same thing is not sent again within this window (owner request
     # 2026-11-15: a task submitted, sent back and submitted again mails once).
     mail_repeat_window_minutes: int = Field(default=30, ge=0, le=1440)
+    # False on the dev site (a copy of production data): mails are logged, never sent, so real
+    # clients and staff never get mail from testing (owner request 2026-11-26).
+    mail_delivery_enabled: bool = True
+    # With delivery off, mail to these addresses (comma-separated) still goes, so the owner can
+    # test the dev site with their own Gmail (2026-11-27).
+    mail_allowed_recipients: str = ""
     # Meet relay (coturn with use-auth-secret). Empty TURN_URLS = STUN only, fine on most home
     # networks; strict office or mobile networks need the relay. Example:
     # TURN_URLS=turn:turn.example.com:3478?transport=udp,turns:turn.example.com:5349

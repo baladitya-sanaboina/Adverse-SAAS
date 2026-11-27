@@ -10,7 +10,8 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, File, Request, Response, UploadFile
+from fastapi.responses import FileResponse
 
 from app.middleware.authentication import AuthenticatedContext
 from app.schemas.onboarding import (
@@ -103,6 +104,16 @@ def packet_pdf(packet_id: UUID, context: AuthenticatedContext) -> Response:
     return _pdf(*onboarding_service.admin_pdf(context, packet_id))
 
 
+@router.get(
+    "/packets/{packet_id}/files/{key}",
+    summary="A file the person uploaded (ID proof, photo)",
+    responses=ERRORS,
+)
+def packet_file(packet_id: UUID, key: str, context: AuthenticatedContext) -> FileResponse:
+    path, name, mime = onboarding_service.admin_file(context, packet_id, key)
+    return FileResponse(path, media_type=mime, filename=name, content_disposition_type="inline")
+
+
 @router.put(
     "/templates/{kind}",
     response_model=list[TemplateResponse],
@@ -139,6 +150,16 @@ def public_submit(token: str, body: PublicSubmit, request: Request) -> PublicPac
     forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
     ip = forwarded or (request.client.host if request.client else "")
     return onboarding_service.public_submit(token, body, ip, request.headers.get("user-agent", ""))
+
+
+@public_router.post(
+    "/{token}/files/{key}",
+    response_model=PublicPacket,
+    summary="Upload a document (ID proof, photo)",
+    responses=ERRORS,
+)
+def public_upload(token: str, key: str, file: UploadFile = File(...)) -> PublicPacket:
+    return onboarding_service.public_upload(token, key, file)
 
 
 @public_router.get("/{token}/pdf", summary="My documents as PDF", responses=ERRORS)

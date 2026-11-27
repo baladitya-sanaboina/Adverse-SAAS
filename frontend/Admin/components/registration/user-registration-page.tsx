@@ -223,7 +223,7 @@ export function UserRegistrationPage({
       const loginEmail = invitationMode ? data.email || values.email.trim() : data.email;
       setStatus(
         invitationMode
-          ? `Activation email sent to ${recipientEmail}. Login email: ${loginEmail}.`
+          ? `Onboarding email sent to ${recipientEmail} with the username ${loginEmail}. They set their password on the onboarding page.`
           : `${currentTitle} ${data.email} created successfully.`,
       );
       setValues(empty);
@@ -337,7 +337,7 @@ export function UserRegistrationPage({
                   <span>{invitationMode ? "NEW TEAM MEMBER" : `NEW ${currentTitle.toUpperCase()}`}</span>
                   <h2>
                     {invitationMode
-                      ? `Send ${currentTitle.toLowerCase()} activation email`
+                      ? `Send ${currentTitle.toLowerCase()} onboarding email`
                       : `Create ${currentTitle.toLowerCase()} account`}
                   </h2>
                   <p>
@@ -457,7 +457,7 @@ export function UserRegistrationPage({
         open={confirmCreate}
         title={
           invitationMode
-            ? `Send ${currentTitle.toLowerCase()} activation email?`
+            ? `Send ${currentTitle.toLowerCase()} onboarding email?`
             : `Create this ${currentTitle.toLowerCase()} account?`
         }
         description={

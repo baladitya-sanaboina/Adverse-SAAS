@@ -144,11 +144,8 @@ class ClientService:
             )
         except ClientConflict as error:
             raise self._client_conflict(error) from error
-        # A new client gets their welcome, onboarding form and agreement straight away
-        # (owner request 2026-11-15); without an email the admin sends it later.
-        from app.services.onboarding_service import onboarding_service
-
-        onboarding_service.auto_send_client(company_id, record.id, context.user_id)
+        # The onboarding mail goes when the client's portal login is invited (one mail with the
+        # username, documents and agreement: owner request 2026-11-27), not here.
         return self._client(record)
 
     def list(self, context: AuthContext, filters: ClientListFilters) -> ClientListResponse:

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class TemplateDefault:
     kind: str
-    audience: str  # CLIENT or EMPLOYEE
+    audience: str  # CLIENT, EMPLOYEE or MANAGER
     label: str
     signable: bool  # the recipient accepts it online
     subject: str
@@ -41,6 +41,18 @@ PLACEHOLDERS: dict[str, list[str]] = {
         "joining_date",
         "reporting_to",
         "work_location",
+        "probation_months",
+        "notice_days",
+        "date",
+        "link_expires",
+    ],
+    "MANAGER": [
+        "company_name",
+        "company_email",
+        "company_phone",
+        "employee_name",
+        "job_title",
+        "joining_date",
         "probation_months",
         "notice_days",
         "date",
@@ -166,14 +178,11 @@ Dear {{employee_name}},
 
 We are pleased to offer you the position of {{job_title}} at {{company_name}}.
 
-Monthly salary: {{monthly_salary}}
 Date of joining: {{joining_date}}
-Reporting to: {{reporting_to}}
-Place of work: {{work_location}}
 Probation: {{probation_months}} months
 
-Your salary is paid monthly. After probation, either side may end the employment with
-{{notice_days}} days' notice.
+Your pay is as agreed with the Company and is paid monthly. After probation, either side may
+end the employment with {{notice_days}} days' notice.
 
 This offer is subject to the employment agreement that comes with it. Please accept it online
 before {{link_expires}}.
@@ -194,16 +203,15 @@ Date: {{date}}
 
 Dear {{employee_name}},
 
-This letter confirms that you join {{company_name}} as {{job_title}} on {{joining_date}}, reporting
-to {{reporting_to}} at {{work_location}}.
+This letter confirms that you join {{company_name}} as {{job_title}} on {{joining_date}}.
 
-On your first day please bring:
-- A government photo ID (Aadhaar or PAN)
-- Your bank account details for salary
-- Recent passport-size photographs
+Before your first day, please complete your onboarding online:
+- Accept the offer letter and the employment agreement
+- Add your personal details and emergency contact
+- Upload your Aadhaar and PAN, add your bank details and a profile photo
+- Set the password for your Adverse account
 
-Your Adverse account will be set up on your first day; your tasks, salary and documents are all
-there.
+Your tasks, salary slips and documents are all in your Adverse account.
 
 Welcome aboard,
 {{company_name}}""",
@@ -224,7 +232,8 @@ The Employee works as {{job_title}}, does the work assigned in Adverse to the ag
 and dates, and follows the Company's reasonable instructions.
 
 2. Salary
-The Company pays {{monthly_salary}} a month. Salary is reviewed once a year.
+The Employee is paid the salary agreed with the Company, monthly. Salary is reviewed once a
+year.
 
 3. Probation and notice
 The first {{probation_months}} months are probation. After that, either side gives
@@ -247,6 +256,124 @@ The Employee treats colleagues and clients with respect and follows the Company'
 This agreement is governed by the laws of India.
 
 By accepting online, the Employee agrees to these terms.""",
+    ),
+    TemplateDefault(
+        "MANAGER_WELCOME",
+        "MANAGER",
+        "Welcome email",
+        False,
+        "Welcome to {{company_name}}, {{employee_name}}",
+        """Hello {{employee_name}},
+
+Welcome to {{company_name}}! We are excited to have you join us as {{job_title}}.
+
+Your documents are ready at the private link in this email. Please read them and accept them
+online before {{link_expires}}.
+
+See you soon,
+{{company_name}}""",
+    ),
+    TemplateDefault(
+        "MANAGER_OFFER",
+        "MANAGER",
+        "Offer letter",
+        True,
+        "Offer letter · {{job_title}}",
+        """OFFER LETTER
+
+Date: {{date}}
+
+Dear {{employee_name}},
+
+We are pleased to offer you the role of {{job_title}} at {{company_name}}, managing client work
+and the team that delivers it.
+
+Date of joining: {{joining_date}}
+Probation: {{probation_months}} months
+
+You are paid for the work you manage at the per-service rates agreed with the Company; a
+statement is shared for every payment. After probation, either side may end this engagement with
+{{notice_days}} days' notice.
+
+This offer is subject to the manager agreement that comes with it. Please accept it online
+before {{link_expires}}.
+
+We look forward to working with you.
+
+{{company_name}}""",
+    ),
+    TemplateDefault(
+        "MANAGER_JOINING",
+        "MANAGER",
+        "Joining letter",
+        True,
+        "Joining letter · {{employee_name}}",
+        """JOINING LETTER
+
+Date: {{date}}
+
+Dear {{employee_name}},
+
+This letter confirms that you join {{company_name}} as {{job_title}} on {{joining_date}}.
+
+Before your first day, please complete your onboarding online:
+- Accept the offer letter and the manager agreement
+- Add your personal details and emergency contact
+- Upload your Aadhaar and PAN, add your bank details and a profile photo
+- Set the password for your Adverse account
+
+Your clients, team tasks, statements and documents are all in your Adverse account.
+
+Welcome aboard,
+{{company_name}}""",
+    ),
+    TemplateDefault(
+        "MANAGER_AGREEMENT",
+        "MANAGER",
+        "Manager agreement",
+        True,
+        "Manager agreement · {{company_name}}",
+        """MANAGER AGREEMENT
+
+This agreement is made on {{date}} between {{company_name}} ("the Company") and
+{{employee_name}} ("the Manager").
+
+1. Role
+The Manager works as {{job_title}}: plans and assigns the work of the clients given to them in
+Adverse, reviews it before it goes to the Company, keeps to the agreed quality and dates, and
+follows the Company's reasonable instructions.
+
+2. Pay
+The Manager is paid for the work they manage at the per-service rates agreed with the Company.
+Advances and payouts are recorded in Adverse and a statement is shared for each one.
+
+3. Clients and pricing
+The Manager does not agree prices, discounts or new work with clients; client pricing and
+billing stay with the Company.
+
+4. Probation and notice
+The first {{probation_months}} months are probation. After that, either side gives
+{{notice_days}} days' notice to end this agreement.
+
+5. Confidentiality
+The Manager keeps the Company's and its clients' information, footage, prices and plans private
+during and after this agreement, and does not share client material outside the Company.
+
+6. Work belongs to the Company
+Everything the Manager or their team makes for the Company or its clients belongs to the
+Company.
+
+7. Clients and team
+For 12 months after leaving, the Manager does not take on the Company's clients directly or hire
+away its team members.
+
+8. Conduct
+The Manager treats the team and clients with respect and follows the Company's policies.
+
+9. Law
+This agreement is governed by the laws of India.
+
+By accepting online, the Manager agrees to these terms.""",
     ),
 )
 
@@ -280,6 +407,20 @@ DEFAULTS = tuple(
 BY_KIND = {item.kind: item for item in DEFAULTS}
 CLIENT_KINDS = ["CLIENT_WELCOME", "CLIENT_ONBOARDING", "CLIENT_AGREEMENT"]
 EMPLOYEE_KINDS = ["EMPLOYEE_WELCOME", "EMPLOYEE_OFFER", "EMPLOYEE_JOINING", "EMPLOYEE_AGREEMENT"]
+MANAGER_KINDS = ["MANAGER_WELCOME", "MANAGER_OFFER", "MANAGER_JOINING", "MANAGER_AGREEMENT"]
+# What the onboarding mail attaches and the onboarding page shows, per role (owner request
+# 2026-11-27: offer letter and joining letter for employees and managers, plus the agreement).
+ONBOARDING_KINDS = {
+    "CLIENT": ["CLIENT_ONBOARDING", "CLIENT_AGREEMENT"],
+    "EMPLOYEE": ["EMPLOYEE_OFFER", "EMPLOYEE_JOINING", "EMPLOYEE_AGREEMENT"],
+    "MANAGER": ["MANAGER_OFFER", "MANAGER_JOINING", "MANAGER_AGREEMENT"],
+}
+
+
+def manager_kind(kind: str) -> str:
+    """The manager's own version of an employee document (EMPLOYEE_OFFER -> MANAGER_OFFER)."""
+    return "MANAGER_" + kind.removeprefix("EMPLOYEE_") if kind.startswith("EMPLOYEE_") else kind
+
 
 _TOKEN = re.compile(r"\{\{\s*([a-z_]+)\s*\}\}")
 

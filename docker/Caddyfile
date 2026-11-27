@@ -34,3 +34,7 @@
 	import app
 	reverse_proxy 127.0.0.1:8000
 }
+
+# Extra sites, such as the dev site (scripts/production/install_dev_site.sh writes
+# /etc/caddy/sites.d/adverse-dev.caddy). Nothing there = nothing extra is served.
+import /etc/caddy/sites.d/*.caddy

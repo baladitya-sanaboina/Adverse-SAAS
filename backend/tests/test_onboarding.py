@@ -30,6 +30,9 @@ class FakeRepo:
         self.saved: dict[UUID, PacketRow] = {}
         self.completed: dict[str, Any] = {}
 
+    def pending_client_invitation(self, company_id: UUID, client_id: UUID) -> None:
+        return None
+
     def clients(self, company_id: UUID) -> list[ClientInfo]:
         return [self.client]
 
@@ -112,7 +115,7 @@ def context() -> Any:
 
 
 @patch.object(OnboardingService, "_email", lambda self, packet, token: None)
-@patch.object(OnboardingService, "_after_accept", lambda self, packet: None)
+@patch.object(OnboardingService, "_after_accept", lambda self, packet, **_: None)
 class OnboardingRulesTest(unittest.TestCase):
     def service(self, repo: FakeRepo) -> OnboardingService:
         return OnboardingService(repo, FakeInvoices(), FakeFinance())  # type: ignore[arg-type]

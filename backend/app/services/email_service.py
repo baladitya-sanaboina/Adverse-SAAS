@@ -132,6 +132,16 @@ class EmailService:
 
     def _send(self, message: EmailMessage, *, once_key: str | None = None) -> None:
         recipients = self._real_recipients(message)
+        if not settings.mail_delivery_enabled:
+            allowed = {
+                item.strip().lower()
+                for item in settings.mail_allowed_recipients.split(",")
+                if item.strip()
+            }
+            recipients = [address for address in recipients if address.lower() in allowed]
+            if not recipients:
+                logger.info("Mail '%s' not sent: delivery is off on this site.", message["Subject"])
+                return
         if not recipients:
             logger.info(
                 "Mail '%s' not sent: only test accounts were addressed.", message["Subject"]
@@ -178,6 +188,8 @@ class EmailService:
             client.send_message(message, to_addrs=recipients)
 
     def is_ready(self) -> bool:
+        if not settings.mail_delivery_enabled:
+            return True  # mail is switched off on purpose (dev site): nothing to reach
         if not settings.smtp_host:
             return False
         try:

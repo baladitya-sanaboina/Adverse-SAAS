@@ -1,7 +1,7 @@
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Query, status
 
 from app.middleware.authentication import AuthenticatedContext
 from app.schemas.employee import (
@@ -107,11 +107,8 @@ def update_employee(
 
 @router.delete(
     "/{employee_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    response_class=Response,
-    summary="Delete a pending employee profile",
+    summary="Delete an employee or manager (removed instead when work is linked)",
     responses=ERRORS,
 )
-def delete_employee(employee_id: UUID, context: AuthenticatedContext) -> Response:
-    employee_service.delete(context, employee_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+def delete_employee(employee_id: UUID, context: AuthenticatedContext) -> dict[str, str]:
+    return {"message": employee_service.delete(context, employee_id)}

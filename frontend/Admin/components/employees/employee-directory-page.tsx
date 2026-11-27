@@ -57,7 +57,9 @@ export function EmployeeDirectoryPage() {
     const email = searchParams.get("email");
     if (searchParams.get("invite") !== "sent" || !email) return "";
     const login = searchParams.get("login");
-    return login ? `Activation email sent to ${email}. Login email: ${login}.` : `Activation email sent to ${email}.`;
+    return login
+      ? `Onboarding email sent to ${email} with the username ${login}. They set their password on the onboarding page.`
+      : `Onboarding email sent to ${email}.`;
   });
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [statusEmployee, setStatusEmployee] = useState<Employee | null>(null);
@@ -196,11 +198,12 @@ export function EmployeeDirectoryPage() {
     setNotice("");
     try {
       const response = await fetch(`/api/company/employees/${deleteEmployee.id}`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
         throw new Error(typeof data?.detail === "string" ? data.detail : "Unable to delete employee.");
       }
-      setNotice(`${deleteEmployee.user_name} deleted successfully.`);
+      // Someone with tasks or payments is removed instead of deleted (2026-11-27); say which.
+      setNotice(typeof data?.message === "string" ? data.message : `${deleteEmployee.user_name} deleted successfully.`);
       setDeleteEmployee(null);
       await load();
     } catch (reason) {
@@ -346,18 +349,17 @@ export function EmployeeDirectoryPage() {
                         <Power />
                       </button>
                     )}
-                    {canDelete &&
-                      (employee.user_status === "PENDING_VERIFICATION" || employee.status === "PENDING") && (
-                        <button
-                          type="button"
-                          className="danger"
-                          aria-label={`Delete ${employee.user_name}`}
-                          title="Delete pending employee"
-                          onClick={() => setDeleteEmployee(employee)}
-                        >
-                          <Trash2 />
-                        </button>
-                      )}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        className="danger"
+                        aria-label={`Delete ${employee.user_name}`}
+                        title="Delete"
+                        onClick={() => setDeleteEmployee(employee)}
+                      >
+                        <Trash2 />
+                      </button>
+                    )}
                   </div>
                 </article>
               ))}
@@ -413,8 +415,8 @@ export function EmployeeDirectoryPage() {
       />
       <ConfirmationDialog
         open={Boolean(deleteEmployee)}
-        title="Delete this pending employee?"
-        description="This removes the pending employee profile, invitation and login before the invite is accepted."
+        title={`Delete ${deleteEmployee?.user_name ?? "this person"}?`}
+        description="If they have no tasks, payments or messages yet, their profile and login are deleted. Otherwise they are removed: they can no longer sign in and leave every list, but their past tasks and payments stay on record."
         confirmLabel="Delete employee"
         tone="danger"
         loading={updating}

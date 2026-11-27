@@ -207,3 +207,36 @@ def deliver(
             logger.warning("Outgoing mail '%s' failed", subject, exc_info=True)
 
     threading.Thread(target=send, name="outbound-mail", daemon=True).start()
+
+
+def send_html(
+    *,
+    to_email: str,
+    subject: str,
+    text: str,
+    html: str,
+    attachments: Sequence[tuple[bytes, str, str]] = (),
+    reply_to: str | None = None,
+) -> None:
+    """A mail whose HTML is already built (the onboarding and welcome mails), sent in the
+    background. Never raises."""
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["To"] = to_email
+    if reply_to:
+        message["Reply-To"] = reply_to
+    message.set_content(text)
+    message.add_alternative(html, subtype="html")
+    for content, filename, mime in attachments:
+        main, _, sub = mime.partition("/")
+        message.add_attachment(
+            content, maintype=main, subtype=sub or "octet-stream", filename=filename
+        )
+
+    def send() -> None:
+        try:
+            email_service._send(message)
+        except Exception:  # noqa: BLE001 - the action itself already happened
+            logger.warning("Outgoing mail '%s' failed", subject, exc_info=True)
+
+    threading.Thread(target=send, name="outbound-mail", daemon=True).start()

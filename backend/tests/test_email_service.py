@@ -14,8 +14,8 @@ class EmailTemplateTests(unittest.TestCase):
         self.assertIn(expected_code, html)
         self.assertIn(expected_copy, html)
         self.assertIn("Adverse", html)
-        self.assertIn("#0876ED", html)
-        self.assertIn('name="color-scheme" content="light"', html)
+        self.assertIn("#0876ed", html)
+        self.assertIn('name="color-scheme" content="light only"', html)
 
     @patch.object(settings, "smtp_host", "mailpit")
     def test_verification_email_has_plain_and_branded_html_parts(self) -> None:
@@ -112,6 +112,48 @@ class EmailTemplateTests(unittest.TestCase):
         html = send.call_args.args[0].get_body(preferencelist=("html",)).get_content()
         self.assertIn("employee@adverseindia.com", html)
         self.assertNotIn(">Password<", html)
+
+
+class MailDeliverySwitchTests(unittest.TestCase):
+    def _message(self):
+        from email.message import EmailMessage
+
+        message = EmailMessage()
+        message["Subject"] = "Hello"
+        message["To"] = "client@gmail.com"
+        message.set_content("Hi")
+        return message
+
+    @patch.object(settings, "mail_delivery_enabled", False)
+    def test_no_mail_leaves_when_delivery_is_off(self) -> None:
+        with patch("app.services.email_service.smtplib") as smtp:
+            EmailService()._send(self._message())
+        smtp.SMTP.assert_not_called()
+        smtp.SMTP_SSL.assert_not_called()
+
+    @patch.object(settings, "mail_delivery_enabled", False)
+    @patch.object(settings, "mail_allowed_recipients", "Client@Gmail.com, other@gmail.com")
+    @patch.object(settings, "mail_repeat_window_minutes", 0)
+    @patch.object(settings, "smtp_username", "sender@gmail.com")
+    def test_allowed_addresses_still_get_mail_when_delivery_is_off(self) -> None:
+        with patch("app.services.email_service.smtplib") as smtp:
+            EmailService()._send(self._message())
+        smtp.SMTP.assert_called_once()
+
+    @patch.object(settings, "mail_delivery_enabled", False)
+    @patch.object(settings, "smtp_host", "127.0.0.1")
+    def test_health_is_ready_when_delivery_is_off(self) -> None:
+        with patch("app.services.email_service.smtplib") as smtp:
+            self.assertTrue(EmailService().is_ready())
+        smtp.SMTP.assert_not_called()
+
+    @patch.object(settings, "mail_delivery_enabled", True)
+    @patch.object(settings, "mail_repeat_window_minutes", 0)
+    @patch.object(settings, "smtp_username", "sender@gmail.com")
+    def test_mail_is_sent_when_delivery_is_on(self) -> None:
+        with patch("app.services.email_service.smtplib") as smtp:
+            EmailService()._send(self._message())
+        smtp.SMTP.assert_called_once()
 
 
 if __name__ == "__main__":

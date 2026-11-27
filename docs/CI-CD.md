@@ -5,7 +5,26 @@
 - **Frontend quality and builds:** clean npm install, UI standards, formatting, lint, type checking, and production builds for all four workspaces.
 - **Backend quality, tests, and startup:** pinned Python and Prisma installs, formatting, lint, type checking, compilation, database migrations and seed, unit tests, and FastAPI health checks.
 
-The **Deploy to VPS** job runs only for a push to `main`, only after both validation jobs pass, and only when the repository variable `DEPLOY_ENABLED` is set to `true`. Pull requests and other branches never deploy.
+The deploy job runs only after both validation jobs pass, and only when the repository variable `DEPLOY_ENABLED` is set to `true`:
+
+- a push to `main` deploys **production** (`admin.adverseindia.com` and the other live sites);
+- a push to `dev` deploys the **dev site** (`dev-admin.adverseindia.com`, `dev-manager…`, `dev-employee…`, `dev-client…`, `dev-api…`).
+
+Pull requests and other branches never deploy.
+
+## Release flow (owner decision 2026-11-26)
+
+1. All work is pushed to `dev`. Nothing is pushed straight to `main`.
+2. The dev site updates by itself. Test there.
+3. On GitHub, open a Pull Request from `dev` into `main` and click **Merge**. Only this updates production.
+
+The dev site runs on the same VPS but is fully separate: `/opt/adverse-dev`, `/etc/adverse-dev`, database `adverse_dev`, Redis database 1, ports 8100 and 3100–3103. Its data is a copy of production. On the dev site, mail is logged and never sent (`MAIL_DELIVERY_ENABLED=false`), except to the addresses listed in `MAIL_ALLOWED_RECIPIENTS` in `/etc/adverse-dev/backend.env` (the owner's own Gmail, for testing), and push subscriptions are removed from the copy. To replace the dev data with a fresh copy of production, run `sudo adverse-dev-refresh` on the VPS. One-time setup: `sudo bash scripts/production/install_dev_site.sh`. It needs DNS A records for the five `dev-` names.
+
+## Backups
+
+- **Before every production deploy**, the deploy script saves a full database copy to `/var/backups/adverse-deploy/before-<commit>-<time>.sql.gz` (the last 10 are kept) before any migration runs.
+- **Nightly**, at 03:00 IST, `/usr/local/sbin/adverse-backup` saves the database and uploaded files to `/var/backups/adverse` (14 days kept).
+- To restore a backup into an empty database: `gunzip -c <file> | psql "$DATABASE_URL"`.
 
 ## One-time VPS setup
 
@@ -39,4 +58,4 @@ Add these repository variables:
 
 The action packages `github.sha` and copies it to the VPS over SSH. The VPS does not clone the repository or receive a GitHub token, so changing the repository from public to private does not require a deployment change. The deploy script builds a new release, runs Prisma migrations, switches the active symlink, restarts the services, and checks all five local HTTP endpoints. A failed health check restores the prior release.
 
-Protect `main` with required status checks for **Frontend quality and builds** and **Backend quality, tests, and startup**. Keep `DEPLOY_ENABLED` unset while configuring the VPS; setting it to `true` turns on automatic deployment after successful CI.
+Protect `main` (Settings → Branches): require a pull request before merging, and require the status checks for **Frontend quality and builds** and **Backend quality, tests, and startup**. Keep `DEPLOY_ENABLED` unset while configuring the VPS; setting it to `true` turns on automatic deployment after successful CI.
