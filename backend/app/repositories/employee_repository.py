@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from psycopg.errors import ForeignKeyViolation, UniqueViolation
+from psycopg.errors import ForeignKeyViolation, RestrictViolation, UniqueViolation
 
 from app.database.connectivity import database_pool
 from app.schemas.employee import EmployeeListFilters
@@ -270,7 +270,7 @@ class EmployeeRepository:
                         'DELETE FROM "users" WHERE id=%s AND company_id=%s', (user_id, company_id)
                     )
                 return user_name, user_email, "DELETED"
-            except ForeignKeyViolation:
+            except (ForeignKeyViolation, RestrictViolation):
                 pass  # work is linked to them: keep the records, remove the person
             cursor.execute(
                 "UPDATE \"users\" SET status='INACTIVE',updated_at=NOW() WHERE id=%s", (user_id,)

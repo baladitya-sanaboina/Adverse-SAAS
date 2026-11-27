@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from psycopg.errors import ForeignKeyViolation, UniqueViolation
+from psycopg.errors import ForeignKeyViolation, RestrictViolation, UniqueViolation
 
 from app.database.connectivity import database_pool
 from app.schemas.client import ClientListFilters
@@ -327,7 +327,7 @@ class ClientRepository:
                     if cursor.fetchone() is None:
                         raise ClientDeletionError("ACTIVE_ACCOUNT")
                 return client_name, client_email
-        except ForeignKeyViolation as error:
+        except (ForeignKeyViolation, RestrictViolation) as error:
             raise ClientDeletionError("IN_USE") from error
 
     def list_contacts(self, company_id: UUID, client_id: UUID) -> tuple[ClientContactRecord, ...]:
