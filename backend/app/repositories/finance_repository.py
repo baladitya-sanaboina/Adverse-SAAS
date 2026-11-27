@@ -1058,6 +1058,8 @@ class FinanceRepository:
                 ) salary ON TRUE
                 WHERE u.company_id = %(company)s
                   AND r.code IN ('COMPANY_MANAGER', 'COMPANY_EMPLOYEE')
+                  -- A removed person keeps their history but leaves the lists (2026-11-28).
+                  AND u.status <> 'INACTIVE'
                 ORDER BY u.name
                 """,
                 {"company": company_id, "tz": tz, "start": start, "end": end},

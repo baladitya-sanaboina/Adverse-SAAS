@@ -5,12 +5,12 @@
  * compact header, quick filter chips, richer board cards, a slide-in task sheet and a status
  * progress bar. Colours and type come from the existing theme tokens only.
  */
-import { useCallback, useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   CalendarDays,
   Check,
   ChevronDown,
-  ChevronUp,
+  ChevronRight,
   List,
   MessageSquare,
   Paperclip,
@@ -68,16 +68,9 @@ export function taskSummary(tasks: Filterable[], reviewLabel = "to review"): str
   return `${open} open · ${overdue} overdue · ${review} ${reviewLabel}`;
 }
 
+/** The first letter of a name, shown when there is no photo (owner request 2026-11-28). */
 export function initials(name: string): string {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0])
-      .join("")
-      .toUpperCase() || "–"
-  );
+  return name.trim().charAt(0).toUpperCase() || "–";
 }
 
 function shortDate(value: string): string {
@@ -387,52 +380,98 @@ export function StatusProgress({ status }: { status: TaskStatus }) {
   );
 }
 
-/* Long board columns fold (owner request 2026-11-28): each column shows the first cards, and
-   "Show more" opens the next ones. */
-export const BOARD_COLUMN_PAGE = 6;
+/* Board columns fold by due date (owner request 2026-11-28): this week by day, the rest of this
+   month by week, other months by month, then tasks with no due date. Today's group starts open;
+   click a group to open or close it. Approved and completed columns list the newest first. */
+type DueGroup<T> = { key: string; sort: string; label: string; today: boolean; tasks: T[] };
 
-export function useBoardColumnLimits() {
-  const [limits, setLimits] = useState<Record<string, number>>({});
-  const limit = useCallback((column: string) => limits[column] ?? BOARD_COLUMN_PAGE, [limits]);
-  const more = useCallback(
-    (column: string) =>
-      setLimits((current) => ({ ...current, [column]: (current[column] ?? BOARD_COLUMN_PAGE) + BOARD_COLUMN_PAGE })),
-    [],
+const pad2 = (value: number) => String(value).padStart(2, "0");
+const isoDate = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+const dateOf = (value: string) => {
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+const mondayOf = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate() - ((date.getDay() + 6) % 7));
+const dueText = (options: Intl.DateTimeFormatOptions, value: Date) =>
+  new Intl.DateTimeFormat("en-IN", options).format(value);
+
+export function groupByDue<T extends { due_date: string | null }>(tasks: T[], today: string): DueGroup<T>[] {
+  const weekStart = isoDate(mondayOf(dateOf(today)));
+  const weekEnd = isoDate(
+    new Date(dateOf(weekStart).getFullYear(), dateOf(weekStart).getMonth(), dateOf(weekStart).getDate() + 6),
   );
-  const less = useCallback(
-    (column: string) => setLimits((current) => ({ ...current, [column]: BOARD_COLUMN_PAGE })),
-    [],
-  );
-  return { limit, more, less };
+  const groups = new Map<string, DueGroup<T>>();
+  for (const task of tasks) {
+    const due = task.due_date?.slice(0, 10) ?? null;
+    let group: Omit<DueGroup<T>, "tasks">;
+    if (!due) {
+      group = { key: "none", sort: "9999", label: "No due date", today: false };
+    } else if (due >= weekStart && due <= weekEnd) {
+      const day = dueText({ weekday: "short", day: "numeric", month: "short" }, dateOf(due));
+      group = { key: `day-${due}`, sort: due, label: due === today ? `Today · ${day}` : day, today: due === today };
+    } else if (due.slice(0, 7) === today.slice(0, 7)) {
+      const monday = mondayOf(dateOf(due));
+      group = {
+        key: `week-${isoDate(monday)}`,
+        sort: isoDate(monday),
+        label: `Week of ${dueText({ day: "numeric", month: "short" }, monday)}`,
+        today: false,
+      };
+    } else {
+      group = {
+        key: `month-${due.slice(0, 7)}`,
+        sort: `${due.slice(0, 7)}-01`,
+        label: dueText({ month: "long", year: "numeric" }, dateOf(due)),
+        today: false,
+      };
+    }
+    const entry = groups.get(group.key) ?? { ...group, tasks: [] };
+    entry.tasks.push(task);
+    groups.set(group.key, entry);
+  }
+  return [...groups.values()].sort((a, b) => a.sort.localeCompare(b.sort));
 }
 
-export function BoardColumnMore({
-  shown,
-  total,
-  onMore,
-  onLess,
+export function BoardColumnGroups<T extends { id: string; due_date: string | null }>({
+  tasks,
+  newestFirst = false,
+  render,
 }: {
-  shown: number;
-  total: number;
-  onMore: () => void;
-  onLess: () => void;
+  tasks: T[];
+  newestFirst?: boolean;
+  render: (task: T) => ReactNode;
 }) {
-  if (total <= BOARD_COLUMN_PAGE) return null;
-  const left = total - shown;
+  const [today] = useState(() => isoDate(new Date()));
+  const [toggled, setToggled] = useState<Record<string, boolean>>({});
+  const groups = useMemo(() => {
+    const list = groupByDue(tasks, today);
+    if (!newestFirst) return list;
+    const dated = list.filter((group) => group.key !== "none").reverse();
+    return [...dated, ...list.filter((group) => group.key === "none")];
+  }, [tasks, today, newestFirst]);
+  // A small column needs no folding; otherwise today's group (else the first) starts open.
+  const openByDefault = tasks.length <= 4 ? null : (groups.find((group) => group.today)?.key ?? groups[0]?.key ?? null);
   return (
-    <div className="production-board-more">
-      {left > 0 && (
-        <button type="button" onClick={onMore}>
-          <ChevronDown aria-hidden="true" />
-          Show more ({left})
-        </button>
-      )}
-      {shown > BOARD_COLUMN_PAGE && (
-        <button type="button" className="less" onClick={onLess}>
-          <ChevronUp aria-hidden="true" />
-          Show less
-        </button>
-      )}
-    </div>
+    <>
+      {groups.map((group) => {
+        const open = toggled[group.key] ?? (openByDefault === null || group.key === openByDefault);
+        return (
+          <div key={group.key} className={`production-board-group${group.today ? " today" : ""}`}>
+            <button
+              type="button"
+              className="production-board-group-head"
+              aria-expanded={open}
+              onClick={() => setToggled((current) => ({ ...current, [group.key]: !open }))}
+            >
+              {open ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+              <span>{group.label}</span>
+              <b>{group.tasks.length}</b>
+            </button>
+            {open && group.tasks.map(render)}
+          </div>
+        );
+      })}
+    </>
   );
 }

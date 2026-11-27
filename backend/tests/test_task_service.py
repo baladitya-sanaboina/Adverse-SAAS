@@ -120,6 +120,11 @@ class FakeTaskRepository:
     def get_person(self, company_id: UUID, user_id: UUID) -> PersonRow | None:
         return self.people.get(user_id)
 
+    def get_assignee(self, company_id: UUID, user_id: UUID) -> PersonRow | None:
+        if user_id == ADMIN:
+            return PersonRow(ADMIN, "Asha Admin", "ADMIN", "", "admin@example.com")
+        return self.people.get(user_id)
+
     def current_rate(
         self, company_id: UUID, scope: str, subject_id: UUID, service_id: UUID
     ) -> Decimal | None:
@@ -340,6 +345,22 @@ class TaskServiceTest(unittest.TestCase):
             self.service.create_task(
                 context("COMPANY_ADMIN", ADMIN),
                 self.create(assignee_user_id=EMPLOYEE, commission=Decimal("100")),
+            )
+        self.assertEqual(error.exception.code, "COMMISSION_NOT_ALLOWED")
+
+    def test_admin_can_take_a_task_with_no_commission(self) -> None:
+        # Owner request 2026-11-28: the Admin does some tasks too.
+        self.service.create_task(
+            context("COMPANY_ADMIN", ADMIN), self.create(assignee_user_id=ADMIN)
+        )
+        assert self.repo.created is not None
+        self.assertEqual(self.repo.created["assignee_type"], "ADMIN")
+        self.assertEqual(self.repo.created["status"], "ASSIGNED")
+        self.assertIsNone(self.repo.created["commission_final"])
+        with self.assertRaises(AuthenticationError) as error:
+            self.service.create_task(
+                context("COMPANY_ADMIN", ADMIN),
+                self.create(assignee_user_id=ADMIN, commission=Decimal("100")),
             )
         self.assertEqual(error.exception.code, "COMMISSION_NOT_ALLOWED")
 

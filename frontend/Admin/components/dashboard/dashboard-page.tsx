@@ -622,14 +622,7 @@ function TeamPanel({ data }: { data: AdminDashboard }) {
           <ul className="production-dash-team">
             {data.team.map((row) => (
               <li key={row.person.id}>
-                <b aria-hidden="true">
-                  {row.person.name
-                    .split(/\s+/)
-                    .slice(0, 2)
-                    .map((part) => part[0])
-                    .join("")
-                    .toUpperCase()}
-                </b>
+                <b aria-hidden="true">{row.person.name.trim().charAt(0).toUpperCase()}</b>
                 <span>
                   <strong>{row.person.name}</strong>
                   <small>

@@ -199,15 +199,9 @@ export function sizeLabel(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** The first letter of a name, shown when there is no photo (owner request 2026-11-28). */
 export function initialsOf(name: string): string {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? "")
-      .join("") || "?"
-  );
+  return name.trim().charAt(0).toUpperCase() || "?";
 }
 
 const PALETTE = ["#0876ed", "#2fa66a", "#c2414f", "#8a5cf6", "#d97706", "#0e9f9a", "#db2777", "#4b5563"];

@@ -57,13 +57,8 @@ function Sidebar({
   const branding = useCompanyBranding();
   const accountName = user?.user.name ?? roleLabel;
   const accountRole = user?.role.name ?? roleLabel;
-  const accountInitials = accountName
-    .split(/\\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
+  // First letter when there is no photo (owner request 2026-11-28).
+  const accountInitials = accountName.trim().charAt(0).toUpperCase();
 
   return (
     <aside className="dash-sidebar">

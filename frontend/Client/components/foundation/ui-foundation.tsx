@@ -21,13 +21,8 @@ export function ShellActions({
   userName: string;
   profileImageUrl?: string | null;
 }) {
-  const initials = userName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
+  // First letter when there is no photo (owner request 2026-11-28).
+  const initials = userName.trim().charAt(0).toUpperCase();
 
   return (
     <div className="shell-actions">

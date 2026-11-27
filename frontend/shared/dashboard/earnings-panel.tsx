@@ -104,48 +104,92 @@ export function EarningsPanel({
   loading?: boolean;
   error?: string;
 }) {
-  const [view, setView] = useState<View>("month");
+  const [mode, setMode] = useState<View | "custom">("month");
   const [today] = useState(() => isoDay(new Date()));
   const [focus, setFocus] = useState(today);
+  const [from, setFrom] = useState(() => `${today.slice(0, 8)}01`);
+  const [to, setTo] = useState(today);
   const [showAll, setShowAll] = useState(false);
-  const bars = VIEWS.find((item) => item.id === view)?.bars ?? 12;
-  const selected = periodStart(view, parse(focus));
-  const selectedKey = isoDay(selected);
   const withCommission = items.some((item) => item.commission !== undefined);
 
-  // Totals per period, for this view.
+  // Custom From–To (owner request 2026-11-28): the graph is by day for up to a month, by week
+  // for up to half a year, else by month; the comparison is the same number of days before.
+  const custom = mode === "custom";
+  const first = from <= to ? from : to;
+  const lastDay = from <= to ? to : from;
+  const spanDays = Math.round((parse(lastDay).getTime() - parse(first).getTime()) / 86_400_000) + 1;
+  const view: View = !custom ? mode : spanDays <= 31 ? "day" : spanDays <= 182 ? "week" : "month";
+  const selected = periodStart(view, parse(focus));
+  const range = custom
+    ? {
+        start: first,
+        next: isoDay(shift("day", parse(lastDay), 1)),
+        title: `${fmt({ day: "numeric", month: "short", year: "numeric" }).format(parse(first))} – ${fmt({
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }).format(parse(lastDay))}`,
+        before: [isoDay(shift("day", parse(first), -spanDays)), first] as const,
+        beforeLabel: `the ${spanDays} ${spanDays === 1 ? "day" : "days"} before`,
+      }
+    : {
+        start: isoDay(selected),
+        next: isoDay(shift(view, selected, 1)),
+        title: periodTitle(view, selected),
+        before: [isoDay(shift(view, selected, -1)), isoDay(selected)] as const,
+        beforeLabel: PREVIOUS[view],
+      };
+
+  // Totals per graph period.
   const totals = useMemo(() => {
-    const map = new Map<string, { amount: number; commission: number; count: number }>();
+    const map = new Map<string, number>();
     for (const item of items) {
       const key = isoDay(periodStart(view, parse(item.day)));
-      const entry = map.get(key) ?? { amount: 0, commission: 0, count: 0 };
-      entry.amount += item.amount;
-      entry.commission += item.commission ?? 0;
-      entry.count += 1;
-      map.set(key, entry);
+      map.set(key, (map.get(key) ?? 0) + item.amount);
     }
     return map;
   }, [items, view]);
 
-  // The graph ends at the current period, or at the chosen one when that is further back.
-  const current = periodStart(view, parse(today));
-  const last = isoDay(shift(view, selected, bars - 1)) >= isoDay(current) ? current : selected;
-  const columns = Array.from({ length: bars }, (_, index) => {
-    const start = shift(view, last, index - (bars - 1));
-    const key = isoDay(start);
-    return { key, start, total: totals.get(key)?.amount ?? 0 };
-  });
+  // Custom: every period in the range. Otherwise the last few, ending at the current period, or
+  // at the chosen one when that is further back.
+  const columns = useMemo(() => {
+    const list: { key: string; start: Date; total: number }[] = [];
+    if (custom) {
+      let at = periodStart(view, parse(first));
+      while (isoDay(at) <= lastDay && list.length < 62) {
+        list.push({ key: isoDay(at), start: at, total: totals.get(isoDay(at)) ?? 0 });
+        at = shift(view, at, 1);
+      }
+      return list;
+    }
+    const bars = VIEWS.find((item) => item.id === view)?.bars ?? 12;
+    const current = periodStart(view, parse(today));
+    const last = isoDay(shift(view, selected, bars - 1)) >= isoDay(current) ? current : selected;
+    for (let index = 0; index < bars; index += 1) {
+      const at = shift(view, last, index - (bars - 1));
+      list.push({ key: isoDay(at), start: at, total: totals.get(isoDay(at)) ?? 0 });
+    }
+    return list;
+  }, [custom, view, first, lastDay, totals, today, selected]);
   const highest = Math.max(1, ...columns.map((column) => column.total));
+  const selectedKey = custom ? "" : isoDay(selected);
 
-  const now = totals.get(selectedKey) ?? { amount: 0, commission: 0, count: 0 };
-  const before = totals.get(isoDay(shift(view, selected, -1)))?.amount ?? 0;
-  const change = before > 0 ? ((now.amount - before) / before) * 100 : null;
-  const nextKey = isoDay(shift(view, selected, 1));
   const lines = items
-    .filter((item) => item.day >= selectedKey && item.day < nextKey)
+    .filter((item) => item.day >= range.start && item.day < range.next)
     .sort((a, b) => b.day.localeCompare(a.day));
+  const now = {
+    amount: lines.reduce((sum, item) => sum + item.amount, 0),
+    commission: lines.reduce((sum, item) => sum + (item.commission ?? 0), 0),
+    count: lines.length,
+  };
+  const before = items
+    .filter((item) => item.day >= range.before[0] && item.day < range.before[1])
+    .reduce((sum, item) => sum + item.amount, 0);
+  const change = before > 0 ? ((now.amount - before) / before) * 100 : null;
   const shown = showAll ? lines : lines.slice(0, 8);
+  // A bar opens that period in its own view (Date, Week or Month).
   const choose = (day: string) => {
+    if (custom) setMode(view);
     setFocus(day);
     setShowAll(false);
   };
@@ -154,19 +198,19 @@ export function EarningsPanel({
     <Panel>
       <PanelHead
         eyebrow={eyebrow}
-        title={periodTitle(view, selected)}
+        title={range.title}
         aside={
           <div className="earn-controls">
             <div className="earn-views" role="tablist" aria-label="Earnings by">
-              {VIEWS.map((item) => (
+              {[...VIEWS, { id: "custom" as const, label: "Custom" }].map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   role="tab"
-                  aria-selected={view === item.id}
-                  className={view === item.id ? "active" : undefined}
+                  aria-selected={mode === item.id}
+                  className={mode === item.id ? "active" : undefined}
                   onClick={() => {
-                    setView(item.id);
+                    setMode(item.id);
                     setShowAll(false);
                   }}
                 >
@@ -174,13 +218,39 @@ export function EarningsPanel({
                 </button>
               ))}
             </div>
-            <LooplessDate
-              value={focus}
-              onValueChange={(value) => choose(value || today)}
-              ariaLabel="Pick a date"
-              max={today}
-              clearable={false}
-            />
+            {custom ? (
+              <div className="earn-range">
+                <LooplessDate
+                  value={from}
+                  onValueChange={(value) => {
+                    setFrom(value || today);
+                    setShowAll(false);
+                  }}
+                  ariaLabel="From date"
+                  max={today}
+                  clearable={false}
+                />
+                <span aria-hidden="true">to</span>
+                <LooplessDate
+                  value={to}
+                  onValueChange={(value) => {
+                    setTo(value || today);
+                    setShowAll(false);
+                  }}
+                  ariaLabel="To date"
+                  max={today}
+                  clearable={false}
+                />
+              </div>
+            ) : (
+              <LooplessDate
+                value={focus}
+                onValueChange={(value) => choose(value || today)}
+                ariaLabel="Pick a date"
+                max={today}
+                clearable={false}
+              />
+            )}
           </div>
         }
       />
@@ -197,11 +267,11 @@ export function EarningsPanel({
                 <strong>{money(now.amount)}</strong>
                 <em className={change === null ? undefined : change >= 0 ? "up" : "down"}>
                   {change === null ? (
-                    `${money(before)} ${PREVIOUS[view]}`
+                    `${money(before)} ${range.beforeLabel}`
                   ) : (
                     <>
                       {change >= 0 ? <TrendingUp aria-hidden="true" /> : <TrendingDown aria-hidden="true" />}
-                      {Math.abs(change).toFixed(0)}% vs {PREVIOUS[view]}
+                      {Math.abs(change).toFixed(0)}% vs {range.beforeLabel}
                     </>
                   )}
                 </em>
@@ -246,7 +316,7 @@ export function EarningsPanel({
             {lines.length === 0 ? (
               <p className="production-dash-empty">
                 <Wallet aria-hidden="true" />
-                Nothing earned in this {view === "day" ? "day" : view}.
+                Nothing earned in {custom ? "these dates" : `this ${view === "day" ? "day" : view}`}.
               </p>
             ) : (
               <>

@@ -58,6 +58,7 @@ import {
   dayLabel,
   fileSize,
   initials,
+  photoSrc,
   jsonBody,
   listTime,
   type ChatMessage,
@@ -88,11 +89,14 @@ function Avatar({
   person: Pick<ChatPerson, "name" | "image"> & { status?: ChatStatus };
   size?: number;
 }) {
+  // The photo when it loads, else the first letter (owner request 2026-11-28).
+  const src = photoSrc(person.image);
+  const [failed, setFailed] = useState("");
   return (
     <span className="chat-avatar" style={{ width: size, height: size, fontSize: size * 0.36 }}>
-      {person.image ? (
+      {src && failed !== src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={person.image} alt="" />
+        <img src={src} alt="" onError={() => setFailed(src)} />
       ) : (
         initials(person.name)
       )}

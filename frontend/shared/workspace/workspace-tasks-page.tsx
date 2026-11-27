@@ -33,8 +33,7 @@ import {
   SheetHeader,
   StatusProgress,
   TaskCard,
-  BoardColumnMore,
-  useBoardColumnLimits,
+  BoardColumnGroups,
   TaskSheet,
   TasksHeader,
   matchesQuick,
@@ -81,7 +80,6 @@ function syncUrl(id: string | null) {
 export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
-  const columnLimits = useBoardColumnLimits();
   const [items, setItems] = useState<WorkerTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -306,47 +304,45 @@ export function WorkspaceTasksPage({ canMonitor }: { canMonitor: boolean }) {
                     {tasks.length === 0 ? (
                       <p className="production-board-empty">No tasks</p>
                     ) : (
-                      tasks.slice(0, columnLimits.limit(column)).map((task) => (
-                        <TaskCard
-                          key={task.id}
-                          code={task.code}
-                          service={task.service_name}
-                          title={task.title}
-                          client={task.client_name}
-                          priority={task.priority}
-                          person={task.my_role === "ASSIGNEE" ? "You" : task.assignee_name}
-                          personTitle={
-                            task.my_role === "ASSIGNEE"
-                              ? ROLE_TEXT.ASSIGNEE
-                              : `${ROLE_TEXT[task.my_role]} · ${task.assignee_name ?? "not assigned"}`
-                          }
-                          dueDate={task.due_date}
-                          overdue={task.is_overdue}
-                          closed={CLOSED.includes(task.status)}
-                          amount={task.my_commission ? money(task.my_commission, task.currency) : null}
-                          files={task.files_count}
-                          comments={task.comments_count}
-                          dragging={dragging?.id === task.id}
-                          draggable={task.allowed_statuses.length > 0}
-                          onOpen={() => open(task.id)}
-                          onDragStart={(event) => {
-                            event.dataTransfer.effectAllowed = "move";
-                            event.dataTransfer.setData("text/plain", task.id);
-                            setDragging(task);
-                          }}
-                          onDragEnd={() => {
-                            setDragging(null);
-                            setHover(null);
-                          }}
-                        />
-                      ))
+                      <BoardColumnGroups
+                        tasks={tasks}
+                        newestFirst={CLOSED.includes(column)}
+                        render={(task) => (
+                          <TaskCard
+                            key={task.id}
+                            code={task.code}
+                            service={task.service_name}
+                            title={task.title}
+                            client={task.client_name}
+                            priority={task.priority}
+                            person={task.my_role === "ASSIGNEE" ? "You" : task.assignee_name}
+                            personTitle={
+                              task.my_role === "ASSIGNEE"
+                                ? ROLE_TEXT.ASSIGNEE
+                                : `${ROLE_TEXT[task.my_role]} · ${task.assignee_name ?? "not assigned"}`
+                            }
+                            dueDate={task.due_date}
+                            overdue={task.is_overdue}
+                            closed={CLOSED.includes(task.status)}
+                            amount={task.my_commission ? money(task.my_commission, task.currency) : null}
+                            files={task.files_count}
+                            comments={task.comments_count}
+                            dragging={dragging?.id === task.id}
+                            draggable={task.allowed_statuses.length > 0}
+                            onOpen={() => open(task.id)}
+                            onDragStart={(event) => {
+                              event.dataTransfer.effectAllowed = "move";
+                              event.dataTransfer.setData("text/plain", task.id);
+                              setDragging(task);
+                            }}
+                            onDragEnd={() => {
+                              setDragging(null);
+                              setHover(null);
+                            }}
+                          />
+                        )}
+                      />
                     )}
-                    <BoardColumnMore
-                      shown={Math.min(columnLimits.limit(column), tasks.length)}
-                      total={tasks.length}
-                      onMore={() => columnLimits.more(column)}
-                      onLess={() => columnLimits.less(column)}
-                    />
                   </section>
                 );
               })}

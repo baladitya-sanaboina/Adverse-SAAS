@@ -1082,7 +1082,7 @@ export function ClientManagementPage({
                     {result.items.map((client) => (
                       <article key={client.id} role="row">
                         <div>
-                          <b>{client.name.slice(0, 2).toUpperCase()}</b>
+                          <b>{client.name.trim().charAt(0).toUpperCase()}</b>
                           <span>
                             <strong>{client.name}</strong>
                             <small>{client.code}</small>
@@ -1103,7 +1103,7 @@ export function ClientManagementPage({
                     {result.items.map((client) => (
                       <article key={client.id}>
                         <header>
-                          <b>{client.name.slice(0, 2).toUpperCase()}</b>
+                          <b>{client.name.trim().charAt(0).toUpperCase()}</b>
                           <div>
                             <strong>{client.name}</strong>
                             <span>{client.code}</span>
@@ -1591,7 +1591,9 @@ export function ClientManagementPage({
                           <div className="client-contact-list">
                             {selected.contacts.map((contact) => (
                               <article key={contact.id}>
-                                <div className="client-contact-avatar">{`${contact.first_name[0] ?? ""}${contact.last_name[0] ?? ""}`}</div>
+                                <div className="client-contact-avatar">
+                                  {(contact.first_name[0] ?? contact.last_name[0] ?? "?").toUpperCase()}
+                                </div>
                                 <div className="client-contact-identity">
                                   <strong>{`${contact.first_name} ${contact.last_name}`.trim()}</strong>
                                   <span>{contact.designation || "Client contact"}</span>
@@ -1759,11 +1761,7 @@ export function ClientManagementPage({
                               {(historyTab === "notes" ? notes : feedback).map((item) => (
                                 <article key={item.id}>
                                   <div className="client-history-avatar">
-                                    {item.created_by_name
-                                      .split(/\s+/)
-                                      .slice(0, 2)
-                                      .map((part) => part[0])
-                                      .join("")}
+                                    {item.created_by_name.trim().charAt(0).toUpperCase()}
                                   </div>
                                   <div>
                                     <header>

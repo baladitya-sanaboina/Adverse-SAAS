@@ -252,7 +252,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
               <section className="profile-identity employee-record-identity">
                 <div className="profile-avatar employee-record-avatar">
-                  <b>{employee.user_name.slice(0, 2).toUpperCase()}</b>
+                  <b>{employee.user_name.trim().charAt(0).toUpperCase()}</b>
                 </div>
                 <div className="profile-meta">
                   <h2>{employee.user_name}</h2>

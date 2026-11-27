@@ -225,7 +225,7 @@ export function ProfilePage({ initialTab = "profile" }: { initialTab?: Tab }) {
                           alt="Profile"
                         />
                       ) : (
-                        <b>{profile.user.name.slice(0, 2).toUpperCase()}</b>
+                        <b>{profile.user.name.trim().charAt(0).toUpperCase()}</b>
                       )}
                       <label title="Upload profile image">
                         <Camera />

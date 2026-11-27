@@ -219,6 +219,16 @@ class TaskService:
             )
         return person
 
+    def _require_assignee(self, company_id: UUID, user_id: UUID) -> PersonRow:
+        person = self.repository.get_assignee(company_id, user_id)
+        if person is None:
+            raise AuthenticationError(
+                404,
+                "ASSIGNEE_NOT_FOUND",
+                "Assignee was not found or is not an active manager, employee or admin.",
+            )
+        return person
+
     def _require_monitor(
         self, company_id: UUID, monitor_id: UUID, assignee_id: UUID | None
     ) -> PersonRow:
@@ -462,7 +472,7 @@ class TaskService:
                 code=person.code,
                 email=person.email,
             )
-            for person in self.repository.list_people(company_id)
+            for person in self.repository.list_assignees(company_id)
         ]
 
     def pricing_preview(
@@ -485,9 +495,7 @@ class TaskService:
         person = None
         commission_default = None
         if assignee_user_id is not None:
-            person = self._require_person(
-                company_id, assignee_user_id, "ASSIGNEE_NOT_FOUND", "Assignee"
-            )
+            person = self._require_assignee(company_id, assignee_user_id)
             if person.role == "MANAGER":
                 commission_default = self.repository.current_rate(
                     company_id, "MANAGER", person.id, service_id
@@ -516,13 +524,18 @@ class TaskService:
         service_id: UUID,
         requested: Decimal | None,
     ) -> tuple[Decimal | None, Decimal | None]:
-        """(default, final) commission for an assignee. Employees are salaried: none."""
-        if person.role == "EMPLOYEE":
+        """(default, final) commission for an assignee. Employees are salaried and the Admin's
+        own tasks earn nothing: only managers get commission."""
+        if person.role != "MANAGER":
             if requested is not None:
                 raise AuthenticationError(
                     422,
                     "COMMISSION_NOT_ALLOWED",
-                    "Employees are paid a monthly salary, so tasks assigned to them have no commission.",
+                    (
+                        "Employees are paid a monthly salary, so tasks assigned to them have no commission."
+                        if person.role == "EMPLOYEE"
+                        else "Tasks the Admin does have no commission."
+                    ),
                 )
             return None, None
         default = self.repository.current_rate(company_id, "MANAGER", person.id, service_id)
@@ -575,9 +588,7 @@ class TaskService:
         person = None
         commission_default = commission_final = None
         if request.assignee_user_id is not None:
-            person = self._require_person(
-                company_id, request.assignee_user_id, "ASSIGNEE_NOT_FOUND", "Assignee"
-            )
+            person = self._require_assignee(company_id, request.assignee_user_id)
             commission_default, commission_final = self._commission_for(
                 company_id, person, service.id, request.commission
             )
@@ -639,9 +650,7 @@ class TaskService:
         self, context: AuthContext, task_id: UUID, request: TaskAssignRequest
     ) -> TaskWriteResponse:
         company_id = self._admin(context, "ASSIGN")
-        person = self._require_person(
-            company_id, request.assignee_user_id, "ASSIGNEE_NOT_FOUND", "Assignee"
-        )
+        person = self._require_assignee(company_id, request.assignee_user_id)
         if request.monitor_user_id is not None:
             self._require_monitor(company_id, request.monitor_user_id, person.id)
         current = self._load(company_id, task_id)

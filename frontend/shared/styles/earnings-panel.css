@@ -222,3 +222,33 @@
     height: 180px;
   }
 }
+
+/* The calendar opens to the left, inside the panel (owner report 2026-11-28: it ran off the
+   right edge). */
+.earn-controls .loopless-date > div {
+  right: 0 !important;
+  left: auto !important;
+}
+
+.earn-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.earn-range > span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .earn-range {
+    flex: 1 1 100%;
+  }
+
+  .earn-range .loopless-date {
+    flex: 1;
+    min-width: 0;
+  }
+}
