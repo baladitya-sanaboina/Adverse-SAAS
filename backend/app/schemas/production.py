@@ -808,6 +808,23 @@ class PeriodResponse(BaseModel):
     end: date | None
 
 
+class EarningLine(BaseModel):
+    """One delivery on the Admin's Earnings section (owner request 2026-11-28)."""
+
+    key: str
+    day: date
+    title: str
+    client_name: str
+    service_name: str
+    amount: Money
+    commission: Money
+
+
+class EarningsResponse(BaseModel):
+    currency: str
+    lines: list[EarningLine]
+
+
 class FinanceSummaryResponse(BaseModel):
     period: PeriodResponse
     currency: str
