@@ -181,6 +181,8 @@ class EmailService:
             client.send_message(message, to_addrs=recipients)
 
     def is_ready(self) -> bool:
+        if not settings.mail_delivery_enabled:
+            return True  # mail is switched off on purpose (dev site): nothing to reach
         if not settings.smtp_host:
             return False
         try:
