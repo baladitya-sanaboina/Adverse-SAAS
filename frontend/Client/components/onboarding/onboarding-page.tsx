@@ -2,23 +2,44 @@
 "use client";
 
 /*
- * The private onboarding link (owner request 2026-11-15): a new client fills a short form and
- * accepts the service agreement; a new employee reads the offer, joining letter and agreement and
- * accepts them. No sign-in: the long random token in the link is the key. Accepting keeps the
- * typed name, time and IP, and the signed copy can be downloaded as a PDF.
+ * The private onboarding link. No sign-in: the long random token in the link is the key.
+ * Owner requests 2026-11-15 and 2026-11-27: a new client, employee or manager opens it from the
+ * onboarding mail, reads the documents and rules, fills in the form (employees and managers:
+ * personal details, ID proof, bank details and a photo), sets their password, and accepts.
+ * Accepting keeps the typed name, time and IP; the welcome mail then brings their login.
  */
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { CheckCircle2, Clock3, Download, FileText, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { CheckCircle2, Clock3, Download, FileText, KeyRound, LogIn, ShieldCheck, Upload } from "lucide-react";
 import { OrbitLoader } from "@/components/loader/orbit-loader";
 import "@/styles/onboarding.css";
 
-type Field = { key: string; label: string; required: boolean; multiline: boolean; placeholder: string };
+type Field = {
+  key: string;
+  label: string;
+  required: boolean;
+  multiline: boolean;
+  placeholder: string;
+  group?: string;
+  input?: "text" | "date" | "tel" | "email";
+};
+type Upload = {
+  key: string;
+  label: string;
+  required: boolean;
+  accept: string;
+  hint: string;
+  uploaded_name: string | null;
+};
 type Doc = { kind: string; label: string; signable: boolean; title: string; body: string };
 type Packet = {
   company_name: string;
   company_email?: string;
   company_phone?: string;
-  audience: "CLIENT" | "EMPLOYEE";
+  audience: "CLIENT" | "EMPLOYEE" | "MANAGER";
+  username?: string | null;
+  needs_password?: boolean;
+  uploads?: Upload[];
   recipient_name: string;
   status: "SENT" | "OPENED" | "COMPLETED" | "CANCELLED" | "EXPIRED";
   expires_at: string;
@@ -34,6 +55,14 @@ type Block = { kind: "heading" | "paragraph" | "list" | "lines"; parts: string[]
 
 const LIST_ITEM = /^(\d+[.)]|[-•*])\s+(.*)$/;
 const SECTION = /^\d+[.)]\s+\S.{0,58}$/;
+const PARTY = { CLIENT: "Client", EMPLOYEE: "Employee", MANAGER: "Manager" } as const;
+const PASSWORD_RULES: [RegExp, string][] = [
+  [/.{12,}/, "12 or more characters"],
+  [/[a-z]/, "a lowercase letter"],
+  [/[A-Z]/, "an uppercase letter"],
+  [/\d/, "a number"],
+  [/[^A-Za-z0-9]/, "a special character"],
+];
 
 /**
  * A document body as layout blocks (owner request 2026-11-19: documents must read like proper
@@ -88,7 +117,7 @@ function documentBlocks(body: string): Block[] {
 
 /** One document drawn like paper: letterhead, title, sections, and a signature block. */
 function DocumentPaper({ doc, packet }: { doc: Doc; packet: Packet }) {
-  const party = packet.audience === "CLIENT" ? "Client" : "Employee";
+  const party = PARTY[packet.audience] ?? "Employee";
   return (
     <article className="onb-paper">
       <header className="onb-letterhead">
@@ -153,53 +182,98 @@ function when(value: string): string {
   });
 }
 
+function problemText(body: { detail?: unknown }, fallback: string): string {
+  const detail = body.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg).replace(/^Value error, /, "");
+  return fallback;
+}
+
+/** Fields in their groups ("Personal details", "Bank details"), in order. */
+function groups(fields: Field[]): [string, Field[]][] {
+  const out: [string, Field[]][] = [];
+  for (const field of fields) {
+    const name = field.group ?? "";
+    const last = out[out.length - 1];
+    if (last && last[0] === name) last[1].push(field);
+    else out.push([name, [field]]);
+  }
+  return out;
+}
+
 export function OnboardingPage({ token }: { token: string }) {
   const [packet, setPacket] = useState<Packet | null>(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState<Record<string, string>>({});
   const [name, setName] = useState("");
   const [accept, setAccept] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState("");
   const [problem, setProblem] = useState("");
+  const [uploadProblem, setUploadProblem] = useState("");
+  const base = `/api/public/onboarding/${encodeURIComponent(token)}`;
 
   const load = useCallback(async () => {
-    const response = await fetch(`/api/public/onboarding/${encodeURIComponent(token)}`, { cache: "no-store" });
+    const response = await fetch(base, { cache: "no-store" });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(typeof body.detail === "string" ? body.detail : "This link is not valid.");
       return;
     }
     setPacket(body as Packet);
-  }, [token]);
+  }, [base]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  async function upload(key: string, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploadProblem("");
+    if (file.size > 5 * 1024 * 1024) return setUploadProblem(`${file.name} is larger than 5 MB.`);
+    setUploading(key);
+    const data = new FormData();
+    data.append("file", file);
+    const response = await fetch(`${base}/files/${key}`, { method: "POST", body: data });
+    const body = await response.json().catch(() => ({}));
+    setUploading("");
+    if (!response.ok) return setUploadProblem(problemText(body, "The file could not be uploaded."));
+    setPacket(body as Packet);
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setProblem("");
+    if (!packet) return;
+    const missing = (packet.uploads ?? []).filter((item) => item.required && !item.uploaded_name);
+    if (missing.length) return setProblem(`Please upload: ${missing.map((item) => item.label).join(", ")}.`);
+    if (packet.needs_password) {
+      const unmet = PASSWORD_RULES.filter(([rule]) => !rule.test(password)).map(([, text]) => text);
+      if (unmet.length) return setProblem(`Your password needs ${unmet.join(", ")}.`);
+      if (password !== confirm) return setProblem("The two passwords do not match.");
+    }
     if (!accept) return setProblem("Tick the box to accept the documents.");
     setBusy(true);
-    const response = await fetch(`/api/public/onboarding/${encodeURIComponent(token)}`, {
+    const response = await fetch(base, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ form, signed_name: name.trim(), accept }),
+      body: JSON.stringify({
+        form,
+        signed_name: name.trim(),
+        accept,
+        ...(packet.needs_password ? { password, confirm_password: confirm } : {}),
+      }),
     });
     const body = await response.json().catch(() => ({}));
     setBusy(false);
-    if (!response.ok) {
-      const detail = body.detail;
-      setProblem(
-        typeof detail === "string"
-          ? detail
-          : Array.isArray(detail) && detail[0]?.msg
-            ? String(detail[0].msg)
-            : "That did not work. Please try again.",
-      );
-      return;
-    }
+    if (!response.ok) return setProblem(problemText(body, "That did not work. Please try again."));
+    setPassword("");
+    setConfirm("");
     setPacket(body as Packet);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -228,21 +302,24 @@ export function OnboardingPage({ token }: { token: string }) {
 
   const done = packet.status === "COMPLETED";
   const expired = packet.status === "EXPIRED";
+  const open = !done && !expired;
   const signable = packet.documents.filter((doc) => doc.signable);
   const isClient = packet.audience === "CLIENT";
-  const pdf = `/api/public/onboarding/${encodeURIComponent(token)}/pdf`;
+  const uploads = packet.uploads ?? [];
+  const activates = Boolean(packet.username);
+  const pdf = `${base}/pdf`;
+  let step = 0;
+  const next = () => `Step ${++step}`;
 
   return (
     <main className="onb-page">
       <header className="onb-head">
         <span className="onb-brand">{packet.company_name}</span>
-        <h1>
-          {isClient ? "Welcome aboard" : "Welcome to the team"}, {packet.recipient_name.split(" ")[0]}
-        </h1>
+        <h1>Let&apos;s get you onboarded, {packet.recipient_name.split(" ")[0]}</h1>
         <p>
           {isClient
-            ? "A short form and our service agreement. It takes about five minutes."
-            : "Your documents are below. Read them, add a few details and accept."}
+            ? "Read our service agreement, tell us about your brand and set your password. It takes about five minutes."
+            : "Read your documents and our rules, add your details and set your password to finish onboarding."}
         </p>
       </header>
 
@@ -250,15 +327,25 @@ export function OnboardingPage({ token }: { token: string }) {
         <section className="onb-card onb-done">
           <CheckCircle2 aria-hidden="true" />
           <div>
-            <h2>All done, thank you</h2>
+            <h2>Onboarding complete, thank you</h2>
             <p>
               Accepted by <strong>{packet.signed_name}</strong>
-              {packet.signed_at ? ` on ${when(packet.signed_at)}` : ""}. A signed copy was sent to your email.
+              {packet.signed_at ? ` on ${when(packet.signed_at)}` : ""}.{" "}
+              {activates
+                ? "Your account is ready; your login details and signed documents were sent to your email."
+                : "A signed copy was sent to your email."}
             </p>
           </div>
-          <a className="onb-button" href={pdf} target="_blank" rel="noopener noreferrer">
-            <Download aria-hidden="true" /> Signed copy (PDF)
-          </a>
+          <div className="onb-done-actions">
+            {activates && (
+              <Link className="onb-button" href="/login">
+                <LogIn aria-hidden="true" /> Sign in
+              </Link>
+            )}
+            <a className="onb-link" href={pdf} target="_blank" rel="noopener noreferrer">
+              <Download aria-hidden="true" /> Signed copy (PDF)
+            </a>
+          </div>
         </section>
       ) : expired ? (
         <section className="onb-card onb-warn">
@@ -276,45 +363,8 @@ export function OnboardingPage({ token }: { token: string }) {
 
       <form className="onb-steps" onSubmit={(event) => void submit(event)}>
         <section className="onb-card">
-          <span className="onb-step">Step 1</span>
-          <h2>{isClient ? "About your brand" : "Your details"}</h2>
-          {packet.intro && <p className="onb-muted">{packet.intro}</p>}
-          <div className="onb-fields">
-            {packet.form.map((field) => {
-              const value = done ? (packet.form_data[field.key] ?? "") : (form[field.key] ?? "");
-              return (
-                <label key={field.key} className={`onb-field${field.multiline ? " wide" : ""}`}>
-                  <span>
-                    {field.label}
-                    {field.required && <em aria-hidden="true"> *</em>}
-                  </span>
-                  {field.multiline ? (
-                    <textarea
-                      rows={3}
-                      value={value}
-                      placeholder={field.placeholder}
-                      required={field.required}
-                      disabled={done || expired}
-                      onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))}
-                    />
-                  ) : (
-                    <input
-                      value={value}
-                      placeholder={field.placeholder}
-                      required={field.required}
-                      disabled={done || expired}
-                      onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))}
-                    />
-                  )}
-                </label>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="onb-card">
-          <span className="onb-step">Step 2</span>
-          <h2>Read the documents</h2>
+          <span className="onb-step">{next()}</span>
+          <h2>{isClient ? "Read the agreement" : "Read your documents and our rules"}</h2>
           <div className="onb-docs">
             {packet.documents.map((doc) => (
               <details key={doc.kind} className="onb-doc" open={doc.signable && signable.length === 1}>
@@ -334,14 +384,146 @@ export function OnboardingPage({ token }: { token: string }) {
           </a>
         </section>
 
-        {!done && !expired && (
+        <section className="onb-card">
+          <span className="onb-step">{next()}</span>
+          <h2>{isClient ? "About your brand" : "Your details"}</h2>
+          {packet.intro && <p className="onb-muted">{packet.intro}</p>}
+          {groups(packet.form).map(([group, fields]) => (
+            <div key={group || "fields"} className="onb-group">
+              {group && <h3>{group}</h3>}
+              <div className="onb-fields">
+                {fields.map((field) => {
+                  const value = done ? (packet.form_data[field.key] ?? "") : (form[field.key] ?? "");
+                  const change = (text: string) => setForm((current) => ({ ...current, [field.key]: text }));
+                  return (
+                    <label key={field.key} className={`onb-field${field.multiline ? " wide" : ""}`}>
+                      <span>
+                        {field.label}
+                        {field.required ? <em aria-hidden="true"> *</em> : <small> (optional)</small>}
+                      </span>
+                      {field.multiline ? (
+                        <textarea
+                          rows={3}
+                          value={value}
+                          placeholder={field.placeholder}
+                          required={field.required}
+                          disabled={!open}
+                          onChange={(event) => change(event.target.value)}
+                        />
+                      ) : (
+                        <input
+                          type={field.input ?? "text"}
+                          value={value}
+                          placeholder={field.placeholder}
+                          required={field.required}
+                          disabled={!open}
+                          autoComplete="off"
+                          onChange={(event) => change(event.target.value)}
+                        />
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </section>
+
+        {uploads.length > 0 && (
           <section className="onb-card">
-            <span className="onb-step">Step 3</span>
-            <h2>Accept</h2>
+            <span className="onb-step">{next()}</span>
+            <h2>ID proof and photo</h2>
+            <p className="onb-muted">PDF, JPG or PNG, up to 5 MB each. Only the admin can see these files.</p>
+            <div className="onb-uploads">
+              {uploads.map((item) => (
+                <div key={item.key} className={`onb-upload${item.uploaded_name ? " done" : ""}`}>
+                  <span>
+                    <strong>
+                      {item.label}
+                      {item.required && <em aria-hidden="true"> *</em>}
+                    </strong>
+                    <small>{item.uploaded_name ? `Uploaded: ${item.uploaded_name}` : item.hint}</small>
+                  </span>
+                  {open && (
+                    <label className="onb-upload-button">
+                      <input
+                        type="file"
+                        accept={item.accept}
+                        disabled={Boolean(uploading)}
+                        onChange={(event) => void upload(item.key, event)}
+                      />
+                      {item.uploaded_name ? <CheckCircle2 aria-hidden="true" /> : <Upload aria-hidden="true" />}
+                      {uploading === item.key ? "Uploading…" : item.uploaded_name ? "Replace" : "Upload"}
+                    </label>
+                  )}
+                </div>
+              ))}
+            </div>
+            {uploadProblem && (
+              <p className="onb-problem" role="alert">
+                {uploadProblem}
+              </p>
+            )}
+          </section>
+        )}
+
+        {open && packet.needs_password && (
+          <section className="onb-card">
+            <span className="onb-step">{next()}</span>
+            <h2>Set your password</h2>
+            <p className="onb-muted">You will sign in to Adverse with this username and the password you set here.</p>
+            <div className="onb-username">
+              <KeyRound aria-hidden="true" />
+              <span>
+                <small>Your username</small>
+                <strong>{packet.username}</strong>
+              </span>
+            </div>
+            <div className="onb-fields">
+              <label className="onb-field">
+                <span>
+                  Password<em aria-hidden="true"> *</em>
+                </span>
+                <input
+                  type="password"
+                  value={password}
+                  required
+                  autoComplete="new-password"
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </label>
+              <label className="onb-field">
+                <span>
+                  Confirm password<em aria-hidden="true"> *</em>
+                </span>
+                <input
+                  type="password"
+                  value={confirm}
+                  required
+                  autoComplete="new-password"
+                  onChange={(event) => setConfirm(event.target.value)}
+                />
+              </label>
+            </div>
+            <ul className="onb-rules">
+              {PASSWORD_RULES.map(([rule, text]) => (
+                <li key={text} className={rule.test(password) ? "met" : ""}>
+                  {text}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {open && (
+          <section className="onb-card">
+            <span className="onb-step">{next()}</span>
+            <h2>Accept and finish</h2>
             <label className="onb-check">
               <input type="checkbox" checked={accept} onChange={(event) => setAccept(event.target.checked)} />
               <span>
-                I have read {signable.length === 1 ? `the ${signable[0].label.toLowerCase()}` : "these documents"} and I
+                I have read{" "}
+                {signable.length === 1 ? `the ${signable[0].label.toLowerCase()}` : "these documents and rules"} and I
                 accept {signable.length === 1 ? "it" : "them"}.
               </span>
             </label>
@@ -364,7 +546,7 @@ export function OnboardingPage({ token }: { token: string }) {
                 {problem}
               </p>
             )}
-            <button type="submit" className="onb-button" disabled={busy}>
+            <button type="submit" className="onb-button" disabled={busy || Boolean(uploading)}>
               <ShieldCheck aria-hidden="true" /> {busy ? "Saving…" : "Accept and finish"}
             </button>
             <p className="onb-muted small">

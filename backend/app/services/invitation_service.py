@@ -4,6 +4,7 @@ import re
 import secrets
 import unicodedata
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from app.core.settings import settings
@@ -35,8 +36,17 @@ def invitation_token_hash(token: str) -> str:
 
 
 class InvitationService:
-    def __init__(self, repository: InvitationRepository | None = None):
+    def __init__(self, repository: InvitationRepository | None = None, onboarding: Any = None):
         self.repository = repository or InvitationRepository()
+        self._onboarding_override = onboarding
+
+    @property
+    def onboarding(self) -> Any:
+        if self._onboarding_override is not None:
+            return self._onboarding_override
+        from app.services.onboarding_service import onboarding_service
+
+        return onboarding_service
 
     @staticmethod
     def _authorize(context: AuthContext, action: str) -> UUID:
@@ -174,13 +184,28 @@ class InvitationService:
                 else "A pending invitation already exists."
             )
             raise AuthenticationError(409, code, detail) from error
-        email_service.send_invitation(
-            record.notification_email,
-            company_name=record.company_name,
-            invitation_url=settings.invitation_url(record.role_code, token),
-            login_email=record.email,
-        )
+        if not self._start_onboarding(company_id, context.user_id, record.id):
+            email_service.send_invitation(
+                record.notification_email,
+                company_name=record.company_name,
+                invitation_url=settings.invitation_url(record.role_code, token),
+                login_email=record.email,
+            )
         return self._response(record)
+
+    def _start_onboarding(self, company_id: UUID, actor_id: UUID, invitation_id: UUID) -> bool:
+        """One flow for new clients, employees and managers (owner request 2026-11-27): the
+        onboarding mail (username, documents, agreement link) replaces the set-password mail;
+        the onboarding page sets the password. False when it cannot be sent (e.g. a client
+        added more than 60 hours ago), so the plain set-password mail goes instead."""
+        try:
+            self.onboarding.start_for_invitation(company_id, actor_id, invitation_id)
+            return True
+        except AuthenticationError as error:
+            logger.info("Onboarding not sent for invitation %s: %s", invitation_id, error.detail)
+        except Exception:  # noqa: BLE001
+            logger.warning("Onboarding failed for invitation %s", invitation_id, exc_info=True)
+        return False
 
     def list(self, context: AuthContext) -> InvitationListResponse:
         company_id = self._authorize(context, "VIEW")
@@ -221,6 +246,13 @@ class InvitationService:
 
     def resend(self, context: AuthContext, invitation_id: UUID) -> InvitationActionResponse:
         company_id = self._authorize(context, "RESEND")
+        try:
+            packet = self.onboarding.repository.packet_for_invitation(invitation_id)
+        except Exception:  # noqa: BLE001 - no onboarding on record: plain resend below
+            packet = None
+        if packet is not None:
+            self.onboarding.start_for_invitation(company_id, context.user_id, invitation_id)
+            return InvitationActionResponse(message="Onboarding mail sent again.")
         token, token_hash, expires_at = self._new_token()
         record = self.repository.resend(
             company_id, invitation_id, context.user_id, token_hash, expires_at

@@ -604,6 +604,7 @@ model Employee {
   branchId           String?         @map("branch_id") @db.Uuid
   roleId             String          @map("role_id") @db.Uuid
   status             EmployeeStatus  @default(PENDING)
+  removedAt          DateTime?       @map("removed_at")
   createdAt          DateTime        @default(now()) @map("created_at")
   updatedAt          DateTime        @updatedAt @map("updated_at")
   company            Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -758,18 +759,18 @@ model ClientActivity {
 }
 
 model CompanyService {
-  id                  String              @id @default(uuid()) @db.Uuid
-  companyId           String              @map("company_id") @db.Uuid
+  id                  String                 @id @default(uuid()) @db.Uuid
+  companyId           String                 @map("company_id") @db.Uuid
   name                String
   code                String
-  description         String              @default("")
-  clientPricingModel  ServicePricingModel @map("client_pricing_model")
-  managerPricingModel ServicePricingModel @map("manager_pricing_model")
-  status              OrganizationStatus  @default(ACTIVE)
-  sortOrder           Int                 @default(0) @map("sort_order")
-  createdAt           DateTime            @default(now()) @map("created_at")
-  updatedAt           DateTime            @updatedAt @map("updated_at")
-  company             Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  description         String                 @default("")
+  clientPricingModel  ServicePricingModel    @map("client_pricing_model")
+  managerPricingModel ServicePricingModel    @map("manager_pricing_model")
+  status              OrganizationStatus     @default(ACTIVE)
+  sortOrder           Int                    @default(0) @map("sort_order")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+  company             Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
   pricingRecords      ServicePricing[]
   tasks               Task[]
   calendarEntries     ContentCalendarEntry[]
@@ -1220,24 +1221,25 @@ model OrganizationAudit {
 }
 
 model CompanyInvitation {
-  id                String           @id @default(uuid()) @db.Uuid
-  companyId         String           @map("company_id") @db.Uuid
+  id                String             @id @default(uuid()) @db.Uuid
+  companyId         String             @map("company_id") @db.Uuid
   email             String
-  notificationEmail String?          @map("notification_email")
-  designation       String?          @db.VarChar(120)
-  departmentId      String?          @map("department_id") @db.Uuid
-  joiningDate       DateTime?        @map("joining_date") @db.Date
-  department        Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  invitedBy         String           @map("invited_by") @db.Uuid
-  tokenHash         String           @unique @map("token_hash")
-  expiresAt         DateTime         @map("expires_at")
-  roleCode          String           @default("COMPANY_EMPLOYEE") @map("role_code")
-  userId            String?          @map("user_id") @db.Uuid
-  clientId          String?          @map("client_id") @db.Uuid
-  acceptedAt        DateTime?        @map("accepted_at")
-  status            InvitationStatus @default(PENDING)
-  createdAt         DateTime         @default(now()) @map("created_at")
-  updatedAt         DateTime         @updatedAt @map("updated_at")
+  notificationEmail String?            @map("notification_email")
+  designation       String?            @db.VarChar(120)
+  departmentId      String?            @map("department_id") @db.Uuid
+  joiningDate       DateTime?          @map("joining_date") @db.Date
+  department        Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  invitedBy         String             @map("invited_by") @db.Uuid
+  tokenHash         String             @unique @map("token_hash")
+  expiresAt         DateTime           @map("expires_at")
+  roleCode          String             @default("COMPANY_EMPLOYEE") @map("role_code")
+  userId            String?            @map("user_id") @db.Uuid
+  clientId          String?            @map("client_id") @db.Uuid
+  acceptedAt        DateTime?          @map("accepted_at")
+  status            InvitationStatus   @default(PENDING)
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  onboardingPackets OnboardingPacket[]
 
   @@index([companyId, status])
   @@index([companyId, email])
@@ -1608,35 +1610,35 @@ model InvoiceLine {
 /// post on which day. The client ticks Recorded, Script, Instagram and YouTube; "Edited" is true
 /// when the linked task is approved (or the admin ticks it by hand). The admin can change anything.
 model ContentCalendarEntry {
-  id                String   @id @default(uuid()) @db.Uuid
-  companyId         String   @map("company_id") @db.Uuid
-  clientId          String   @map("client_id") @db.Uuid
-  entryDate         DateTime @map("entry_date") @db.Date
-  title             String   @db.VarChar(200)
-  referenceUrl      String   @default("") @map("reference_url") @db.VarChar(1000)
-  scriptUrl         String   @default("") @map("script_url") @db.VarChar(1000)
-  pdfUrl            String   @default("") @map("pdf_url") @db.VarChar(1000)
-  notes             String   @default("") @db.VarChar(2000)
-  noPost            Boolean  @default(false) @map("no_post")
-  recorded          Boolean  @default(false)
-  scriptReady       Boolean  @default(false) @map("script_ready")
-  postedInstagram   Boolean  @default(false) @map("posted_instagram")
-  postedYoutube     Boolean  @default(false) @map("posted_youtube")
-  editedManual      Boolean  @default(false) @map("edited_manual")
-  scriptFileName    String?  @map("script_file_name") @db.VarChar(200)
-  scriptStoragePath String?  @map("script_storage_path") @db.VarChar(500)
-  scriptMimeType    String?  @map("script_mime_type") @db.VarChar(200)
-  scriptSizeBytes   BigInt?  @map("script_size_bytes")
-  taskId            String?  @map("task_id") @db.Uuid
-  createdById       String   @map("created_by_id") @db.Uuid
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  task              Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  serviceId         String?  @map("service_id") @db.Uuid
+  id                String          @id @default(uuid()) @db.Uuid
+  companyId         String          @map("company_id") @db.Uuid
+  clientId          String          @map("client_id") @db.Uuid
+  entryDate         DateTime        @map("entry_date") @db.Date
+  title             String          @db.VarChar(200)
+  referenceUrl      String          @default("") @map("reference_url") @db.VarChar(1000)
+  scriptUrl         String          @default("") @map("script_url") @db.VarChar(1000)
+  pdfUrl            String          @default("") @map("pdf_url") @db.VarChar(1000)
+  notes             String          @default("") @db.VarChar(2000)
+  noPost            Boolean         @default(false) @map("no_post")
+  recorded          Boolean         @default(false)
+  scriptReady       Boolean         @default(false) @map("script_ready")
+  postedInstagram   Boolean         @default(false) @map("posted_instagram")
+  postedYoutube     Boolean         @default(false) @map("posted_youtube")
+  editedManual      Boolean         @default(false) @map("edited_manual")
+  scriptFileName    String?         @map("script_file_name") @db.VarChar(200)
+  scriptStoragePath String?         @map("script_storage_path") @db.VarChar(500)
+  scriptMimeType    String?         @map("script_mime_type") @db.VarChar(200)
+  scriptSizeBytes   BigInt?         @map("script_size_bytes")
+  taskId            String?         @map("task_id") @db.Uuid
+  createdById       String          @map("created_by_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  company           Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client            Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  task              Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  serviceId         String?         @map("service_id") @db.Uuid
   service           CompanyService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  createdBy         User     @relation("CalendarEntryCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy         User            @relation("CalendarEntryCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([companyId, entryDate])
   @@index([companyId, clientId, entryDate])
@@ -1939,35 +1941,39 @@ model DocumentTemplate {
 
 /// Documents sent to a new client or employee, opened by a private link (owner request 2026-11-15).
 model OnboardingPacket {
-  id             String    @id @default(uuid()) @db.Uuid
-  companyId      String    @map("company_id") @db.Uuid
-  audience       String    @db.VarChar(20)
-  clientId       String?   @map("client_id") @db.Uuid
-  userId         String?   @map("user_id") @db.Uuid
-  recipientName  String    @map("recipient_name") @db.VarChar(160)
-  recipientEmail String    @map("recipient_email") @db.VarChar(254)
-  documents      Json      @default("[]")
-  fields         Json      @default("{}")
-  tokenHash      String    @unique @map("token_hash") @db.VarChar(64)
-  status         String    @default("SENT") @db.VarChar(20)
-  expiresAt      DateTime  @map("expires_at")
-  formData       Json      @default("{}") @map("form_data")
-  signedName     String?   @map("signed_name") @db.VarChar(160)
-  signedAt       DateTime? @map("signed_at")
-  signedIp       String?   @map("signed_ip") @db.VarChar(64)
-  signedAgent    String?   @map("signed_agent") @db.VarChar(300)
-  openedAt       DateTime? @map("opened_at")
-  sentCount      Int       @default(1) @map("sent_count")
-  createdById    String?   @map("created_by_id") @db.Uuid
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @default(now()) @map("updated_at")
-  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  client         Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user           User?     @relation("PacketRecipient", fields: [userId], references: [id], onDelete: SetNull)
-  createdBy      User?     @relation("PacketSender", fields: [createdById], references: [id], onDelete: SetNull)
+  id             String             @id @default(uuid()) @db.Uuid
+  companyId      String             @map("company_id") @db.Uuid
+  audience       String             @db.VarChar(20)
+  clientId       String?            @map("client_id") @db.Uuid
+  userId         String?            @map("user_id") @db.Uuid
+  recipientName  String             @map("recipient_name") @db.VarChar(160)
+  recipientEmail String             @map("recipient_email") @db.VarChar(254)
+  documents      Json               @default("[]")
+  fields         Json               @default("{}")
+  tokenHash      String             @unique @map("token_hash") @db.VarChar(64)
+  status         String             @default("SENT") @db.VarChar(20)
+  expiresAt      DateTime           @map("expires_at")
+  formData       Json               @default("{}") @map("form_data")
+  invitationId   String?            @map("invitation_id") @db.Uuid
+  uploads        Json               @default("{}")
+  signedName     String?            @map("signed_name") @db.VarChar(160)
+  signedAt       DateTime?          @map("signed_at")
+  signedIp       String?            @map("signed_ip") @db.VarChar(64)
+  signedAgent    String?            @map("signed_agent") @db.VarChar(300)
+  openedAt       DateTime?          @map("opened_at")
+  sentCount      Int                @default(1) @map("sent_count")
+  createdById    String?            @map("created_by_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @default(now()) @map("updated_at")
+  company        Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client         Client?            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user           User?              @relation("PacketRecipient", fields: [userId], references: [id], onDelete: SetNull)
+  createdBy      User?              @relation("PacketSender", fields: [createdById], references: [id], onDelete: SetNull)
+  invitation     CompanyInvitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
 
   @@index([companyId, audience, createdAt])
   @@index([clientId])
+  @@index([invitationId])
   @@map("onboarding_packets")
 }
 

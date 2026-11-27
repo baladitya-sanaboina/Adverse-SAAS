@@ -496,3 +496,181 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* One onboarding flow (owner request 2026-11-27): field groups, ID proof and photo uploads, the
+   username and password step. Same tokens as the rest of the page. */
+.onb-group {
+  display: grid;
+  gap: 10px;
+}
+
+.onb-group + .onb-group {
+  margin-top: 8px;
+}
+
+.onb-group h3 {
+  margin: 0;
+  color: var(--muted, #64748b);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.onb-field small {
+  color: var(--muted, #64748b);
+  font-weight: 500;
+}
+
+.onb-uploads {
+  display: grid;
+  gap: 10px;
+}
+
+.onb-upload {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border, #e2e8f0);
+  border-radius: 12px;
+  background: var(--surface-muted, #f4f8ff);
+}
+
+.onb-upload.done {
+  border-style: solid;
+  border-color: color-mix(in srgb, #0876ed 35%, transparent);
+}
+
+.onb-upload > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.onb-upload strong {
+  font-size: 0.9rem;
+}
+
+.onb-upload em {
+  color: #b74858;
+  font-style: normal;
+}
+
+.onb-upload small {
+  overflow: hidden;
+  color: var(--muted, #64748b);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.onb-upload-button {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid #0876ed;
+  border-radius: 10px;
+  color: #0876ed;
+  background: var(--surface, #fff);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.onb-upload-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.onb-upload-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.onb-username {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  background: var(--surface-muted, #f4f8ff);
+}
+
+.onb-username svg {
+  width: 20px;
+  height: 20px;
+  color: #0876ed;
+}
+
+.onb-username span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.onb-username small {
+  color: var(--muted, #64748b);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.onb-username strong {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+}
+
+.onb-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted, #64748b);
+  font-size: 0.78rem;
+}
+
+.onb-rules li::before {
+  content: "○ ";
+}
+
+.onb-rules li.met {
+  color: #0876ed;
+}
+
+.onb-rules li.met::before {
+  content: "● ";
+}
+
+.onb-done-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.dark .onb-upload-button,
+.dark .onb-rules li.met,
+.dark .onb-username svg {
+  color: #8cc8ff;
+  border-color: #8cc8ff;
+}
+
+@media (max-width: 640px) {
+  .onb-upload {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .onb-upload-button {
+    justify-content: center;
+  }
+}

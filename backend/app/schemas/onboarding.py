@@ -5,14 +5,15 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr
 
 PacketStatus = Literal["SENT", "OPENED", "COMPLETED", "CANCELLED", "EXPIRED"]
+Role = Literal["CLIENT", "EMPLOYEE", "MANAGER"]
 
 
 class TemplateResponse(BaseModel):
     kind: str
-    audience: Literal["CLIENT", "EMPLOYEE"]
+    audience: Role
     label: str
     signable: bool
     subject: str
@@ -28,9 +29,19 @@ class TemplateRequest(BaseModel):
     body: str = Field(min_length=10, max_length=30000)
 
 
+class UploadedFile(BaseModel):
+    label: str
+    file_name: str
+    size_bytes: int
+    uploaded_at: str
+
+
 class PacketResponse(BaseModel):
     id: UUID
     audience: Literal["CLIENT", "EMPLOYEE"]
+    role: Role = "EMPLOYEE"
+    invitation_id: UUID | None = None
+    uploads: dict[str, UploadedFile] = Field(default_factory=dict)
     client_id: UUID | None
     user_id: UUID | None
     recipient_name: str
@@ -84,7 +95,9 @@ class EmployeeDocumentsRequest(BaseModel):
         Literal["EMPLOYEE_WELCOME", "EMPLOYEE_OFFER", "EMPLOYEE_JOINING", "EMPLOYEE_AGREEMENT"]
     ] = Field(min_length=1)
     job_title: str = Field(min_length=2, max_length=120)
-    monthly_salary: Decimal = Field(ge=0, le=Decimal("99999999.99"), decimal_places=2)
+    monthly_salary: Decimal = Field(
+        default=Decimal("0"), ge=0, le=Decimal("99999999.99"), decimal_places=2
+    )
     joining_date: date
     reporting_to: str = Field(default="", max_length=120)
     work_location: str = Field(default="", max_length=160)
@@ -106,13 +119,27 @@ class PublicField(BaseModel):
     required: bool
     multiline: bool = False
     placeholder: str = ""
+    group: str = ""
+    input: Literal["text", "date", "tel", "email"] = "text"
+
+
+class PublicUpload(BaseModel):
+    key: str
+    label: str
+    required: bool
+    accept: str
+    hint: str = ""
+    uploaded_name: str | None = None
 
 
 class PublicPacket(BaseModel):
     company_name: str
     company_email: str = ""
     company_phone: str = ""
-    audience: Literal["CLIENT", "EMPLOYEE"]
+    audience: Role
+    username: str | None = None
+    needs_password: bool = False
+    uploads: list[PublicUpload] = Field(default_factory=list)
     recipient_name: str
     status: PacketStatus
     expires_at: datetime
@@ -130,3 +157,6 @@ class PublicSubmit(BaseModel):
     form: dict[str, str] = Field(default_factory=dict)
     signed_name: str = Field(min_length=2, max_length=160)
     accept: bool
+    # Set on the same page when the onboarding also activates their account (2026-11-27).
+    password: SecretStr | None = Field(default=None, max_length=128)
+    confirm_password: SecretStr | None = Field(default=None, max_length=128)

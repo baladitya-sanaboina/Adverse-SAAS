@@ -627,15 +627,15 @@ export function ClientManagementPage({
           });
           const inviteData = await inviteResponse.json();
           if (!inviteResponse.ok) {
-            throw new Error(messageFrom(inviteData, "Unable to send the client activation email."));
+            throw new Error(messageFrom(inviteData, "Unable to send the client onboarding email."));
           }
           const adverseId = typeof inviteData.email === "string" ? inviteData.email : form.portal_login_email.trim();
-          nextNotice = `Client created successfully (code ${typeof data.code === "string" ? data.code : "set automatically"}). Activation email sent to ${form.email.trim()}; they sign in with that Gmail${adverseId ? ` or their Adverse ID ${adverseId}` : ""}.`;
+          nextNotice = `Client created successfully (code ${typeof data.code === "string" ? data.code : "set automatically"}). Onboarding email sent to ${form.email.trim()}${adverseId ? ` with the username ${adverseId}` : ""}; they set their password on the onboarding page.`;
         } catch (inviteReason) {
           nextNotice =
             inviteReason instanceof Error
-              ? `Client created, but activation email was not sent: ${inviteReason.message}`
-              : "Client created, but activation email was not sent.";
+              ? `Client created, but onboarding email was not sent: ${inviteReason.message}`
+              : "Client created, but onboarding email was not sent.";
         }
       }
       setNotice(nextNotice);

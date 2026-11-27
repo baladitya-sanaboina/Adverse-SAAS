@@ -31,9 +31,12 @@ import "@/styles/documents.css";
 import { LooplessDate } from "@/components/foundation/loopless-date";
 
 type Status = "SENT" | "OPENED" | "COMPLETED" | "CANCELLED" | "EXPIRED";
+type Role = "CLIENT" | "EMPLOYEE" | "MANAGER";
 type Packet = {
   id: string;
   audience: "CLIENT" | "EMPLOYEE";
+  role?: Role;
+  uploads?: Record<string, { label: string; file_name: string; size_bytes: number; uploaded_at: string }>;
   client_id: string | null;
   user_id: string | null;
   recipient_name: string;
@@ -62,7 +65,7 @@ type ClientRow = {
 };
 type Template = {
   kind: string;
-  audience: "CLIENT" | "EMPLOYEE";
+  audience: Role;
   label: string;
   signable: boolean;
   subject: string;
@@ -92,6 +95,15 @@ const EMPLOYEE_DOCS = [
   { key: "EMPLOYEE_AGREEMENT", label: "Employment agreement" },
   { key: "EMPLOYEE_WELCOME", label: "Welcome email" },
 ] as const;
+// Managers get their own versions of the same documents (2026-11-27).
+const DOC_LABELS: Record<string, string> = {
+  ...Object.fromEntries(EMPLOYEE_DOCS.map((item) => [item.key, item.label])),
+  MANAGER_OFFER: "Offer letter",
+  MANAGER_JOINING: "Joining letter",
+  MANAGER_AGREEMENT: "Manager agreement",
+  MANAGER_WELCOME: "Welcome email",
+};
+const ROLE_LABEL: Record<Role, string> = { CLIENT: "Client", EMPLOYEE: "Employee", MANAGER: "Manager" };
 
 function utc(value: string): Date {
   return new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? value : `${value}Z`);
@@ -409,13 +421,12 @@ function EmployeesTab({
               <div className="production-cell">
                 <strong>{packet.recipient_name}</strong>
                 <small>
-                  {String(packet.fields.job_title ?? "")} · {packet.recipient_email}
+                  {ROLE_LABEL[packet.role ?? "EMPLOYEE"]} · {String(packet.fields.job_title ?? "")} ·{" "}
+                  {packet.recipient_email}
                 </small>
               </div>
               <span className="documents-kinds">
-                {packet.documents
-                  .map((kind) => EMPLOYEE_DOCS.find((item) => item.key === kind)?.label ?? kind)
-                  .join(", ")}
+                {packet.documents.map((kind) => DOC_LABELS[kind] ?? kind).join(", ")}
               </span>
               <span>{day(packet.created_at)}</span>
               <span>
@@ -659,9 +670,10 @@ function TemplatesTab({ templates, onSaved }: { templates: Template[]; onSaved: 
   }
 
   if (!current) return null;
-  const groups: ["CLIENT" | "EMPLOYEE", string][] = [
+  const groups: [Role, string][] = [
     ["CLIENT", "Clients"],
     ["EMPLOYEE", "Employees"],
+    ["MANAGER", "Managers"],
   ];
   return (
     <div className="documents-templates">
@@ -779,6 +791,7 @@ function CampaignsTab() {
 
 function PacketView({ packet, onClose }: { packet: Packet; onClose: () => void }) {
   const answers = Object.entries(packet.form_data).filter(([, value]) => value);
+  const files = Object.entries(packet.uploads ?? {});
   return (
     <div className="documents-backdrop" onClick={onClose}>
       <section
@@ -790,7 +803,11 @@ function PacketView({ packet, onClose }: { packet: Packet; onClose: () => void }
       >
         <header>
           <div>
-            <span>{packet.audience === "CLIENT" ? "Client onboarding" : "Employee documents"}</span>
+            <span>
+              {packet.audience === "CLIENT"
+                ? "Client onboarding"
+                : `${ROLE_LABEL[packet.role ?? "EMPLOYEE"]} documents`}
+            </span>
             <h3>{packet.recipient_name}</h3>
             <small>{packet.recipient_email}</small>
           </div>
@@ -839,6 +856,27 @@ function PacketView({ packet, onClose }: { packet: Packet; onClose: () => void }
                 <div key={key}>
                   <dt>{key.replace(/_/g, " ")}</dt>
                   <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </>
+        )}
+        {files.length > 0 && (
+          <>
+            <h4>Uploaded files</h4>
+            <dl className="documents-answers">
+              {files.map(([key, file]) => (
+                <div key={key}>
+                  <dt>{file.label}</dt>
+                  <dd>
+                    <a
+                      href={`/api/company/onboarding/packets/${packet.id}/files/${key}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {file.file_name}
+                    </a>
+                  </dd>
                 </div>
               ))}
             </dl>

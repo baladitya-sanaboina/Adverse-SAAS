@@ -749,8 +749,10 @@ class MailService:
         card: dict[str, Any] | None = None,
         sender_id: UUID | None = None,
         starred: bool = False,
+        files: Sequence[tuple[bytes, str, str]] = (),
     ) -> None:
         """A mail from the app. Never raises: a failed mail must not undo the work.
+        `files`: (content, file name, MIME type) attached to the mail (e.g. onboarding PDFs).
         `starred`: a priority mail, starred for the recipients.
         notify=False when the caller already sends its own bell notification.
         `sender_id`: the person whose action caused it (owner request 2026-11-19: a submitted task
@@ -768,6 +770,10 @@ class MailService:
                 ]
             if not people:
                 return
+            stored = [
+                self.storage.save_bytes(company_id, sender_id or people[0], content, name, mime)
+                for content, name, mime in files
+            ]
             message_id = self.repository.create(
                 company_id,
                 sender_id,
@@ -778,6 +784,11 @@ class MailService:
                 link=link[:300],
                 card=card or card_from_text(subject, body, kind, link),
                 starred=starred,
+                files=[
+                    (item.file_name, item.storage_path, item.mime_type, item.size_bytes)
+                    for item in stored
+                ]
+                or None,
             )
             sender = self.people_repository.person(company_id, sender_id) if sender_id else None
             title = f"Mail from {sender.name}" if sender else "New mail from Adverse"

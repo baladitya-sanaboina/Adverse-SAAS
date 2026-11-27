@@ -64,7 +64,7 @@ class EmployeeRepository:
     def list(
         self, company_id: UUID, filters: EmployeeListFilters
     ) -> tuple[tuple[EmployeeRecord, ...], int]:
-        clauses = ["e.company_id=%s"]
+        clauses = ["e.company_id=%s", "e.removed_at IS NULL"]
         values: list[object] = [company_id]
         if filters.search:
             clauses.append("(u.name ILIKE %s OR u.email ILIKE %s OR e.employee_code ILIKE %s)")
@@ -235,44 +235,63 @@ class EmployeeRepository:
         except UniqueViolation as error:
             raise EmployeeConflict("employee_code") from error
 
-    def delete_pending(self, company_id: UUID, employee_id: UUID) -> tuple[str, str] | None:
-        try:
-            with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT e.user_id,u.name,u.email,u.status::text FROM employees e "
-                    'JOIN "users" u ON u.id=e.user_id '
-                    "WHERE e.company_id=%s AND e.id=%s FOR UPDATE",
-                    (company_id, employee_id),
-                )
-                row = cursor.fetchone()
-                if row is None:
-                    return None
-                user_id, user_name, user_email, user_status = row
-                if user_status != "PENDING_VERIFICATION":
-                    raise EmployeeDeletionError("ACTIVE_ACCOUNT")
-                cursor.execute(
-                    "UPDATE registration_audits SET created_user_id=NULL WHERE created_user_id=%s",
-                    (user_id,),
-                )
-                cursor.execute(
-                    "DELETE FROM company_invitations WHERE company_id=%s AND user_id=%s",
-                    (company_id, user_id),
-                )
-                cursor.execute(
-                    "DELETE FROM employees WHERE id=%s AND company_id=%s RETURNING id",
-                    (employee_id, company_id),
-                )
-                if cursor.fetchone() is None:
-                    return None
-                cursor.execute(
-                    'DELETE FROM "users" WHERE id=%s AND company_id=%s AND status=%s RETURNING id',
-                    (user_id, company_id, "PENDING_VERIFICATION"),
-                )
-                if cursor.fetchone() is None:
-                    raise EmployeeDeletionError("ACTIVE_ACCOUNT")
-                return user_name, user_email
-        except ForeignKeyViolation as error:
-            raise EmployeeDeletionError("IN_USE") from error
+    def remove(self, company_id: UUID, employee_id: UUID) -> tuple[str, str, str] | None:
+        """Delete an employee or manager (owner decision 2026-11-27). Someone with no work in
+        the company is deleted completely ("DELETED"). Someone whose tasks, payments, salary or
+        messages are on record is removed instead ("REMOVED"): they can never sign in again and
+        leave every list, while the records keep their name. Returns (name, email, outcome)."""
+        with database_pool.connection(timeout=2) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT e.user_id,u.name,u.email FROM employees e "
+                'JOIN "users" u ON u.id=e.user_id '
+                "WHERE e.company_id=%s AND e.id=%s AND e.removed_at IS NULL FOR UPDATE OF e",
+                (company_id, employee_id),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            user_id, user_name, user_email = row
+            try:
+                with connection.transaction():
+                    cursor.execute(
+                        "UPDATE registration_audits SET created_user_id=NULL "
+                        "WHERE created_user_id=%s",
+                        (user_id,),
+                    )
+                    cursor.execute(
+                        "DELETE FROM company_invitations WHERE company_id=%s AND user_id=%s",
+                        (company_id, user_id),
+                    )
+                    cursor.execute(
+                        "DELETE FROM employees WHERE id=%s AND company_id=%s",
+                        (employee_id, company_id),
+                    )
+                    cursor.execute(
+                        'DELETE FROM "users" WHERE id=%s AND company_id=%s', (user_id, company_id)
+                    )
+                return user_name, user_email, "DELETED"
+            except ForeignKeyViolation:
+                pass  # work is linked to them: keep the records, remove the person
+            cursor.execute(
+                "UPDATE \"users\" SET status='INACTIVE',updated_at=NOW() WHERE id=%s", (user_id,)
+            )
+            cursor.execute(
+                "UPDATE employees SET status='INACTIVE',removed_at=NOW() AT TIME ZONE 'UTC',"
+                "updated_at=NOW() WHERE id=%s",
+                (employee_id,),
+            )
+            for statement in (
+                "DELETE FROM auth_sessions WHERE user_id=%s",
+                "DELETE FROM push_subscriptions WHERE user_id=%s",
+                "DELETE FROM client_access WHERE user_id=%s",
+                "UPDATE company_invitations SET status='REVOKED',updated_at=NOW() "
+                "WHERE user_id=%s AND status='PENDING'",
+                "UPDATE onboarding_packets SET status='CANCELLED',"
+                "updated_at=NOW() AT TIME ZONE 'UTC' "
+                "WHERE user_id=%s AND status IN ('SENT','OPENED')",
+            ):
+                cursor.execute(statement, (user_id,))
+            return user_name, user_email, "REMOVED"
 
     @staticmethod
     def _validate_user(cursor: Any, company_id: UUID, user_id: UUID) -> None:
@@ -313,7 +332,8 @@ class EmployeeRepository:
 
     def _get(self, cursor: Any, company_id: UUID, employee_id: UUID) -> EmployeeRecord | None:
         cursor.execute(
-            f"SELECT {self._fields}{self._joins}WHERE e.id=%s AND e.company_id=%s",
+            f"SELECT {self._fields}{self._joins}WHERE e.id=%s AND e.company_id=%s "
+            "AND e.removed_at IS NULL",
             (employee_id, company_id),
         )
         row = cursor.fetchone()

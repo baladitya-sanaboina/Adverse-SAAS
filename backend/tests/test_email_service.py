@@ -14,8 +14,8 @@ class EmailTemplateTests(unittest.TestCase):
         self.assertIn(expected_code, html)
         self.assertIn(expected_copy, html)
         self.assertIn("Adverse", html)
-        self.assertIn("#0876ED", html)
-        self.assertIn('name="color-scheme" content="light"', html)
+        self.assertIn("#0876ed", html)
+        self.assertIn('name="color-scheme" content="light only"', html)
 
     @patch.object(settings, "smtp_host", "mailpit")
     def test_verification_email_has_plain_and_branded_html_parts(self) -> None:

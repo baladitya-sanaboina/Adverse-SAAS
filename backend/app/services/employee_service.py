@@ -2,7 +2,6 @@ from uuid import UUID
 
 from app.repositories.employee_repository import (
     EmployeeConflict,
-    EmployeeDeletionError,
     EmployeeRecord,
     EmployeeReferenceError,
     EmployeeRepository,
@@ -113,24 +112,20 @@ class EmployeeService:
             raise AuthenticationError(404, "EMPLOYEE_NOT_FOUND", "Employee was not found.")
         return self._response(record)
 
-    def delete(self, context: AuthContext, employee_id: UUID) -> None:
+    def delete(self, context: AuthContext, employee_id: UUID) -> str:
+        """Delete, or remove when work is linked (owner decision 2026-11-27). Returns the
+        message for the admin."""
         company_id = self._authorize(context, "DELETE")
-        try:
-            deleted = self.repository.delete_pending(company_id, employee_id)
-        except EmployeeDeletionError as error:
-            if error.reason == "ACTIVE_ACCOUNT":
-                raise AuthenticationError(
-                    409,
-                    "EMPLOYEE_DELETE_PENDING_ONLY",
-                    "Only employees with an unaccepted invite can be deleted.",
-                ) from error
-            raise AuthenticationError(
-                409,
-                "EMPLOYEE_IN_USE",
-                "Employee cannot be deleted because company work is already linked.",
-            ) from error
-        if deleted is None:
+        result = self.repository.remove(company_id, employee_id)
+        if result is None:
             raise AuthenticationError(404, "EMPLOYEE_NOT_FOUND", "Employee was not found.")
+        name, _, outcome = result
+        if outcome == "REMOVED":
+            return (
+                f"{name} was removed. They can no longer sign in and no longer appear in lists; "
+                "their past tasks and payments are kept."
+            )
+        return f"{name} deleted successfully."
 
     def is_ready(self) -> bool:
         return self.repository.is_ready()

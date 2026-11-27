@@ -79,6 +79,27 @@ class TaskFileStorage:
             size_bytes=size,
         )
 
+    def save_bytes(
+        self, company_id: UUID, owner_id: UUID, content: bytes, file_name: str, mime_type: str
+    ) -> StoredFile:
+        """A file made by the app itself (e.g. a PDF attached to a system mail)."""
+        if not content:
+            raise AuthenticationError(422, "EMPTY_FILE", "The file is empty.")
+        if len(content) > self.max_bytes:
+            raise AuthenticationError(
+                413, "FILE_TOO_LARGE", f"Files can be at most {_size_label(self.max_bytes)}."
+            )
+        relative = Path(str(company_id)) / str(owner_id) / uuid4().hex
+        target = self.root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        return StoredFile(
+            storage_path=relative.as_posix(),
+            file_name=clean_file_name(file_name),
+            mime_type=mime_type[:200],
+            size_bytes=len(content),
+        )
+
     def path_for(self, storage_path: str) -> Path:
         path = (self.root / storage_path).resolve()
         if not path.is_relative_to(self.root):

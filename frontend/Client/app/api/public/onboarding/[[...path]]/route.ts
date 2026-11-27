@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 
 // Onboarding documents (2026-11-15): the private link works without signing in. Only
-// /public/onboarding/<token>[/pdf] is forwarded; the token is the key the backend checks.
+// /public/onboarding/<token>[/pdf] and /public/onboarding/<token>/files/<key> (an ID proof or
+// photo upload, 2026-11-27) are forwarded; the token is the key the backend checks.
 const SAFE = /^[A-Za-z0-9_-]+$/;
 const BACKEND = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:8000";
 
 type Context = { params: Promise<{ path?: string[] }> };
 
+function allowed(parts: string[]): boolean {
+  if (!parts.every((part) => SAFE.test(part))) return false;
+  if (parts.length === 1) return true;
+  if (parts.length === 2) return parts[1] === "pdf";
+  return parts.length === 3 && parts[1] === "files";
+}
+
 async function forward(request: NextRequest, context: Context) {
   const parts = (await context.params).path ?? [];
-  if (parts.length < 1 || parts.length > 2 || !parts.every((part) => SAFE.test(part))) {
+  if (!allowed(parts)) {
     return NextResponse.json({ detail: "Invalid link." }, { status: 400 });
   }
   const headers: Record<string, string> = {
@@ -18,8 +26,13 @@ async function forward(request: NextRequest, context: Context) {
   };
   const init: RequestInit = { method: request.method, headers };
   if (request.method === "POST") {
-    headers["content-type"] = "application/json";
-    init.body = await request.text();
+    if (parts.length === 3) {
+      headers["content-type"] = request.headers.get("content-type") ?? "";
+      init.body = await request.arrayBuffer();
+    } else {
+      headers["content-type"] = "application/json";
+      init.body = await request.text();
+    }
   }
   const upstream = await fetch(`${BACKEND}/public/onboarding/${parts.join("/")}`, init).catch(() => null);
   if (!upstream) return NextResponse.json({ detail: "Please try again in a moment." }, { status: 502 });
