@@ -9,7 +9,9 @@
  * saved without a code is read as India (+91). An empty number gives "".
  *
  * The code box is a span with role="button", not a <button>: inside a <label> a button would take
- * the label's clicks away from the number box.
+ * the label's clicks away from the number box. The country list opens at page level (a portal,
+ * fixed under the code box, or above it near the bottom of the screen) so a form or modal edge
+ * never cuts it off and the form's input styles never reach its search box (2026-11-28).
  */
 import {
   useEffect,
@@ -21,6 +23,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search } from "lucide-react";
 
 type Country = { iso: string; name: string; dial: string };
@@ -314,6 +317,20 @@ export function PhoneInput({
   );
 }
 
+type MenuPlace = { left: number; width: number; top?: number; bottom?: number };
+
+/** Under the code box, or above it when there is more room there. */
+function menuPlace(anchor: HTMLElement | null): MenuPlace | null {
+  const box = anchor?.getBoundingClientRect();
+  if (!box) return null;
+  const width = Math.min(300, window.innerWidth - 32);
+  const left = Math.max(16, Math.min(box.left, window.innerWidth - width - 16));
+  const below = window.innerHeight - box.bottom;
+  return below >= 330 || below >= box.top
+    ? { left, width, top: box.bottom + 7 }
+    : { left, width, bottom: window.innerHeight - box.top + 7 };
+}
+
 function CountryCodePicker({
   country,
   onChoose,
@@ -327,6 +344,8 @@ function CountryCodePicker({
   const [search, setSearch] = useState("");
   const [active, setActive] = useState(0);
   const root = useRef<HTMLSpanElement>(null);
+  const menu = useRef<HTMLSpanElement>(null);
+  const [place, setPlace] = useState<MenuPlace | null>(null);
   const searchBox = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLSpanElement>(null);
   const listId = useId();
@@ -345,11 +364,19 @@ function CountryCodePicker({
   useEffect(() => {
     if (!open) return;
     const close = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!root.current?.contains(target) && !menu.current?.contains(target)) setOpen(false);
     };
+    const follow = () => setPlace(menuPlace(root.current));
     document.addEventListener("pointerdown", close);
+    window.addEventListener("resize", follow);
+    window.addEventListener("scroll", follow, true);
     searchBox.current?.focus();
-    return () => document.removeEventListener("pointerdown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      window.removeEventListener("resize", follow);
+      window.removeEventListener("scroll", follow, true);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -361,6 +388,7 @@ function CountryCodePicker({
     if (disabled) return;
     setSearch("");
     setActive(Math.max(0, COUNTRIES.indexOf(country)));
+    setPlace(menuPlace(root.current));
     setOpen(true);
   };
   const pick = (item: Country | undefined) => {
@@ -411,51 +439,59 @@ function CountryCodePicker({
         <span>{country.dial}</span>
         <ChevronDown aria-hidden="true" />
       </span>
-      {open && (
-        <span className="phone-code-menu" onClick={(event) => event.preventDefault()}>
-          <span className="phone-code-search">
-            <Search aria-hidden="true" />
-            <input
-              ref={searchBox}
-              value={search}
-              placeholder="Search country or code"
-              aria-label="Search country or code"
-              aria-controls={listId}
-              autoComplete="off"
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setActive(0);
-              }}
-              onKeyDown={onKeys}
-            />
-          </span>
-          <span id={listId} role="listbox" aria-label="Country code" ref={list}>
-            {matches.length === 0 ? (
-              <span className="phone-code-empty">No country found</span>
-            ) : (
-              matches.map((item, index) => (
-                <button
-                  type="button"
-                  role="option"
-                  key={item.iso}
-                  data-index={index}
-                  aria-selected={item.iso === country.iso}
-                  className={index === active ? "active" : undefined}
-                  onPointerMove={() => setActive(index)}
-                  onClick={() => pick(item)}
-                >
-                  <span className="phone-code-flag" aria-hidden="true">
-                    {flag(item.iso)}
-                  </span>
-                  <span className="phone-code-name">{item.name}</span>
-                  <span className="phone-code-dial">{item.dial}</span>
-                  {item.iso === country.iso && <Check aria-hidden="true" />}
-                </button>
-              ))
-            )}
-          </span>
-        </span>
-      )}
+      {open &&
+        place &&
+        createPortal(
+          <span
+            className="phone-code-menu"
+            ref={menu}
+            style={{ left: place.left, width: place.width, top: place.top, bottom: place.bottom }}
+            onClick={(event) => event.preventDefault()}
+          >
+            <span className="phone-code-search">
+              <Search aria-hidden="true" />
+              <input
+                ref={searchBox}
+                value={search}
+                placeholder="Search country or code"
+                aria-label="Search country or code"
+                aria-controls={listId}
+                autoComplete="off"
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setActive(0);
+                }}
+                onKeyDown={onKeys}
+              />
+            </span>
+            <span id={listId} role="listbox" aria-label="Country code" ref={list}>
+              {matches.length === 0 ? (
+                <span className="phone-code-empty">No country found</span>
+              ) : (
+                matches.map((item, index) => (
+                  <button
+                    type="button"
+                    role="option"
+                    key={item.iso}
+                    data-index={index}
+                    aria-selected={item.iso === country.iso}
+                    className={index === active ? "active" : undefined}
+                    onPointerMove={() => setActive(index)}
+                    onClick={() => pick(item)}
+                  >
+                    <span className="phone-code-flag" aria-hidden="true">
+                      {flag(item.iso)}
+                    </span>
+                    <span className="phone-code-name">{item.name}</span>
+                    <span className="phone-code-dial">{item.dial}</span>
+                    {item.iso === country.iso && <Check aria-hidden="true" />}
+                  </button>
+                ))
+              )}
+            </span>
+          </span>,
+          document.body,
+        )}
     </span>
   );
 }
@@ -521,11 +557,8 @@ const PHONE_STYLES = `
   line-height: 1;
 }
 .phone-code-menu {
-  position: absolute;
-  z-index: 130;
-  top: calc(100% + 7px);
-  left: 0;
-  width: min(300px, calc(100vw - 32px));
+  position: fixed;
+  z-index: 2000;
   display: grid;
   gap: 6px;
   padding: 8px;
@@ -548,13 +581,17 @@ const PHONE_STYLES = `
   height: 15px;
   color: var(--muted, #64748b);
 }
-.phone-code-search input {
+.phone-code-menu .phone-code-search input {
   width: 100%;
   min-height: 36px;
-  border: 0;
-  outline: 0;
+  margin: 0;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  outline: 0 !important;
+  box-shadow: none !important;
   color: inherit;
-  background: transparent;
+  background: transparent !important;
   font: 500 0.78rem/1.2 var(--font-poppins), "Poppins", Arial, sans-serif;
 }
 .phone-code-menu [role="listbox"] {

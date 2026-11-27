@@ -47,6 +47,8 @@ from app.schemas.production import (
     DashboardMoney,
     DashboardTeamLoad,
     DashboardTrendPoint,
+    EarningLine,
+    EarningsResponse,
     EmployeeSalaryResponse,
     FinanceSummaryResponse,
     ManagerEarningsResponse,
@@ -1068,6 +1070,28 @@ class FinanceService:
             else:
                 total += salary_cost_in_range(rates, start, end)
         return money(total)
+
+    def earnings(self, context: AuthContext, years: int = 3) -> EarningsResponse:
+        """Admin only: every delivery of the last `years` years (client price and commission),
+        for the dashboard's Earnings section (owner request 2026-11-28)."""
+        company_id = self._admin(context, "FINANCE", "VIEW")
+        tz, today = self._zone(company_id)
+        start = date(today.year - max(0, years - 1), 1, 1)
+        return EarningsResponse(
+            currency=self.repository.company_currency(company_id),
+            lines=[
+                EarningLine(
+                    key=row.key,
+                    day=row.day,
+                    title=row.title,
+                    client_name=row.client_name,
+                    service_name=row.service_name,
+                    amount=money(row.amount),
+                    commission=money(row.commission),
+                )
+                for row in self.repository.delivered_work(company_id, tz, start)
+            ],
+        )
 
     def finance_summary(self, context: AuthContext, query: PeriodQuery) -> FinanceSummaryResponse:
         company_id = self._admin(context, "FINANCE", "VIEW")

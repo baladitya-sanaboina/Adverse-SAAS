@@ -125,6 +125,20 @@ class CommissionTaskRow:
 
 
 @dataclass(frozen=True)
+class EarningRow:
+    """One piece of delivered work for the Admin's earnings (2026-11-28): what the client is
+    charged and the manager's commission on it. A monthly package charge has no commission."""
+
+    key: str
+    day: date
+    title: str
+    client_name: str
+    service_name: str
+    amount: Decimal
+    commission: Decimal
+
+
+@dataclass(frozen=True)
 class DeliveryRow:
     """A delivered (approved/completed) task as a client may see it: no code, people or costs."""
 
@@ -1065,6 +1079,35 @@ class FinanceRepository:
                 )
                 for row in cursor.fetchall()
             ]
+
+    def delivered_work(self, company_id: UUID, tz: str, start: date | None) -> list[EarningRow]:
+        """Every billable delivery since `start` (all clients), newest first, dated in the
+        company timezone: approved work and monthly package charges."""
+        delivered = _local_date("t.approved_at")
+        with database_pool.connection(timeout=5) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT x.key, x.day, x.title, x.client, x.service, x.amount, x.commission FROM (
+                  SELECT t.id::text AS key, {delivered} AS day, t.title, c.name AS client,
+                    s.name AS service, COALESCE(t.client_price_final, 0) AS amount,
+                    COALESCE(t.commission_final, 0) AS commission, t.approved_at AS sort_at
+                  FROM tasks t
+                  JOIN clients c ON c.id = t.client_id
+                  JOIN company_services s ON s.id = t.service_id
+                  WHERE t.company_id=%(company)s AND t.status IN {_BILLABLE}
+                    AND t.approved_at IS NOT NULL AND {_range_sql(delivered, start, None)}
+                  UNION ALL
+                  SELECT 'package-' || pk.package_id::text || '-' || pk.charge_on::text,
+                    pk.charge_on, pk.name || ' · ' || to_char(pk.charge_on, 'Mon YYYY'), c.name,
+                    'Monthly package', pk.amount, 0, pk.charge_on::timestamp
+                  FROM {package_charges_sql()} pk JOIN clients c ON c.id = pk.client_id
+                  WHERE {_range_sql("pk.charge_on", start, None)}
+                ) x
+                ORDER BY x.day DESC, x.sort_at DESC
+                """,
+                {"company": company_id, "tz": tz, "start": start, "end": None},
+            )
+            return [EarningRow(*row) for row in cursor.fetchall()]
 
     def revenue_in_range(
         self, company_id: UUID, tz: str, start: date | None, end: date | None

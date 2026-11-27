@@ -20,13 +20,14 @@ import {
   todayText,
 } from "../dashboard/role-dashboard-ui";
 import { STATUS_LABELS, api, errorText, formatDate, money as formatMoney } from "../production/client";
-import { MoneyPrivacy, PrivacyToggle, usePrivateMoney } from "../production/privacy";
+import { usePrivateMoney } from "../production/privacy";
 import type { EmployeeSalary, ManagerEarnings, Paged, TaskStatus } from "../production/types";
 import type { WorkerTask, WorkspaceDashboard } from "./types";
 import { useLiveRefresh } from "../realtime/realtime";
 import { AvailabilityPanel } from "../chat/availability-panel";
 import { TodayFocus } from "./today-focus";
 import { PaymentsByDatePanel, type DatedPayment } from "../dashboard/payments-by-date";
+import { EarningsPanel, isoDay, type EarningItem } from "../dashboard/earnings-panel";
 import { methodLabel } from "../production/client";
 
 type Role = "MANAGER" | "EMPLOYEE";
@@ -43,14 +44,9 @@ function compactMoney(amount: number, currency: string): string {
   }).format(amount);
 }
 
+// Amounts are always shown (owner request 2026-11-28: no show/hide for managers or employees).
 export function WorkspaceDashboardPage({ role }: { role: Role }) {
-  // Managers always see their amounts (owner request 2026-11-28: no show/hide for managers).
-  if (role === "MANAGER") return <WorkspaceDashboardContent role={role} />;
-  return (
-    <MoneyPrivacy>
-      <WorkspaceDashboardContent role={role} />
-    </MoneyPrivacy>
-  );
+  return <WorkspaceDashboardContent role={role} />;
 }
 
 function WorkspaceDashboardContent({ role }: { role: Role }) {
@@ -111,7 +107,6 @@ function WorkspaceDashboardContent({ role }: { role: Role }) {
         subtitle={subtitle}
         actions={
           <>
-            {role === "EMPLOYEE" && <PrivacyToggle />}
             <Link href={earningsHref} className="management-secondary-action">
               <Wallet /> {role === "MANAGER" ? "My earnings" : "My salary"}
             </Link>
@@ -178,6 +173,8 @@ function WorkspaceDashboardContent({ role }: { role: Role }) {
           </section>
 
           {role === "MANAGER" && earnings && <ManagerDuePanel earnings={earnings} money={money} />}
+
+          {role === "MANAGER" && earnings && <ManagerEarningsPanel earnings={earnings} money={money} />}
 
           <section className="company-dashboard-grid production-dash-grid">
             <TodayFocus endpoint="/api/workspace/tasks/focus" scope="WORKER" />
@@ -395,6 +392,36 @@ function ManagerDuePanel({ earnings, money }: { earnings: ManagerEarnings; money
         )}
       </div>
     </Panel>
+  );
+}
+
+/** The manager's commission by date, week, month and year (owner request 2026-11-28). */
+function ManagerEarningsPanel({ earnings, money }: { earnings: ManagerEarnings; money: Money }) {
+  const items = useMemo<EarningItem[]>(
+    () =>
+      earnings.tasks
+        .filter((task) => task.approved_at && DONE.includes(task.status))
+        .map((task) => {
+          const stamp = task.approved_at ?? "";
+          const at = new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(stamp) ? stamp : `${stamp}Z`);
+          return {
+            key: task.task_id,
+            day: isoDay(at),
+            title: task.title,
+            detail: `${task.code} · ${task.service_name}`,
+            amount: Number(task.commission),
+          };
+        }),
+    [earnings.tasks],
+  );
+  return (
+    <EarningsPanel
+      items={items}
+      money={(amount) => money(amount, earnings.currency)}
+      eyebrow="MY EARNINGS"
+      amountLabel="Commission earned"
+      countLabel="Tasks approved"
+    />
   );
 }
 

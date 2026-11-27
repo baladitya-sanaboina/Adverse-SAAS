@@ -98,5 +98,32 @@ class BudgetLeftWordingTest(unittest.TestCase):
         self.assertNotIn("old@adverse.in", text)
 
 
+class EarningsAccessTest(unittest.TestCase):
+    """The Earnings section shows client prices: Admin only, checked on the server."""
+
+    def test_managers_and_employees_cannot_read_company_earnings(self) -> None:
+        from datetime import timezone
+
+        from app.schemas.authentication import AuthContext
+        from app.services.authentication_service import AuthenticationError
+        from app.services.finance_service import FinanceService
+
+        now = datetime(2026, 11, 28, tzinfo=timezone.utc)
+        service = FinanceService.__new__(FinanceService)
+        for role in ("COMPANY_MANAGER", "COMPANY_EMPLOYEE", "COMPANY_CLIENT"):
+            context = AuthContext(
+                user_id=uuid4(),
+                role=role,
+                company_id=uuid4(),
+                user_type="company",
+                session_id=uuid4(),
+                issued_at=now,
+                expires_at=now,
+            )
+            with self.assertRaises(AuthenticationError) as denied:
+                service.earnings(context)
+            self.assertEqual(denied.exception.status_code, 403)
+
+
 if __name__ == "__main__":
     unittest.main()

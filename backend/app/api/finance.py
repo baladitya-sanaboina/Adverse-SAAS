@@ -18,6 +18,7 @@ from app.schemas.production import (
     ClientPaymentResponse,
     ClientPaymentUpdate,
     ClientReportResponse,
+    EarningsResponse,
     FinanceSummaryResponse,
     ManagerPayoutListResponse,
     ManagerPayoutRequest,
@@ -84,6 +85,16 @@ def dashboard(
     end: date | None = Query(None),
 ) -> AdminDashboardResponse:
     return finance_service.admin_dashboard(context, _period(period, start, end))
+
+
+@router.get(
+    "/earnings",
+    response_model=EarningsResponse,
+    summary="Admin only: every delivery of the last three years, for the Earnings section",
+    responses=ERRORS,
+)
+def earnings(context: AuthenticatedContext) -> EarningsResponse:
+    return finance_service.earnings(context)
 
 
 @router.get(

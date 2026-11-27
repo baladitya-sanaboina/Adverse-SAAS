@@ -1,0 +1,224 @@
+/* Earnings section on the Admin and Manager dashboards (owner request 2026-11-28). Theme tokens
+   and the dashboard's existing row style only. */
+.earn-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.earn-controls .loopless-date {
+  min-width: 150px;
+}
+
+.earn-views {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.earn-views button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  font: 600 0.68rem/1 var(--font-poppins), Arial, sans-serif;
+  cursor: pointer;
+}
+
+.earn-views button.active {
+  color: #ffffff;
+  background: #0876ed;
+}
+
+.earn-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.earn-tiles > span {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.earn-tiles > span.main {
+  border-color: color-mix(in srgb, #0876ed 35%, var(--border));
+  background: color-mix(in srgb, #0876ed 6%, var(--surface));
+}
+
+.earn-tiles small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+.earn-tiles strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.earn-tiles .main strong {
+  color: #065ec1;
+  font-size: 1.05rem;
+}
+
+.earn-tiles em {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.earn-tiles em.up {
+  color: #287150;
+}
+
+.earn-tiles em.down {
+  color: #b74858;
+}
+
+.earn-tiles em svg {
+  width: 13px;
+  height: 13px;
+}
+
+.earn-chart {
+  display: grid;
+  grid-auto-columns: minmax(34px, 1fr);
+  grid-auto-flow: column;
+  gap: 6px;
+  height: 210px;
+  margin-bottom: 14px;
+  padding: 6px 2px 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.earn-bar {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 18px minmax(0, 1fr) 22px;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.earn-bar-value {
+  overflow: hidden;
+  font-size: 0.52rem;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.earn-bar-track {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 8px 8px 0 0;
+  background: color-mix(in srgb, #0876ed 5%, transparent);
+}
+
+.earn-bar-track i {
+  display: block;
+  width: min(100%, 34px);
+  border-radius: 7px 7px 0 0;
+  background: color-mix(in srgb, #0876ed 45%, transparent);
+  transition: height 0.25s ease;
+}
+
+.earn-bar:hover .earn-bar-track i {
+  background: color-mix(in srgb, #0876ed 70%, transparent);
+}
+
+.earn-bar.selected .earn-bar-track i {
+  background: #0876ed;
+}
+
+.earn-bar.selected {
+  color: #065ec1;
+}
+
+.earn-bar-label {
+  overflow: hidden;
+  font-size: 0.56rem;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.production-dash-rows .earn-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.production-dash-rows li:last-child .earn-line {
+  border-bottom: 0;
+}
+
+.earn-line > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.earn-line > span.meta {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.earn-more {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: #0876ed;
+  background: transparent;
+  font: 600 0.68rem/1 var(--font-poppins), Arial, sans-serif;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .earn-controls {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .earn-views {
+    flex: 1 1 100%;
+  }
+
+  .earn-views button {
+    flex: 1;
+  }
+
+  .earn-controls .loopless-date {
+    flex: 1 1 100%;
+  }
+
+  .earn-chart {
+    height: 180px;
+  }
+}

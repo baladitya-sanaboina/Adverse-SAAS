@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Eye, EyeOff, Moon, SunMedium } from "lucide-react";
+import { Eye, EyeOff, Moon, SunMedium } from "lucide-react";
 import { adverseBrand, getBrandLogo } from "@/lib/branding";
 import { ThemeLoader } from "@/components/loader/theme-loader";
 import { AuthApiError, login as authenticate } from "@/lib/auth/client";
@@ -284,10 +284,6 @@ export default function LoginRegisterPage({ initialMode = "login" }: { initialMo
       <AuthCursor />
       <button className="auth-theme" type="button" onClick={toggleTheme} aria-label="Toggle theme">
         {theme === "dark" ? <SunMedium aria-hidden="true" /> : <Moon aria-hidden="true" />}
-      </button>
-      <button className="auth-exit" type="button" onClick={() => router.push("/")}>
-        <ArrowLeft />
-        Back
       </button>
 
       <div className="interactive-card">

@@ -37,6 +37,7 @@ import type {
   TaskStatus,
 } from "@/lib/production/types";
 import { PaymentsByDatePanel, monthRange, type DatedPayment } from "@loopless-shared/dashboard/payments-by-date";
+import { EarningsPanel, type EarningItem } from "@loopless-shared/dashboard/earnings-panel";
 import { STATUS_TEXT, ownerLine, type SheetsOverview } from "@/components/sheets/sheet-types";
 import { useLiveRefresh } from "@loopless-shared/realtime/realtime";
 import { AvailabilityPanel } from "@loopless-shared/chat/availability-panel";
@@ -306,6 +307,8 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
           To your team: {money(m.pending_team_payments, currency)}
         </Tile>
       </section>
+
+      <AdminEarningsPanel currency={currency} />
 
       <section className="company-dashboard-grid production-dash-grid">
         <TodayFocus endpoint="/api/company/tasks/focus" scope="ADMIN" />
@@ -766,6 +769,68 @@ function ClientPaymentsPanel({ data }: { data: AdminDashboard }) {
         )}
       </div>
     </article>
+  );
+}
+
+/* ------------------------------------------------------------------ earnings */
+
+type EarningsData = {
+  currency: string;
+  lines: {
+    key: string;
+    day: string;
+    title: string;
+    client_name: string;
+    service_name: string;
+    amount: string;
+    commission: string;
+  }[];
+};
+
+/** Earnings by date, week, month and year with a graph (owner request 2026-11-28): client prices
+ * of delivered work and the managers' commission on it. Admin only (checked on the server). */
+function AdminEarningsPanel({ currency }: { currency: string }) {
+  const money = usePrivateMoney(formatMoney);
+  const [data, setData] = useState<EarningsData | null>(null);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      setData(await api<EarningsData>("/api/company/finance/earnings"));
+      setError("");
+    } catch (requestError) {
+      setError(errorText(requestError, "Unable to load earnings."));
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+  useLiveRefresh(["task."], () => void load());
+
+  const items = useMemo<EarningItem[]>(
+    () =>
+      (data?.lines ?? []).map((line) => ({
+        key: line.key,
+        day: line.day,
+        title: line.title,
+        detail: `${line.client_name} · ${line.service_name}`,
+        amount: Number(line.amount),
+        commission: Number(line.commission),
+      })),
+    [data],
+  );
+
+  return (
+    <EarningsPanel
+      items={items}
+      money={(amount) => money(amount, data?.currency ?? currency)}
+      amountLabel="Earned from clients"
+      countLabel="Items delivered"
+      loading={!data && !error}
+      error={error}
+    />
   );
 }
 

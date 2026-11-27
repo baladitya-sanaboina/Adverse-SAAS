@@ -13,7 +13,7 @@ import {
   methodLabel,
   money as formatMoneyText,
 } from "../production/client";
-import { MoneyPrivacy, PrivacyToggle, usePrivateMoney } from "../production/privacy";
+import { usePrivateMoney } from "../production/privacy";
 import { AdvanceWallet } from "./advance-wallet";
 import type { EmployeeSalary, ManagerEarnings } from "../production/types";
 import "../styles/organization.css";
@@ -207,11 +207,7 @@ function ManagerEarningsPageContent() {
 
 /** Employee's own salary: due by month, paid and pending. */
 export function EmployeeSalaryPage() {
-  return (
-    <MoneyPrivacy>
-      <EmployeeSalaryPageContent />
-    </MoneyPrivacy>
-  );
+  return <EmployeeSalaryPageContent />;
 }
 
 function EmployeeSalaryPageContent() {
@@ -223,7 +219,6 @@ function EmployeeSalaryPageContent() {
       <DashboardHero
         title=""
         highlight="My Salary"
-        action={<PrivacyToggle className="" />}
         description="Your monthly salary, what has been paid and what is still pending."
         compact
       />
