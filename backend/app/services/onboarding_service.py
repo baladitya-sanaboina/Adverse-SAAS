@@ -121,21 +121,21 @@ STAFF_FORM: tuple[PublicField, ...] = (
         key="address", label="Current address", required=True, multiline=True, group=_PERSONAL
     ),
     PublicField(
-        key="emergency_name", label="Emergency contact name", required=True, group=_PERSONAL
+        key="emergency_name", label="Emergency contact name", required=False, group=_PERSONAL
     ),
     PublicField(
         key="emergency_phone",
         label="Emergency contact phone",
-        required=True,
+        required=False,
         group=_PERSONAL,
         input="tel",
     ),
-    PublicField(key="bank_holder", label="Account holder name", required=True, group=_BANK),
-    PublicField(key="bank_account", label="Account number", required=True, group=_BANK),
+    PublicField(key="bank_holder", label="Account holder name", required=False, group=_BANK),
+    PublicField(key="bank_account", label="Account number", required=False, group=_BANK),
     PublicField(
         key="bank_ifsc",
         label="IFSC code",
-        required=True,
+        required=False,
         group=_BANK,
         placeholder="e.g. HDFC0001234",
     ),
@@ -148,10 +148,12 @@ _DOC_TYPES = {
     "image/webp": ".webp",
 }
 _IMAGE_TYPES = {key: value for key, value in _DOC_TYPES.items() if key.startswith("image/")}
-STAFF_UPLOADS: tuple[tuple[str, str, dict[str, str], str], ...] = (
-    ("aadhaar", "Aadhaar card", _DOC_TYPES, "PDF or a clear photo, front and back"),
-    ("pan", "PAN card", _DOC_TYPES, "PDF or a clear photo"),
-    ("photo", "Profile photo", _IMAGE_TYPES, "A recent photo of your face (JPG or PNG)"),
+# Only the basics are required (owner request 2026-11-27): Aadhaar, PAN, bank details and the
+# emergency contact are optional; the profile photo is required.
+STAFF_UPLOADS: tuple[tuple[str, str, dict[str, str], str, bool], ...] = (
+    ("aadhaar", "Aadhaar card", _DOC_TYPES, "PDF or a clear photo, front and back", False),
+    ("pan", "PAN card", _DOC_TYPES, "PDF or a clear photo", False),
+    ("photo", "Profile photo", _IMAGE_TYPES, "A recent photo of your face (JPG or PNG)", True),
 )
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 ROLE_OF = {"COMPANY_CLIENT": "CLIENT", "COMPANY_MANAGER": "MANAGER"}
@@ -1037,7 +1039,7 @@ class OnboardingService:
             PublicUpload(
                 key=key,
                 label=label,
-                required=True,
+                required=required,
                 accept=",".join(types),
                 hint=hint,
                 uploaded_name=(
@@ -1046,7 +1048,7 @@ class OnboardingService:
                     else None
                 ),
             )
-            for key, label, types, hint in STAFF_UPLOADS
+            for key, label, types, hint, required in STAFF_UPLOADS
         ]
 
     def public_upload(self, token: str, key: str, upload: UploadFile) -> PublicPacket:
@@ -1065,7 +1067,7 @@ class OnboardingService:
             raise AuthenticationError(
                 404, "UPLOAD_NOT_FOUND", "That upload is not part of this form."
             )
-        _, label, types, _ = spec
+        _, label, types, _, _ = spec
         content = upload.file.read(MAX_UPLOAD_BYTES + 1)
         mime = (upload.content_type or "").lower()
         if not content:
@@ -1237,7 +1239,11 @@ class OnboardingService:
             )
         if self._staff_flow(packet):
             form = self._check_staff_form(form)
-            absent = [item.label for item in self._uploads(packet) if not item.uploaded_name]
+            absent = [
+                item.label
+                for item in self._uploads(packet)
+                if item.required and not item.uploaded_name
+            ]
             if absent:
                 raise AuthenticationError(
                     422, "UPLOADS_MISSING", f"Please upload: {', '.join(absent)}."

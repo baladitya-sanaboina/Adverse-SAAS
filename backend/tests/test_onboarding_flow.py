@@ -125,11 +125,14 @@ class FlowRepo:
         return True
 
 
-STAFF_FORM = {
+BASICS = {
     "full_name": "Ravi Kumar",
     "phone": "+91 98765 43210",
     "date_of_birth": "1998-04-02",
     "address": "Hyderabad",
+}
+STAFF_FORM = {
+    **BASICS,
     "emergency_name": "Lakshmi",
     "emergency_phone": "9876500000",
     "bank_holder": "Ravi Kumar",
@@ -241,9 +244,10 @@ class OnboardingFlowTest(unittest.TestCase):
             submit()
         self.assertEqual(missing.exception.code, "UPLOADS_MISSING")
         packet_id = next(iter(repo.saved))
+        self.assertIn("Profile photo", missing.exception.detail)
+        self.assertNotIn("Aadhaar", missing.exception.detail)
         uploads = {
-            key: {"label": key, "name": f"{key}.pdf", "path": f"x/{key}", "mime": "application/pdf"}
-            for key in ("aadhaar", "pan", "photo")
+            "photo": {"label": "photo", "name": "me.png", "path": "x/p", "mime": "image/png"}
         }
         repo.saved[packet_id] = replace(repo.saved[packet_id], uploads=uploads)
         with self.assertRaises(AuthenticationError) as weak:
@@ -260,6 +264,31 @@ class OnboardingFlowTest(unittest.TestCase):
         stored = repo.saved[packet_id].form_data
         self.assertEqual(stored["bank_ifsc"], "HDFC0001234")
         self.assertNotIn("bank_account", view.form_data)
+
+    def test_only_basics_are_required(self) -> None:
+        repo = FlowRepo()
+        service, token = self.start(repo)
+        view = service.public_view(token)
+        required = {field.key for field in view.form if field.required}
+        self.assertEqual(required, {"full_name", "phone", "date_of_birth", "address"})
+        self.assertEqual({item.key for item in view.uploads if item.required}, {"photo"})
+        packet_id = next(iter(repo.saved))
+        photo = {"photo": {"label": "photo", "name": "me.png", "path": "x/p", "mime": "image/png"}}
+        repo.saved[packet_id] = replace(repo.saved[packet_id], uploads=photo)
+        with patch.object(OnboardingService, "_activate"):
+            done = service.public_submit(
+                token,
+                PublicSubmit(
+                    form=BASICS,
+                    signed_name="Ravi Kumar",
+                    accept=True,
+                    password="Str0ng!Passw0rd",  # type: ignore[arg-type]
+                    confirm_password="Str0ng!Passw0rd",  # type: ignore[arg-type]
+                ),
+                "127.0.0.1",
+                "test",
+            )
+        self.assertEqual(done.status, "COMPLETED")
 
     def test_bad_ifsc_is_refused(self) -> None:
         repo = FlowRepo()
