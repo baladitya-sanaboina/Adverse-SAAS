@@ -18,7 +18,7 @@ export type AssigneeRole = "MANAGER" | "EMPLOYEE" | "ADMIN";
 export type FileKind = "REFERENCE" | "DELIVERABLE";
 export type PaymentMethod = "CASH" | "BANK_TRANSFER" | "UPI" | "CHEQUE" | "CARD" | "OTHER";
 export type BudgetEntryType = "INITIAL" | "TOP_UP" | "ADJUSTMENT";
-export type ReportPeriod = "all" | "today" | "this_week" | "this_month" | "previous_month" | "custom";
+export type ReportPeriod = "all" | "today" | "this_week" | "this_month" | "previous_month" | "last_30_days" | "custom";
 
 export type NamedRef = { id: string; name: string; code: string };
 export type PersonRef = { id: string; name: string; role: AssigneeRole };

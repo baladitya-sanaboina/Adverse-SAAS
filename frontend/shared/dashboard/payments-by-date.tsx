@@ -22,13 +22,26 @@ export type DatedPayment = {
   direction: "IN" | "OUT";
 };
 
+/** The "Last 30 days" choice in the month list (owner request 2026-11-28). */
+export const LAST_30_DAYS = "last30";
+
+const isoDate = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+/** First and last day of a month ("YYYY-MM"), or of the last 30 days (today included). */
 export function monthRange(month: string): { start: string; end: string } {
+  if (month === LAST_30_DAYS) {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+    return { start: isoDate(start), end: isoDate(now) };
+  }
   const [year, number] = month.split("-").map(Number);
   const last = new Date(year, number, 0).getDate();
   return { start: `${month}-01`, end: `${month}-${String(last).padStart(2, "0")}` };
 }
 
 function monthLabel(month: string): string {
+  if (month === LAST_30_DAYS) return "Last 30 days";
   return new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric" }).format(new Date(`${month}-01T00:00:00`));
 }
 
@@ -93,7 +106,10 @@ export function PaymentsByDatePanel({
                 onMonth(value);
               }}
               ariaLabel="Month"
-              options={months.map((key) => ({ value: key, label: monthLabel(key) }))}
+              options={[
+                { value: LAST_30_DAYS, label: "Last 30 days" },
+                ...months.map((key) => ({ value: key, label: monthLabel(key) })),
+              ]}
             />
             <LooplessSelect
               value={chosenDay}

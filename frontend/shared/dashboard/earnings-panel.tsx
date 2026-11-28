@@ -104,7 +104,7 @@ export function EarningsPanel({
   loading?: boolean;
   error?: string;
 }) {
-  const [mode, setMode] = useState<View | "custom">("month");
+  const [mode, setMode] = useState<View | "last30" | "custom">("month");
   const [today] = useState(() => isoDay(new Date()));
   const [focus, setFocus] = useState(today);
   const [from, setFrom] = useState(() => `${today.slice(0, 8)}01`);
@@ -114,9 +114,11 @@ export function EarningsPanel({
 
   // Custom From–To (owner request 2026-11-28): the graph is by day for up to a month, by week
   // for up to half a year, else by month; the comparison is the same number of days before.
-  const custom = mode === "custom";
-  const first = from <= to ? from : to;
-  const lastDay = from <= to ? to : from;
+  // "30 days" (owner request 2026-11-28) is a ready-made range: today and the 29 days before.
+  const custom = mode === "custom" || mode === "last30";
+  const thirtyAgo = isoDay(shift("day", parse(today), -29));
+  const first = mode === "last30" ? thirtyAgo : from <= to ? from : to;
+  const lastDay = mode === "last30" ? today : from <= to ? to : from;
   const spanDays = Math.round((parse(lastDay).getTime() - parse(first).getTime()) / 86_400_000) + 1;
   const view: View = !custom ? mode : spanDays <= 31 ? "day" : spanDays <= 182 ? "week" : "month";
   const selected = periodStart(view, parse(focus));
@@ -202,23 +204,25 @@ export function EarningsPanel({
         aside={
           <div className="earn-controls">
             <div className="earn-views" role="tablist" aria-label="Earnings by">
-              {[...VIEWS, { id: "custom" as const, label: "Custom" }].map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={mode === item.id}
-                  className={mode === item.id ? "active" : undefined}
-                  onClick={() => {
-                    setMode(item.id);
-                    setShowAll(false);
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
+              {[...VIEWS, { id: "last30" as const, label: "30 days" }, { id: "custom" as const, label: "Custom" }].map(
+                (item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={mode === item.id}
+                    className={mode === item.id ? "active" : undefined}
+                    onClick={() => {
+                      setMode(item.id);
+                      setShowAll(false);
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ),
+              )}
             </div>
-            {custom ? (
+            {mode === "custom" ? (
               <div className="earn-range">
                 <LooplessDate
                   value={from}
@@ -242,7 +246,7 @@ export function EarningsPanel({
                   clearable={false}
                 />
               </div>
-            ) : (
+            ) : mode === "last30" ? null : (
               <LooplessDate
                 value={focus}
                 onValueChange={(value) => choose(value || today)}

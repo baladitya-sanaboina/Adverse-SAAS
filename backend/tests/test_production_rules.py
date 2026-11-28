@@ -135,6 +135,10 @@ class PeriodTest(unittest.TestCase):
             resolve_period("previous_month", date(2026, 1, 5)),
             (date(2025, 12, 1), date(2025, 12, 31)),
         )
+        # Owner request 2026-11-28: today and the 29 days before it.
+        self.assertEqual(
+            resolve_period("last_30_days", today), (date(2026, 10, 15), date(2026, 11, 13))
+        )
 
     def test_custom_range_validation(self) -> None:
         today = date(2026, 11, 13)

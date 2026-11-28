@@ -155,6 +155,7 @@ export const PERIOD_OPTIONS: { value: ReportPeriod; label: string }[] = [
   { value: "this_week", label: "This week" },
   { value: "this_month", label: "This month" },
   { value: "previous_month", label: "Previous month" },
+  { value: "last_30_days", label: "Last 30 days" },
   { value: "all", label: "All time" },
   { value: "custom", label: "Custom range" },
 ];
