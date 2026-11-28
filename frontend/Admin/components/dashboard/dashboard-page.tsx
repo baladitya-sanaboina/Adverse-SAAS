@@ -117,6 +117,7 @@ type AdminDashboard = {
 const PERIODS: { value: ReportPeriod; label: string }[] = [
   { value: "this_month", label: "This month" },
   { value: "previous_month", label: "Previous month" },
+  { value: "last_30_days", label: "Last 30 days" },
   { value: "this_week", label: "This week" },
   { value: "today", label: "Today" },
   { value: "all", label: "All time" },

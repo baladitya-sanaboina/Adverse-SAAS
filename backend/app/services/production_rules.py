@@ -25,7 +25,9 @@ TaskStatus = Literal[
 # request 2026-11-26). Write moves status like a monitor; Read only looks.
 TaskActorRole = Literal["ADMIN", "ASSIGNEE", "MONITOR", "CLIENT_WRITE", "CLIENT_READ"]
 ACCESS_RANK = {"READ": 1, "WRITE": 2, "CREATE": 3}
-ReportPeriod = Literal["all", "today", "this_week", "this_month", "previous_month", "custom"]
+ReportPeriod = Literal[
+    "all", "today", "this_week", "this_month", "previous_month", "last_30_days", "custom"
+]
 
 ALL_STATUSES: tuple[TaskStatus, ...] = (
     "PENDING",
@@ -208,6 +210,9 @@ def resolve_period(
         return monday, monday + timedelta(days=6)
     if period == "this_month":
         return today.replace(day=1), today.replace(day=monthrange(today.year, today.month)[1])
+    if period == "last_30_days":
+        # Today and the 29 days before it (owner request 2026-11-28).
+        return today - timedelta(days=29), today
     if period == "previous_month":
         last_of_previous = today.replace(day=1) - timedelta(days=1)
         return last_of_previous.replace(day=1), last_of_previous

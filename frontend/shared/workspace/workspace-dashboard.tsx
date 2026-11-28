@@ -26,7 +26,7 @@ import type { WorkerTask, WorkspaceDashboard } from "./types";
 import { useLiveRefresh } from "../realtime/realtime";
 import { AvailabilityPanel } from "../chat/availability-panel";
 import { TodayFocus } from "./today-focus";
-import { PaymentsByDatePanel, type DatedPayment } from "../dashboard/payments-by-date";
+import { PaymentsByDatePanel, monthRange, type DatedPayment } from "../dashboard/payments-by-date";
 import { EarningsPanel, isoDay, type EarningItem } from "../dashboard/earnings-panel";
 import { methodLabel } from "../production/client";
 
@@ -431,20 +431,19 @@ function ManagerPaymentsPanel({ earnings, money }: { earnings: ManagerEarnings; 
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
-  const rows = useMemo<DatedPayment[]>(
-    () =>
-      earnings.payouts
-        .filter((payout) => payout.paid_on.startsWith(month))
-        .map((payout) => ({
-          id: payout.id,
-          day: payout.paid_on.slice(0, 10),
-          title: "Top-up from the Admin",
-          detail: `${methodLabel(payout.method)}${payout.reference ? ` · ${payout.reference}` : ""}`,
-          amount: Number(payout.amount),
-          direction: "IN" as const,
-        })),
-    [earnings.payouts, month],
-  );
+  const rows = useMemo<DatedPayment[]>(() => {
+    const range = monthRange(month);
+    return earnings.payouts
+      .filter((payout) => payout.paid_on.slice(0, 10) >= range.start && payout.paid_on.slice(0, 10) <= range.end)
+      .map((payout) => ({
+        id: payout.id,
+        day: payout.paid_on.slice(0, 10),
+        title: "Top-up from the Admin",
+        detail: `${methodLabel(payout.method)}${payout.reference ? ` · ${payout.reference}` : ""}`,
+        amount: Number(payout.amount),
+        direction: "IN" as const,
+      }));
+  }, [earnings.payouts, month]);
   return (
     <PaymentsByDatePanel
       rows={rows}
