@@ -7,6 +7,7 @@ notification problem never fails the user's action. Nobody is notified about the
 from __future__ import annotations
 
 import logging
+from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
@@ -117,6 +118,32 @@ class TaskEvents:
             sender_id=actor_id,
             category=category,
         )
+
+    def add_to_calendar(
+        self,
+        company_id: UUID,
+        actor_id: UUID,
+        task_id: UUID,
+        client_id: UUID,
+        service_id: UUID,
+        title: str,
+        day: date,
+    ) -> None:
+        """A task made on the Tasks page also shows in that client's content calendar (owner
+        report 2026-11-28: it only appeared there when made from the calendar)."""
+        try:
+            from app.repositories.calendar_repository import CalendarRepository
+
+            calendar = CalendarRepository()
+            entry_id = calendar.create(
+                company_id,
+                client_id,
+                actor_id,
+                {"service_id": service_id, "entry_date": day, "title": title[:200]},
+            )
+            calendar.set_task(company_id, entry_id, task_id)
+        except Exception:  # noqa: BLE001 - never fail the task the Admin just made
+            logger.warning("Could not add the task to the content calendar", exc_info=True)
 
     def changed(self, company_id: UUID) -> None:
         """Any saved change to a task: the Admin's dashboard (revenue, costs) refreshes."""
@@ -440,6 +467,9 @@ class NoTaskEvents(TaskEvents):
         pass
 
     def changed(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    def add_to_calendar(self, *args: object, **kwargs: object) -> None:
         pass
 
     def assigned(self, *args: object, **kwargs: object) -> None:

@@ -633,6 +633,15 @@ class TaskService:
         )
         self.events.assigned(company_id, task_id, context.user_id, None, None)
         self.events.changed(company_id)
+        self.events.add_to_calendar(
+            company_id,
+            context.user_id,
+            task_id,
+            client.id,
+            service.id,
+            request.title,
+            request.due_date or self._today(company_id),
+        )
         return self._write_response(company_id, task_id)
 
     def update_task(

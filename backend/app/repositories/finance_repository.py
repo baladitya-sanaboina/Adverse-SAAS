@@ -1136,6 +1136,25 @@ class FinanceRepository:
             row = _one(cursor)
             return Decimal(row[0]), int(row[1]), Decimal(row[2]), Decimal(row[3])
 
+    def admin_work_in_range(
+        self, company_id: UUID, tz: str, start: date | None, end: date | None
+    ) -> tuple[Decimal, int]:
+        """(client price, count) of the work the Admin did and approved in the range (owner
+        request 2026-11-28: the Admin's own work as its own card)."""
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT COALESCE(SUM(client_price_final), 0), COUNT(*)
+                FROM tasks
+                WHERE company_id=%(company)s AND assignee_type='ADMIN'
+                  AND status IN {_BILLABLE} AND approved_at IS NOT NULL
+                  AND {_range_sql(_local_date("approved_at"), start, end)}
+                """,
+                {"company": company_id, "tz": tz, "start": start, "end": end},
+            )
+            row = _one(cursor)
+            return Decimal(row[0]), int(row[1])
+
     def revenue_in_range(
         self, company_id: UUID, tz: str, start: date | None, end: date | None
     ) -> tuple[Decimal, Decimal, int]:
