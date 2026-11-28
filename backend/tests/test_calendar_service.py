@@ -227,14 +227,39 @@ class CalendarServiceTest(unittest.TestCase):
         self.assertEqual(approved.task.code if approved.task else "", "TSK-0007")
         self.assertTrue(service_entry(row(CLIENT_A, edited_manual=True)).edited)
 
-    def test_client_cannot_delete_an_entry_in_production(self, *_: Any) -> None:
+    def test_client_can_delete_until_delivered_and_the_ticket_is_cancelled(self, *_: Any) -> None:
+        # Owner rule 2026-11-28: while the video is in progress the client may still remove it.
         task = uuid4()
         entry = row(CLIENT_A, task_id=task, task_number=3, task_status="IN_PROGRESS")
         service, repository = self.service(entry, tickets=FakeTickets({task: "IN_PROGRESS"}))
+        service.client_delete(context("COMPANY_CLIENT", USER_A), entry.id)
+        self.assertEqual(self.tickets.cancelled, [task])
+        self.assertEqual(repository.deleted, [entry.id])
+
+    def test_client_cannot_delete_a_delivered_video(self, *_: Any) -> None:
+        task = uuid4()
+        entry = row(CLIENT_A, task_id=task, task_number=3, task_status="APPROVED")
+        service, repository = self.service(entry, tickets=FakeTickets({task: "APPROVED"}))
         with self.assertRaises(AuthenticationError) as error:
             service.client_delete(context("COMPANY_CLIENT", USER_A), entry.id)
-        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(error.exception.code, "ENTRY_DELIVERED")
         self.assertEqual(repository.deleted, [])
+
+    def test_admin_delete_cancels_an_unfinished_ticket_but_keeps_delivered_work(
+        self, *_: Any
+    ) -> None:
+        # Owner report 2026-11-28: a deleted entry's task stayed in My Tasks.
+        task = uuid4()
+        entry = row(CLIENT_A, task_id=task, task_number=4, task_status="ASSIGNED")
+        service, repository = self.service(entry, tickets=FakeTickets({task: "ASSIGNED"}))
+        service.admin_delete(context("COMPANY_ADMIN"), entry.id)
+        self.assertEqual(self.tickets.cancelled, [task])
+        self.assertEqual(repository.deleted, [entry.id])
+        done = row(CLIENT_A, task_id=uuid4(), task_number=5, task_status="COMPLETED")
+        service, repository = self.service(done, tickets=FakeTickets({}))
+        service.admin_delete(context("COMPANY_ADMIN"), done.id)
+        self.assertEqual(self.tickets.cancelled, [])
+        self.assertEqual(repository.deleted, [done.id])
 
     def test_client_delete_cancels_a_pending_ticket(self, *_: Any) -> None:
         task = uuid4()

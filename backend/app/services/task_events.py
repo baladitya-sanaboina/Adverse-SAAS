@@ -118,6 +118,10 @@ class TaskEvents:
             category=category,
         )
 
+    def changed(self, company_id: UUID) -> None:
+        """Any saved change to a task: the Admin's dashboard (revenue, costs) refreshes."""
+        self.notifier.refresh_admins(company_id, "task.changed")
+
     def _row(self, company_id: UUID, task_id: UUID) -> TaskRow | None:
         try:
             return self.repository.get_task(company_id, task_id)
@@ -433,6 +437,9 @@ class NoTaskEvents(TaskEvents):
     """Used in unit tests and internal helpers: records nothing, sends nothing."""
 
     def __init__(self) -> None:  # noqa: D107 - deliberately skips the real dependencies
+        pass
+
+    def changed(self, *args: object, **kwargs: object) -> None:
         pass
 
     def assigned(self, *args: object, **kwargs: object) -> None:

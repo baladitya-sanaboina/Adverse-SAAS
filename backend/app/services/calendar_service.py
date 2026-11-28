@@ -512,9 +512,33 @@ class CalendarService:
         self._follow(company_id, before, context.user_id)
         return entry_response(self._entry(company_id, entry_id, None))
 
+    def _cancel_entry_ticket(
+        self, company_id: UUID, row: CalendarEntryRow, actor_id: UUID, note: str
+    ) -> None:
+        """A removed entry takes its unfinished ticket with it (owner report 2026-11-28: the
+        ticket stayed in My Tasks). Delivered work stays: it is billed."""
+        if row.task_id is None or row.task_status in (None, "CANCELLED", *BILLABLE_STATUSES):
+            return
+        had = self.tickets.cancel_calendar_ticket(
+            company_id, row.task_id, actor_id, note=note, assigned_ok=True
+        )
+        notification_service.notify(
+            company_id,
+            [had, *notification_service.admins(company_id)],
+            "task.cancelled",
+            f"Task cancelled: {row.task_title or row.title}",
+            f"{row.title} was removed from {row.client_name}'s calendar.",
+            "/tasks",
+            {"task_id": str(row.task_id)},
+            exclude=actor_id,
+        )
+
     def admin_delete(self, context: AuthContext, entry_id: UUID) -> None:
         company_id = self._admin(context, "DELETE")
         row = self._entry(company_id, entry_id, None)
+        self._cancel_entry_ticket(
+            company_id, row, context.user_id, "Removed from the client's calendar by the Admin."
+        )
         self.repository.delete(company_id, entry_id)
         self._remove_script(row)
 
@@ -614,11 +638,19 @@ class CalendarService:
         return entry_response(self._entry(company_id, entry_id, client.id))
 
     def client_delete(self, context: AuthContext, entry_id: UUID) -> None:
-        """A client can remove an entry until someone takes the ticket; the ticket is cancelled."""
+        """A client can remove an entry until the video is delivered (owner rule 2026-11-28: also
+        while it is in progress); its ticket is cancelled. Delivered work cannot be removed."""
         company_id, client = self._client(context)
         row = self._entry(company_id, entry_id, client.id)
-        if row.task_id is not None and row.task_status != "CANCELLED":
-            self.tickets.cancel_calendar_ticket(company_id, row.task_id, context.user_id)
+        if row.task_status in BILLABLE_STATUSES:
+            raise AuthenticationError(
+                409,
+                "ENTRY_DELIVERED",
+                "This video is already delivered, so it cannot be removed.",
+            )
+        self._cancel_entry_ticket(
+            company_id, row, context.user_id, "Removed from the calendar by the client."
+        )
         self.repository.delete(company_id, entry_id)
         self._remove_script(row)
 

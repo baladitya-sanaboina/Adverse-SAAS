@@ -988,6 +988,10 @@ function EntryDialog({
   // notes and ticks stay editable). Before that, a change also updates the ticket.
   const locked =
     role === "CLIENT" && entry?.task != null && !["PENDING", "ASSIGNED", "CANCELLED"].includes(entry.task.status);
+  // A client can remove a video until it is delivered (owner rule 2026-11-28); its task is
+  // cancelled with it.
+  const delivered = entry?.task != null && ["APPROVED", "COMPLETED"].includes(entry.task.status);
+  const canDelete = role === "CLIENT" ? !delivered : !locked;
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && !busy && onClose();
@@ -1257,7 +1261,7 @@ function EntryDialog({
           )}
 
           <footer>
-            {entry && !locked && (
+            {entry && canDelete && (
               <button type="button" className="cal-delete" disabled={busy} onClick={() => setConfirmDelete(true)}>
                 <Trash2 /> Delete
               </button>
@@ -1278,8 +1282,10 @@ function EntryDialog({
         title="Delete this entry?"
         description={
           role === "CLIENT"
-            ? "It is removed from your calendar and its ticket is cancelled."
-            : "It is removed from the calendar. Its ticket stays in Tasks."
+            ? "It is removed from your calendar and the work on it is stopped."
+            : delivered
+              ? "It is removed from the calendar. The video is already delivered, so its task stays."
+              : "It is removed from the calendar and its task is cancelled, so it leaves everyone's tasks."
         }
         confirmLabel="Delete entry"
         tone="danger"

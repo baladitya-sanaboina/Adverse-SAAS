@@ -626,6 +626,7 @@ class FinanceService:
             money(request.amount),
             request.note,
         )
+        notification_service.refresh_admins(company_id, "payment.changed")
         if request.type in ("INITIAL", "TOP_UP") and money(request.amount) > 0:
             currency = self.repository.company_currency(company_id)
             notification_service.notify(
@@ -663,6 +664,7 @@ class FinanceService:
         payment_id = self.repository.create_client_payment(
             company_id, context.user_id, request.model_dump()
         )
+        notification_service.refresh_admins(company_id, "payment.changed")
         row = self.repository.get_client_payment(company_id, payment_id)
         assert row is not None
         payment = self._client_payment(row)
@@ -692,6 +694,8 @@ class FinanceService:
         }[kind]
         if not self.repository.delete_payment(table, company_id, payment_id, context.user_id):
             raise AuthenticationError(404, "PAYMENT_NOT_FOUND", "Payment was not found.")
+
+        notification_service.refresh_admins(company_id, "payment.changed")
 
     def update_client_payment(
         self, context: AuthContext, payment_id: UUID, request: ClientPaymentUpdate
@@ -738,6 +742,8 @@ class FinanceService:
         ):
             raise AuthenticationError(404, "PAYMENT_NOT_FOUND", "Payment was not found.")
 
+        notification_service.refresh_admins(company_id, "payment.changed")
+
     # -- admin: salaries and payouts -------------------------------------------------------
 
     def update_salary_record(
@@ -751,6 +757,7 @@ class FinanceService:
             money(request.monthly_amount) if request.monthly_amount is not None else None,
             request.note,
         )
+        notification_service.refresh_admins(company_id, "payment.changed")
         if user_id is None:
             raise AuthenticationError(404, "SALARY_NOT_FOUND", "Salary record was not found.")
         return self.person_finance(context, user_id)
@@ -758,6 +765,7 @@ class FinanceService:
     def delete_salary_record(self, context: AuthContext, record_id: UUID) -> PersonFinanceResponse:
         company_id = self._admin(context, "FINANCE", "DELETE")
         user_id = self.repository.delete_salary_record(company_id, record_id, context.user_id)
+        notification_service.refresh_admins(company_id, "payment.changed")
         if user_id is None:
             raise AuthenticationError(404, "SALARY_NOT_FOUND", "Salary record was not found.")
         return self.person_finance(context, user_id)
@@ -776,6 +784,7 @@ class FinanceService:
                 request.effective_from,
                 request.note,
             )
+            notification_service.refresh_admins(company_id, "payment.changed")
         except SalaryDateConflict as error:
             raise AuthenticationError(
                 409,
@@ -820,6 +829,7 @@ class FinanceService:
         payment_id = self.repository.create_salary_payment(
             company_id, context.user_id, request.model_dump()
         )
+        notification_service.refresh_admins(company_id, "payment.changed")
         row = self.repository.get_salary_payment(company_id, payment_id)
         assert row is not None
         payment = self._salary_payment(row)
@@ -888,6 +898,7 @@ class FinanceService:
         company_id = self._admin(context, "FINANCE", "CREATE")
         self._require_person(company_id, request.manager_user_id, "MANAGER")
         payout_id = self.repository.create_payout(company_id, context.user_id, request.model_dump())
+        notification_service.refresh_admins(company_id, "payment.changed")
         row = self.repository.get_payout(company_id, payout_id)
         assert row is not None
         payout = self._payout(row)

@@ -207,6 +207,15 @@ export function DashboardPage() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  // Revenue and costs follow every change to work and money live (owner report 2026-11-28),
+  // and again when the Admin comes back to this tab.
+  useLiveRefresh(["task.", "payment.", "payout.", "salary.", "invoice.", "budget."], () => void load());
+  useEffect(() => {
+    const again = () => document.visibilityState === "visible" && void load();
+    document.addEventListener("visibilitychange", again);
+    return () => document.removeEventListener("visibilitychange", again);
+  }, [load]);
+
   const firstName = company?.current_user.name.split(/\s+/)[0] ?? "";
   const todayText = new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long" }).format(
     new Date(),
@@ -892,6 +901,7 @@ function AdminPaymentsPanel({ currency }: { currency: string }) {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+  useLiveRefresh(["payment.", "payout.", "salary."], () => void load());
 
   return (
     <PaymentsByDatePanel
@@ -929,7 +939,7 @@ function SheetAlertsPanel({ currency }: { currency: string }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  useLiveRefresh(["task.", "payout.", "budget."], () => void load());
+  useLiveRefresh(["task.", "payment.", "payout.", "budget."], () => void load());
 
   if (failed || !data) return null;
   const owners = [...data.managers, ...data.clients];
