@@ -912,6 +912,13 @@ class DashboardMoney(BaseModel):
     pending_client_payments: Money
     pending_team_payments: Money
     approved_items: int
+    # Since 2026-11-28 revenue is money received from clients and team cost is money paid to the
+    # team (salaries and manager top-ups). The work side stays here for the small print.
+    received_count: int = 0
+    salaries_paid: Money = Decimal("0.00")
+    topups_paid: Money = Decimal("0.00")
+    work_delivered: Money = Decimal("0.00")
+    cost_earned: Money = Decimal("0.00")
 
 
 class DashboardTrendPoint(BaseModel):

@@ -65,6 +65,12 @@ type AdminDashboard = {
     pending_client_payments: string;
     pending_team_payments: string;
     approved_items: number;
+    /** Since 2026-11-28 revenue = money received, team cost = salaries + top-ups paid. */
+    received_count?: number;
+    salaries_paid?: string;
+    topups_paid?: string;
+    work_delivered?: string;
+    cost_earned?: string;
   };
   trend: Trend[];
   status_counts: Partial<Record<TaskStatus, number>>;
@@ -289,18 +295,21 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
   return (
     <div className={`production-dash-body${refreshing ? " refreshing" : ""}`}>
       <section className="company-dashboard-kpis" aria-label="Money summary">
+        {/* Revenue = money received from clients; team cost = salaries and top-ups paid
+            (owner decision 2026-11-28). The work side is the small print. */}
         <Tile title="Revenue" value={money(m.revenue, currency)} icon={<CircleDollarSign />}>
           {change === null ? (
-            `${m.approved_items} approved ${m.approved_items === 1 ? "item" : "items"}`
+            `${m.received_count ?? 0} client ${m.received_count === 1 ? "payment" : "payments"}`
           ) : (
             <span className={`production-dash-delta ${change >= 0 ? "up" : "down"}`}>
               {change >= 0 ? <TrendingUp aria-hidden="true" /> : <TrendingDown aria-hidden="true" />}
               {change >= 0 ? "Up" : "Down"} {hidden ? "••" : Math.abs(change).toFixed(0)}% vs previous period
             </span>
           )}
+          {` · work delivered ${money(m.work_delivered ?? 0, currency)}`}
         </Tile>
         <Tile title="Team cost" value={money(m.team_cost, currency)} icon={<HandCoins />}>
-          Commission {money(m.commission_cost, currency)} · salaries {money(m.salary_cost, currency)}
+          Top-ups {money(m.topups_paid ?? 0, currency)} · salaries {money(m.salaries_paid ?? 0, currency)}
         </Tile>
         <Tile
           title="Gross margin"
@@ -443,7 +452,7 @@ function TrendPanel({ trend, currency }: { trend: Trend[]; currency: string }) {
             </tbody>
           </table>
         ) : empty ? (
-          <p className="production-dash-empty">No approved work or salaries in the last 6 months yet.</p>
+          <p className="production-dash-empty">No payments received or paid in the last 6 months yet.</p>
         ) : (
           <div className="production-dash-chart" ref={box} onMouseLeave={() => setHover(null)}>
             <svg

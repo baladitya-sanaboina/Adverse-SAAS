@@ -168,3 +168,15 @@
   width: 14px;
   height: 14px;
 }
+
+/* Money in green, money out red in the list too (2026-11-28: the dashboard's row style made
+   them blue). */
+.production-dash-rows .pay-date-row em.in,
+.production-dash-panel .pay-date-day > header em.in {
+  color: #287150;
+}
+
+.production-dash-rows .pay-date-row em.out,
+.production-dash-panel .pay-date-day > header em.out {
+  color: #b74858;
+}
