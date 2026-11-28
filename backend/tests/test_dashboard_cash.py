@@ -50,6 +50,7 @@ class CashDashboardTest(unittest.TestCase):
             Decimal("0"),
             Decimal("10000"),
         )
+        service.repository.admin_work_in_range.return_value = (Decimal("700"), 1)
         service.repository.company_currency.return_value = "INR"
         service.repository.attention_tasks.return_value = []
         service.repository.client_balances.return_value = []
@@ -75,6 +76,9 @@ class CashDashboardTest(unittest.TestCase):
         self.assertEqual(money.work_delivered, Decimal("1500.00"))
         self.assertEqual(money.cost_earned, Decimal("300.00"))
         self.assertEqual(result.trend[-1].revenue, Decimal("19800.00"))
+        # The Admin's own video (TSK-0007, ₹700) on its own card.
+        self.assertEqual(money.admin_work, Decimal("700.00"))
+        self.assertEqual(money.admin_work_items, 1)
 
 
 if __name__ == "__main__":

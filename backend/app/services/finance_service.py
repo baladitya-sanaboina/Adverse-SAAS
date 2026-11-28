@@ -1299,6 +1299,7 @@ class FinanceService:
         )
         revenue = money(received)
         team_cost = money(salaries_paid) + money(topups_paid)
+        admin_work, admin_items = self.repository.admin_work_in_range(company_id, tz, start, end)
         margin = revenue - team_cost
         previous_revenue: Decimal | None = None
         previous_period: PeriodResponse | None = None
@@ -1415,6 +1416,8 @@ class FinanceService:
                 topups_paid=money(topups_paid),
                 work_delivered=summary.revenue,
                 cost_earned=summary.team_cost,
+                admin_work=money(admin_work),
+                admin_work_items=admin_items,
             ),
             trend=trend,
             status_counts=self.repository.status_counts(company_id),

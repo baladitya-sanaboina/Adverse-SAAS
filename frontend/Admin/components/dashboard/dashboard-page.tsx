@@ -12,6 +12,7 @@ import {
   Table2,
   TrendingDown,
   TrendingUp,
+  UserRound,
   UsersRound,
   Wallet,
 } from "lucide-react";
@@ -71,6 +72,9 @@ type AdminDashboard = {
     topups_paid?: string;
     work_delivered?: string;
     cost_earned?: string;
+    /** Work the Admin did themselves, approved in the period (2026-11-28). */
+    admin_work?: string;
+    admin_work_items?: number;
   };
   trend: Trend[];
   status_counts: Partial<Record<TaskStatus, number>>;
@@ -295,7 +299,7 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
 
   return (
     <div className={`production-dash-body${refreshing ? " refreshing" : ""}`}>
-      <section className="company-dashboard-kpis" aria-label="Money summary">
+      <section className="company-dashboard-kpis five" aria-label="Money summary">
         {/* Revenue = money received from clients; team cost = salaries and top-ups paid
             (owner decision 2026-11-28). The work side is the small print. */}
         <Tile title="Revenue" value={money(m.revenue, currency)} icon={<CircleDollarSign />}>
@@ -324,6 +328,13 @@ function DashboardBody({ data, refreshing }: { data: AdminDashboard; refreshing:
         </Tile>
         <Tile title="Pending from clients" value={money(m.pending_client_payments, currency)} icon={<Wallet />}>
           To your team: {money(m.pending_team_payments, currency)}
+        </Tile>
+        {/* The Admin's own work (owner request 2026-11-28): videos the Admin did and approved in
+            this period, at the client's price. No commission, so all of it is the Admin's. */}
+        <Tile title="Your work" value={money(m.admin_work ?? 0, currency)} icon={<UserRound />}>
+          {(m.admin_work_items ?? 0) === 0
+            ? "No videos by you in this period"
+            : `${m.admin_work_items} ${m.admin_work_items === 1 ? "video" : "videos"} you did · no commission`}
         </Tile>
       </section>
 

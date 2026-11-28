@@ -919,6 +919,9 @@ class DashboardMoney(BaseModel):
     topups_paid: Money = Decimal("0.00")
     work_delivered: Money = Decimal("0.00")
     cost_earned: Money = Decimal("0.00")
+    # Work the Admin did themselves and approved in the period (2026-11-28).
+    admin_work: Money = Decimal("0.00")
+    admin_work_items: int = 0
 
 
 class DashboardTrendPoint(BaseModel):

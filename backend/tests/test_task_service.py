@@ -348,6 +348,17 @@ class TaskServiceTest(unittest.TestCase):
             )
         self.assertEqual(error.exception.code, "COMMISSION_NOT_ALLOWED")
 
+    def test_a_task_from_the_tasks_page_goes_into_the_client_calendar(self) -> None:
+        # Owner report 2026-11-28: a task made on the Tasks page did not show in the calendar.
+        with patch.object(self.service.events, "add_to_calendar") as add:
+            self.service.create_task(context("COMPANY_ADMIN", ADMIN), self.create())
+        assert self.repo.created is not None
+        add.assert_called_once()
+        args = add.call_args.args
+        self.assertEqual(
+            (args[3], args[4], args[5], args[6]), (CLIENT, SERVICE, "Reel", date(2026, 12, 1))
+        )
+
     def test_admin_can_take_a_task_with_no_commission(self) -> None:
         # Owner request 2026-11-28: the Admin does some tasks too.
         self.service.create_task(

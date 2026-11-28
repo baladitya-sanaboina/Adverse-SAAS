@@ -1815,3 +1815,24 @@
   height: 100%;
   object-fit: cover;
 }
+
+/* Five money cards on the Admin dashboard: "Your work" joins the row (owner request
+   2026-11-28). */
+.company-dashboard-kpis.five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+@media (max-width: 1400px) {
+  .company-dashboard-kpis.five {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1050px) {
+  .company-dashboard-kpis.five {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .company-dashboard-kpis.five {
+    grid-template-columns: 1fr;
+  }
+}
