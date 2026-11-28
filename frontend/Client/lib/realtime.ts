@@ -68,7 +68,9 @@ export function useLiveRefresh(prefixes: string[], refresh: () => void) {
     const kinds = key.split("|");
     let timer: number | null = null;
     const unsubscribe = subscribeRealtime((event) => {
-      if (event.type !== "notification") return;
+      // A bell notice, or a quiet "refresh" the server sends the Admin after any change to work
+      // or money, including the Admin's own (2026-11-28).
+      if (event.type !== "notification" && event.type !== "refresh") return;
       const kind = String((event.data as { type?: unknown }).type ?? "");
       if (!kinds.some((prefix) => kind.startsWith(prefix))) return;
       if (timer !== null) window.clearTimeout(timer);

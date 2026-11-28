@@ -118,6 +118,15 @@ class NotificationService:
         except Exception:  # noqa: BLE001
             logger.warning("Could not mark chat notifications read", exc_info=True)
 
+    def refresh_admins(self, company_id: UUID, kind: str) -> None:
+        """Tell every Admin's open pages that money or work changed, including the Admin who made
+        the change (owner report 2026-11-28: revenue did not update; notifications skip the
+        actor). No bell notice, only a live refresh. Never raises."""
+        try:
+            realtime.publish(self.admins(company_id), "refresh", {"type": kind})
+        except Exception:  # noqa: BLE001 - live refresh is best effort
+            logger.warning("Admin refresh failed", exc_info=True)
+
     def admins(self, company_id: UUID) -> list[UUID]:
         try:
             return self.repository.company_admin_ids(company_id)

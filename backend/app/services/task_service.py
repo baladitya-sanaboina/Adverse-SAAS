@@ -632,6 +632,7 @@ class TaskService:
             price_changes,
         )
         self.events.assigned(company_id, task_id, context.user_id, None, None)
+        self.events.changed(company_id)
         return self._write_response(company_id, task_id)
 
     def update_task(
@@ -882,6 +883,7 @@ class TaskService:
             self.repository.mutate_task(company_id, task_id, actor_id, plan)  # type: ignore[arg-type]
         except TaskNotFound as error:
             raise _not_found() from error
+        self.events.changed(company_id)
 
     # -- content calendar tickets (Phase 13, owner request 2026-11-14) ----------------------
 
