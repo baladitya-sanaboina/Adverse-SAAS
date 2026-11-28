@@ -1111,6 +1111,31 @@ class FinanceRepository:
             )
             return [EarningRow(*row) for row in cursor.fetchall()]
 
+    def cash_in_range(
+        self, company_id: UUID, start: date | None, end: date | None
+    ) -> tuple[Decimal, int, Decimal, Decimal]:
+        """Money that moved in the range (owner decision 2026-11-28, the dashboard follows cash):
+        (received from clients, number of client payments, salaries paid, manager top-ups paid)."""
+        received = _range_sql("received_on", start, end)
+        paid = _range_sql("paid_on", start, end)
+        with database_pool.connection(timeout=3) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT
+                  (SELECT COALESCE(SUM(amount), 0) FROM client_payments
+                     WHERE company_id=%(company)s AND {received}),
+                  (SELECT COUNT(*) FROM client_payments
+                     WHERE company_id=%(company)s AND {received}),
+                  (SELECT COALESCE(SUM(amount), 0) FROM salary_payments
+                     WHERE company_id=%(company)s AND {paid}),
+                  (SELECT COALESCE(SUM(amount), 0) FROM manager_payouts
+                     WHERE company_id=%(company)s AND {paid})
+                """,
+                {"company": company_id, "start": start, "end": end},
+            )
+            row = _one(cursor)
+            return Decimal(row[0]), int(row[1]), Decimal(row[2]), Decimal(row[3])
+
     def revenue_in_range(
         self, company_id: UUID, tz: str, start: date | None, end: date | None
     ) -> tuple[Decimal, Decimal, int]:

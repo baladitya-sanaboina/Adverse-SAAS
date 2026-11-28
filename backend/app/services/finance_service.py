@@ -1291,16 +1291,24 @@ class FinanceService:
         summary = self.finance_summary(context, query)
         currency = summary.currency
 
+        # The dashboard follows the money (owner decision 2026-11-28): revenue is what clients
+        # paid, team cost is salaries and manager top-ups paid, margin is the difference. Work
+        # delivered and commission earned stay as the small print; pending is unpaid work.
+        received, received_count, salaries_paid, topups_paid = self.repository.cash_in_range(
+            company_id, start, end
+        )
+        revenue = money(received)
+        team_cost = money(salaries_paid) + money(topups_paid)
+        margin = revenue - team_cost
         previous_revenue: Decimal | None = None
         previous_period: PeriodResponse | None = None
         previous = self._previous_range(query.period, today, start, end)
         if previous is not None:
-            previous_revenue, _, _ = self.repository.revenue_in_range(
-                company_id, tz, previous[0], previous[1]
+            previous_received, _, _, _ = self.repository.cash_in_range(
+                company_id, previous[0], previous[1]
             )
-            previous_revenue = money(previous_revenue)
+            previous_revenue = money(previous_received)
             previous_period = PeriodResponse(period="custom", start=previous[0], end=previous[1])
-        revenue = summary.revenue
         change = (
             float((revenue - previous_revenue) / previous_revenue * 100)
             if previous_revenue is not None and previous_revenue > 0
@@ -1316,16 +1324,16 @@ class FinanceService:
         for first in reversed(months):
             last = resolve_period("this_month", first)[1]
             assert last is not None
-            month_revenue, month_commission, _ = self.repository.revenue_in_range(
-                company_id, tz, first, last
+            month_in, _, month_salaries, month_topups = self.repository.cash_in_range(
+                company_id, first, last
             )
-            month_cost = money(month_commission) + self._salary_cost(company_id, first, last, today)
+            month_cost = money(month_salaries) + money(month_topups)
             trend.append(
                 DashboardTrendPoint(
                     month=first,
-                    revenue=money(month_revenue),
+                    revenue=money(month_in),
                     team_cost=month_cost,
-                    margin=money(month_revenue) - month_cost,
+                    margin=money(month_in) - month_cost,
                 )
             )
 
@@ -1394,14 +1402,19 @@ class FinanceService:
                 revenue=revenue,
                 previous_revenue=previous_revenue,
                 revenue_change_pct=change,
-                team_cost=summary.team_cost,
+                team_cost=team_cost,
                 commission_cost=summary.commission_cost,
                 salary_cost=summary.salary_cost,
-                gross_margin=summary.gross_margin,
-                margin_pct=float(summary.gross_margin / revenue * 100) if revenue > 0 else None,
+                gross_margin=margin,
+                margin_pct=float(margin / revenue * 100) if revenue > 0 else None,
                 pending_client_payments=summary.pending_client_payments,
                 pending_team_payments=summary.pending_team_payments,
                 approved_items=summary.approved_items,
+                received_count=received_count,
+                salaries_paid=money(salaries_paid),
+                topups_paid=money(topups_paid),
+                work_delivered=summary.revenue,
+                cost_earned=summary.team_cost,
             ),
             trend=trend,
             status_counts=self.repository.status_counts(company_id),
